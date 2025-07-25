@@ -83,6 +83,14 @@
                         <label for="min_offcut_dim">Min. Usable Offcut Dimension:</label>
                         <input type="number" step="0.1" id="min_offcut_dim" name="min_offcut_dim" value="{{ config.min_offcut_dim }}">
                     </div>
+                    <div>
+                        <label>Scoring Weights (Yield | Offcuts | Cuts):</label>
+                        <div class="size-inputs">
+                            <input type="number" step="0.1" name="w_yield" value="{{ config.w_yield }}">
+                            <input type="number" step="0.1" name="w_offcut" value="{{ config.w_offcut }}">
+                            <input type="number" step="0.1" name="w_cuts" value="{{ config.w_cuts }}">
+                        </div>
+                    </div>
                 <h3>Data File Paths</h3>
                 <div>
                     <label for="hhos_path">HHOS File Path:</label>

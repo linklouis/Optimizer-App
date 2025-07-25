@@ -4,6 +4,7 @@ FEATURES
         - ✓ Should save its own version of the offcut list, rather than pointing.
 
         - [ASK] Maybe allow uploading a temp Offcut List that doesn't override the current one?
+        - Save offcuts
     
     Optimizer
         - 
@@ -18,8 +19,9 @@ FEATURES
 
 
 BUGS
+    - ✓ Allow part rotation check box not working?
+
     - Downcasting issue with replace in extract_hhos_data
-    - Allow part rotation check box not working?
 
 
 QUESTIONS

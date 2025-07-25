@@ -19,8 +19,9 @@ DEFAULT_CONFIG = {
     'stock_path': '',
     'kerf': 0.125,
     'allow_rotation': True,
-    'min_offcut_dim': 4.0,
-    'multi_pass': True  # Default multi-pass to on
+    'min_offcut_dim': 12.0,
+    'multi_pass': True,
+    'w_yield': 1.0, 'w_offcut': 0.5, 'w_cuts': 0.2
 }
 
 def setup_app():
@@ -56,7 +57,10 @@ def home():
         config['kerf'] = request.form.get('kerf', type=float, default=0.125)
         config['allow_rotation'] = request.form.get('allow_rotation') == 'true'
         config['min_offcut_dim'] = request.form.get('min_offcut_dim', type=float, default=4.0)
-        config['multi_pass'] = request.form.get('multi_pass') == 'true' # Handle the new checkbox
+        config['multi_pass'] = request.form.get('multi_pass') == 'true'
+        config['w_yield'] = request.form.get('w_yield', type=float, default=1.0)
+        config['w_offcut'] = request.form.get('w_offcut', type=float, default=0.5)
+        config['w_cuts'] = request.form.get('w_cuts', type=float, default=0.2)
 
         with open(CONFIG_FILE, 'w') as f:
             json.dump(config, f, indent=4)
@@ -98,7 +102,8 @@ def home():
                             sheet_length, sheet_width, sorted_parts,
                             config['kerf'], config['allow_rotation']
                         )
-                        score = calculate_layout_score(layout['placed_parts'], sheet_length, sheet_width)
+                        weights = {k: config[k] for k in ['w_yield', 'w_offcut', 'w_cuts']}
+                        score = calculate_layout_score(layout, sheet_length, sheet_width, weights)
                         print(f"  - Score: {score:.2f}")
 
                         if score > best_score:

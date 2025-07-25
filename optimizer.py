@@ -13,17 +13,33 @@ def find_best_fit(part_l, part_w, empty_rects):
     
     return best_fit_index
 
-def calculate_layout_score(placed_parts, sheet_length, sheet_width):
-    """Calculates a score for a given layout, for now based on yield."""
-    if not placed_parts:
-        return 0.0
-    
+def calculate_layout_score(layout, sheet_length, sheet_width, weights):
+    """Calculates a weighted score for a given layout."""
+    placed_parts = layout['placed_parts']
+    offcuts = layout['offcuts']
+
+    # 1. Calculate Yield Score
     total_parts_area = sum([(p['length'] * p['width']) for p in placed_parts])
     sheet_area = sheet_length * sheet_width
-    yield_percentage = (total_parts_area / sheet_area) * 100 if sheet_area > 0 else 0
+    yield_score = (total_parts_area / sheet_area) * 100 if sheet_area > 0 else 0
+
+    # 2. Calculate Offcut Quality Score
+    offcut_score = 0
+    for offcut in offcuts:
+        # This rewards squarer offcuts over long, thin ones [cite: 37]
+        aspect_ratio = max(offcut['length'], offcut['width']) / min(offcut['length'], offcut['width']) if min(offcut['length'], offcut['width']) > 0 else float('inf')
+        offcut_score += (offcut['length'] * offcut['width']) / aspect_ratio
+
+    # 3. Calculate Number of Cuts (a simple proxy)
+    # Every placed part requires at least one new cut line
+    num_cuts = len(placed_parts)
+
+    # 4. Apply Weights to get Final Score [cite: 33]
+    final_score = (weights['w_yield'] * yield_score) + \
+                  (weights['w_offcut'] * offcut_score) - \
+                  (weights['w_cuts'] * num_cuts)
     
-    # The score can be expanded later with weights for offcuts, etc.
-    return yield_percentage
+    return final_score
 
 def run_optimization(sheet_length, sheet_width, parts, kerf=0.0, allow_rotation=True):
     """
