@@ -10,7 +10,7 @@ def extract_hhos_data(hhos_df: pd.DataFrame) -> pd.DataFrame:
                     .replace(r'^\s*$', np.nan, regex=True)
                     .dropna(axis=1, how='all')
                     .astype(str))
-    processed_df.columns = ['part name', 'number', 'client', 'count', 'length', 'width']
+    processed_df.columns = ['material', 'number', 'part name', 'quantity', 'length', 'width']
     return processed_df
 
 def extract_offcut_data(offcut_df: pd.DataFrame) -> pd.DataFrame:

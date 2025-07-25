@@ -2,7 +2,13 @@ FEATURES
     Features
         - ✓ Probably have it remember the latest file paths?
         - ✓ Should save its own version of the offcut list, rather than pointing.
+
+        - [ASK] Maybe allow uploading a temp Offcut List that doesn't override the current one?
     
+    Optimizer
+        - 
+
+
     Visual
         - 
 
@@ -20,3 +26,5 @@ QUESTIONS
     - Should it be called default "board" size?
     - Notes section in Offcut List?
     - Which order do length & width come in?
+    - Does yield count saved offcuts as used or wasted?
+    - Can we do cuts that only go partway through the material?
