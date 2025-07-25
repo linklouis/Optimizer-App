@@ -84,13 +84,13 @@
                 
                 <h3>Scoring Weights</h3>
                 <div class="input-group">
-                    <div><label for="w_yield">Yield</label><input type="number" step="any" name="w_yield" value="{{ config.w_yield }}"></div>
-                    <div><label for="w_offcut">Offcuts</label><input type="number" step="any" name="w_offcut" value="{{ config.w_offcut }}"></div>
-                    <div><label for="w_cuts">Cuts</label><input type="number" step="any" name="w_cuts" value="{{ config.w_cuts }}"></div>
+                    <div><label for="w_waste">Waste Penalty</label><input type="number" step="any" name="w_waste" value="{{ config.w_waste }}"></div>
+                    <div><label for="w_offcut">Offcut Penalty</label><input type="number" step="any" name="w_offcut" value="{{ config.w_offcut }}"></div>
+                    <div><label for="w_cuts">Cuts Penalty</label><input type="number" step="any" name="w_cuts" value="{{ config.w_cuts }}"></div>
                 </div>
                 <div class="input-group">
-                    <div><label for="w_quantity">Inventory Qty</label><input type="number" step="any" name="w_quantity" value="{{ config.w_quantity }}"></div>
-                    <div><label for="w_sheets"># of Sheets</label><input type="number" step="any" name="w_sheets" value="{{ config.w_sheets }}"></div>
+                    <div><label for="w_quantity">Inventory Bonus</label><input type="number" step="any" name="w_quantity" value="{{ config.w_quantity }}"></div>
+                    <div><label for="w_sheets"># of Sheets Penalty</label><input type="number" step="any" name="w_sheets" value="{{ config.w_sheets }}"></div>
                 </div>
 
                 <button type="submit" style="width: 100%; padding: 12px; background-color: #3498db; color: white; border: none; border-radius: 4px; font-size: 16px; cursor: pointer;">Save and Optimize</button>
@@ -101,7 +101,7 @@
             <h2>Layout Results</h2>
             {% if result and result.layouts %}
                 <h3>Overall Score: {{ result.final_score|round(2) }}</h3>
-                <p>Used {{ result.layouts|length }} sheet(s). {{ result.remaining_parts|length }} parts could not be placed.</p>
+                <p>Used {{ result.layouts|length }} sheet(s). {% if result.remaining_parts|length > 0 %}<span style="color: #c0392b;">{{ result.remaining_parts|length }} parts could not be placed.</span>{% endif %}</p>
                 <hr>
                 {% for layout in result.layouts %}
                     <div class="layout-container">

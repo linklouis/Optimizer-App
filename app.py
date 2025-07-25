@@ -5,6 +5,7 @@ import os
 import json
 import pandas as pd
 import numpy as np
+import uuid
 
 app = Flask(__name__)
 
@@ -22,11 +23,11 @@ DEFAULT_CONFIG = {
     'allow_rotation': True,
     'min_offcut_dim': 12.0,
     'use_offcuts': True,
-    'w_yield': 1.0, 
+    'w_waste': 1.0, 
     'w_offcut': 0.5, 
     'w_cuts': 0.2,
-    'w_quantity': 0.1, # Weight for favoring sheets with higher quantity
-    'w_sheets': 1.0 # Penalty for each additional sheet used
+    'w_quantity': 0.1,
+    'w_sheets': 1.0
 }
 
 def setup_app():
@@ -49,12 +50,10 @@ def home():
     optimization_result = None
 
     if request.method == 'POST':
-        # --- Update config from form ---
         config['hhos_path'] = request.form.get('hhos_path', '').strip(' "')
         config['offcut_path'] = request.form.get('offcut_path', '').strip(' "')
         config['stock_path'] = request.form.get('stock_path', '').strip(' "')
         
-        # General Settings
         config['default_length'] = request.form.get('default_length', type=float, default=96)
         config['default_width'] = request.form.get('default_width', type=float, default=48)
         config['kerf'] = request.form.get('kerf', type=float, default=0.125)
@@ -62,8 +61,7 @@ def home():
         config['min_offcut_dim'] = request.form.get('min_offcut_dim', type=float, default=4.0)
         config['use_offcuts'] = request.form.get('use_offcuts') == 'true'
 
-        # Scoring Weights
-        config['w_yield'] = request.form.get('w_yield', type=float, default=1.0)
+        config['w_waste'] = request.form.get('w_waste', type=float, default=1.0)
         config['w_offcut'] = request.form.get('w_offcut', type=float, default=0.5)
         config['w_cuts'] = request.form.get('w_cuts', type=float, default=0.2)
         config['w_quantity'] = request.form.get('w_quantity', type=float, default=0.1)
@@ -79,16 +77,15 @@ def home():
             hhos_df, offcut_df, stock_df = process_uploaded_files(
                 config['hhos_path'], 
                 config.get('offcut_path') or MANAGED_OFFCUT_PATH, 
-                config['stock_path']
+                config['stock_path'],
+                config['default_length'],
+                config['default_width']
             )
             
-            # --- Prepare the list of parts to cut ---
             parts_to_cut = hhos_df[['part name', 'label', 'length', 'width', 'quantity']].to_dict('records')
 
-            # --- Prepare the list of available stock sheets ---
             stock_sheets = []
             
-            # 1. Add the default sheet (considered infinite quantity)
             stock_sheets.append({
                 'id': 'default_sheet',
                 'length': config['default_length'],
@@ -97,31 +94,27 @@ def home():
                 'type': 'Default'
             })
             
-            # 2. Add sheets from the main stock inventory
-            stock_df['id'] = 'stock_' + stock_df.index.astype(str)
-            stock_df['type'] = 'Stock'
-            stock_sheets.extend(stock_df.to_dict('records'))
+            if stock_df is not None and not stock_df.empty:
+                stock_df['id'] = 'stock_' + stock_df.index.astype(str)
+                stock_df['type'] = 'Stock'
+                stock_sheets.extend(stock_df.to_dict('records'))
 
-            # 3. Add offcut sheets if enabled
             if config.get('use_offcuts') and offcut_df is not None and not offcut_df.empty:
                 offcut_df['id'] = 'offcut_' + offcut_df.index.astype(str)
                 offcut_df['type'] = 'Offcut'
                 stock_sheets.extend(offcut_df.to_dict('records'))
 
-            # --- Run the Multi-Sheet Optimization ---
             layouts, remaining_parts, final_score = optimize_multiple_sheets(
                 parts_to_cut, stock_sheets, config
             )
             
-            # Process results for display
             if layouts:
                 message = message or "Optimization complete."
                 processed_layouts = []
                 for layout in layouts:
                     sheet_info = layout['sheet_info']
                     sheet_area = sheet_info['length'] * sheet_info['width']
-                    total_parts_area = sum((p['length'] * p['width']) for p in layout['placed_parts'])
-                    yield_percentage = (total_parts_area / sheet_area) * 100 if sheet_area > 0 else 0
+                    yield_percentage = (layout['total_placed_area'] / sheet_area) * 100 if sheet_area > 0 else 0
                     
                     min_dim = config['min_offcut_dim']
                     usable_offcuts = [r for r in layout['offcuts'] if r['length'] >= min_dim and r['width'] >= min_dim]
