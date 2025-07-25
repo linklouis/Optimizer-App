@@ -10,7 +10,7 @@ FEATURES
 
 
     Visual
-        - 
+        - Add measurements to layout display
 
     Code
         - 
@@ -19,6 +19,7 @@ FEATURES
 
 BUGS
     - Downcasting issue with replace in extract_hhos_data
+    - Allow part rotation check box not working?
 
 
 QUESTIONS

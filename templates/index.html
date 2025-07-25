@@ -31,6 +31,13 @@
             text-anchor: middle; /* Center the text horizontally */
             dominant-baseline: middle; /* Center the text vertically */
         }
+        .offcut {
+            fill: #EFEFEF;
+            stroke: #B2B2B2;
+            stroke-width: 0.5;
+            stroke-dasharray: 2 2; /* Make the border dashed */
+            vector-effect: non-scaling-stroke;
+        }
     </style>
 </head>
 <body>
@@ -68,6 +75,10 @@
                             <label for="allow_rotation">Allow Part Rotation</label>
                         </div>
                     </div>
+                    <div>
+                        <label for="min_offcut_dim">Min. Usable Offcut Dimension:</label>
+                        <input type="number" step="0.1" id="min_offcut_dim" name="min_offcut_dim" value="{{ config.min_offcut_dim }}">
+                    </div>
                 <h3>Data File Paths</h3>
                 <div>
                     <label for="hhos_path">HHOS File Path:</label>
@@ -88,13 +99,14 @@
         <div class="layout-display">
             <h2>Layout Result</h2>
             {% if layout.placed_parts %}
+                <h3>Yield: {{ layout.yield_percentage|round(2) }}%</h3>
+
                 <svg class="layout-svg" viewBox="0 0 {{ layout.sheet_width }} {{ layout.sheet_length }}">
                     <rect class="sheet" x="0" y="0" width="{{ layout.sheet_width }}" height="{{ layout.sheet_length }}" />
 
                     {% for part in layout.placed_parts %}
                         {% set svg_y = layout.sheet_length - part.y - (part.width if part.rotated else part.length) %}
                         <g transform="translate({{ part.x }}, {{ svg_y }})">
-                            {# Swap width and height for drawing if the part is rotated #}
                             {% if part.rotated %}
                                 <rect class="part" width="{{ part.length }}" height="{{ part.width }}" />
                                 <text class="part-label" x="{{ part.length / 2 }}" y="{{ part.width / 2 }}">{{ part.label }}</text>
@@ -104,6 +116,14 @@
                             {% endif %}
                         </g>
                     {% endfor %}
+
+                    {% for offcut in layout.usable_offcuts %}
+                        {% set svg_y = layout.sheet_length - offcut.y - offcut.length %}
+                        <g transform="translate({{ offcut.x }}, {{ svg_y }})">
+                            <rect class="offcut" width="{{ offcut.width }}" height="{{ offcut.length }}" />
+                        </g>
+                    {% endfor %}
+
                 </svg>
             {% else %}
                 <p>No layout to display. Process files to see the result.</p>

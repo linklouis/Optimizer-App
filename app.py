@@ -18,8 +18,9 @@ DEFAULT_CONFIG = {
     'hhos_path': '',
     'offcut_path': '',
     'stock_path': '',
-    'kerf': 0.125,  # Default kerf, e.g., 1/8 inch
-    'allow_rotation': True
+    'kerf': 0.125,
+    'allow_rotation': True,
+    'min_offcut_dim': 12.0
 }
 
 def setup_app():
@@ -54,6 +55,7 @@ def home():
         config['default_width'] = request.form.get('default_width', type=int, default=48)
         config['kerf'] = request.form.get('kerf', type=float, default=0.125)
         config['allow_rotation'] = request.form.get('allow_rotation') == 'true'
+        config['min_offcut_dim'] = request.form.get('min_offcut_dim', type=float, default=4.0)
 
         with open(CONFIG_FILE, 'w') as f:
             json.dump(config, f, indent=4)
@@ -76,8 +78,8 @@ def home():
 
                 sheet_length = config['default_length']
                 sheet_width = config['default_width']
-                
-                placed_parts, remaining_parts = run_optimization(
+
+                placed_parts, remaining_parts, offcuts_and_scrap = run_optimization(
                     sheet_length,
                     sheet_width,
                     parts_list,
@@ -85,12 +87,27 @@ def home():
                     config['allow_rotation']
                 )
 
+                # --- Analyze Results ---
+                # Calculate Yield
+                total_parts_area = sum([(p['length'] * p['width']) for p in placed_parts])
+                sheet_area = sheet_length * sheet_width
+                yield_percentage = (total_parts_area / sheet_area) * 100 if sheet_area > 0 else 0
+
+                # Analyze offcuts
+                min_dim = config['min_offcut_dim']
+                usable_offcuts = [r for r in offcuts_and_scrap if r['length'] >= min_dim and r['width'] >= min_dim]
+
+                # --- Prepare data for the template ---
                 layout_data['placed_parts'] = placed_parts
                 layout_data['sheet_length'] = sheet_length
                 layout_data['sheet_width'] = sheet_width
-                
-                print("\n--- OPTIMIZATION RESULTS ---")
-                print(f"Placed {len(placed_parts)} parts. {len(remaining_parts)} remaining.")
+                layout_data['yield_percentage'] = yield_percentage
+                layout_data['usable_offcuts'] = usable_offcuts
+
+                print(f"\n--- OPTIMIZATION RESULTS ---")
+                print(f"Yield: {yield_percentage:.2f}%")
+                print(f"Placed {len(placed_parts)} parts, {len(usable_offcuts)} usable offcuts found, {len(remaining_parts)} remaining.")
+
 
         except Exception as e:
             error = f"An error occurred: {e}"

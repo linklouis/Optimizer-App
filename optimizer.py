@@ -1,70 +1,81 @@
+def find_best_fit(part_l, part_w, empty_rects):
+    """Finds the best empty rectangle to place a part in."""
+    best_fit_index = -1
+    min_waste = float('inf')
+
+    for i, rect in enumerate(empty_rects):
+        # Check if the part fits
+        if part_l <= rect['length'] and part_w <= rect['width']:
+            waste = (rect['length'] * rect['width']) - (part_l * part_w)
+            if waste < min_waste:
+                min_waste = waste
+                best_fit_index = i
+    
+    return best_fit_index
+
 def run_optimization(sheet_length, sheet_width, parts, kerf=0.0, allow_rotation=True):
     """
-    Places parts onto a sheet, accounting for kerf and rotation.
+    Places parts using a best-fit algorithm that tracks empty spaces.
+    Returns placed parts, remaining parts, and all leftover empty rectangles.
     """
     parts_to_place = []
     for part in parts:
         for _ in range(int(part['quantity'])):
-            parts_to_place.append({
-                'part name': part['part name'],
-                'label': part['label'],
-                'length': part['length'],
-                'width': part['width'],
-                'rotated': False # Add rotation flag
-            })
+            parts_to_place.append({**part, 'rotated': False})
 
-    parts_to_place.sort(key=lambda p: p['length'] * p['width'], reverse=True) # Sort by area
+    parts_to_place.sort(key=lambda p: p['length'] * p['width'], reverse=True)
 
     placed_parts = []
-    remaining_parts = list(parts_to_place) # Start with all parts as remaining
-    
-    shelf_x = 0.0
-    shelf_y = 0.0
-    shelf_length = 0.0
+    empty_rects = [{'x': 0, 'y': 0, 'length': sheet_length, 'width': sheet_width}]
 
-    while len(remaining_parts) > 0:
-        part_placed_on_shelf = False
+    for part in parts_to_place:
+        placed = False
         
-        # Find the next part that can fit
-        for i, part in enumerate(remaining_parts):
-            
-            # Try both original and rotated orientations
-            orientations = [(part['length'], part['width'], False)]
-            if allow_rotation and part['length'] != part['width']:
-                orientations.append((part['width'], part['length'], True))
+        # Determine possible orientations
+        orientations = [(part['length'], part['width'], False)]
+        if allow_rotation and part['length'] != part['width']:
+            orientations.append((part['width'], part['length'], True))
 
-            for part_l, part_w, rotated in orientations:
-                if shelf_y == 0 and shelf_x == 0: # Starting the very first shelf
-                    shelf_length = part_l
+        for part_l, part_w, rotated in orientations:
+            best_rect_index = find_best_fit(part_l, part_w, empty_rects)
 
-                # Does it fit vertically on the sheet?
-                if shelf_y + part_l <= sheet_length:
-                    # Does it fit horizontally on the current shelf?
-                    if shelf_x + part_w <= sheet_width:
-                        
-                        # --- Place the part ---
-                        part_to_place = remaining_parts.pop(i)
-                        part_to_place['rotated'] = rotated
-                        placed_parts.append({**part_to_place, 'x': shelf_x, 'y': shelf_y})
-                        
-                        # Advance shelf position, accounting for kerf
-                        shelf_x += part_w + kerf
-                        part_placed_on_shelf = True
-                        break # Move to the next part
-            if part_placed_on_shelf:
-                break
-        
-        # If no part could be placed on the current shelf, start a new one
-        if not part_placed_on_shelf:
-            if shelf_length == 0: # No parts could be placed at all
-                break
-            
-            shelf_y += shelf_length + kerf # Start new shelf above, accounting for kerf
-            shelf_x = 0.0
-            shelf_length = 0.0 # Reset shelf length; it will be set by the next part
-
-            # If the new shelf is off the board, we're done
-            if shelf_y >= sheet_length:
-                break
+            if best_rect_index != -1:
+                # A spot was found, place the part
+                rect = empty_rects.pop(best_rect_index)
                 
-    return placed_parts, remaining_parts
+                # Add the part to the placed list
+                part['rotated'] = rotated
+                placed_parts.append({**part, 'x': rect['x'], 'y': rect['y']})
+
+                # --- Split the remaining space into two new empty rectangles ---
+                # New rectangle above the placed part
+                top_rect = {
+                    'x': rect['x'],
+                    'y': rect['y'] + part_l + kerf,
+                    'length': rect['length'] - part_l - kerf,
+                    'width': rect['width']
+                }
+                # New rectangle to the right of the placed part
+                right_rect = {
+                    'x': rect['x'] + part_w + kerf,
+                    'y': rect['y'],
+                    'length': part_l, # Only as long as the part itself
+                    'width': rect['width'] - part_w - kerf
+                }
+
+                # Add the new rectangles to the list if they are valid
+                if top_rect['length'] > 0 and top_rect['width'] > 0:
+                    empty_rects.append(top_rect)
+                if right_rect['length'] > 0 and right_rect['width'] > 0:
+                    empty_rects.append(right_rect)
+
+                placed = True
+                break # Stop trying orientations for this part
+        
+        if not placed:
+            # This part could not be placed in any orientation
+            # For simplicity, we'll just drop it. A more complex algorithm could try again later.
+            pass
+
+    remaining_parts_list = [p for p in parts_to_place if p not in placed_parts]
+    return placed_parts, remaining_parts_list, empty_rects
