@@ -4,5 +4,7 @@
     "hhos_path": "S:\\Temporary\\Louis Link - Temp\\Optimizer\\Demo\\Input\\HHOS_SC-220492.csv",
     "offcut_path": "",
     "stock_path": "S:\\Temporary\\Louis Link - Temp\\Optimizer\\Demo\\Input\\Stock Part Inventory.xlsx",
+    "kerf": 0.125,
+    "allow_rotation": false,
     "default_height": 48
 }

@@ -1,76 +1,70 @@
-def run_optimization(sheet_length, sheet_width, parts):
+def run_optimization(sheet_length, sheet_width, parts, kerf=0.0, allow_rotation=True):
     """
-    Places parts onto a sheet using a simple shelf-based guillotine algorithm.
-
-    Args:
-        sheet_length (float): The length of the sheet to place parts on.
-        sheet_width (float): The width of the sheet to place parts on.
-        parts (list of dict): A list of parts to place, each with 'part name', 
-                                'length', 'width', and 'quantity'.
-
-    Returns:
-        tuple: A tuple containing:
-            - list: A list of placed parts with their x, y coordinates.
-            - list: A list of parts that could not be placed.
+    Places parts onto a sheet, accounting for kerf and rotation.
     """
-    # Create a flat list of all individual parts to be placed
     parts_to_place = []
     for part in parts:
         for _ in range(int(part['quantity'])):
             parts_to_place.append({
                 'part name': part['part name'],
+                'label': part['label'],
                 'length': part['length'],
-                'width': part['width']
+                'width': part['width'],
+                'rotated': False # Add rotation flag
             })
 
-    # Sort parts by length (longest first) as a simple heuristic
-    parts_to_place.sort(key=lambda p: p['length'], reverse=True)
+    parts_to_place.sort(key=lambda p: p['length'] * p['width'], reverse=True) # Sort by area
 
     placed_parts = []
+    remaining_parts = list(parts_to_place) # Start with all parts as remaining
     
-    # --- Shelf Algorithm Logic ---
     shelf_x = 0.0
     shelf_y = 0.0
-    shelf_length = 0.0 # This represents the length of the current shelf
+    shelf_length = 0.0
 
-    remaining_parts = []
-    for part in parts_to_place:
-        part_l = part['length']
-        part_w = part['width']
-
-        # If the shelf is empty, start it with the current part's length
-        if shelf_length == 0.0:
-            shelf_length = part_l
-
-        # Try to place the part on the current shelf
-        if shelf_y + part_l <= sheet_length:
-            if shelf_x + part_w <= sheet_width:
-                # Place the part
-                placed_parts.append({
-                    **part,
-                    'x': shelf_x,
-                    'y': shelf_y
-                })
-                shelf_x += part_w
-            else:
-                # Part doesn't fit on this shelf, move to the next shelf
-                shelf_y += shelf_length
-                shelf_x = 0.0
-                shelf_length = part_l # New shelf starts with this part's length
-
-                # Try placing the part on the new shelf
-                if shelf_y + part_l <= sheet_length:
-                    placed_parts.append({
-                        **part,
-                        'x': shelf_x,
-                        'y': shelf_y
-                    })
-                    shelf_x += part_w
-                else:
-                    # Part doesn't fit on the sheet at all
-                    remaining_parts.append(part)
-        else:
-            # Part is too long for the remaining space
-            remaining_parts.append(part)
+    while len(remaining_parts) > 0:
+        part_placed_on_shelf = False
+        
+        # Find the next part that can fit
+        for i, part in enumerate(remaining_parts):
             
+            # Try both original and rotated orientations
+            orientations = [(part['length'], part['width'], False)]
+            if allow_rotation and part['length'] != part['width']:
+                orientations.append((part['width'], part['length'], True))
+
+            for part_l, part_w, rotated in orientations:
+                if shelf_y == 0 and shelf_x == 0: # Starting the very first shelf
+                    shelf_length = part_l
+
+                # Does it fit vertically on the sheet?
+                if shelf_y + part_l <= sheet_length:
+                    # Does it fit horizontally on the current shelf?
+                    if shelf_x + part_w <= sheet_width:
+                        
+                        # --- Place the part ---
+                        part_to_place = remaining_parts.pop(i)
+                        part_to_place['rotated'] = rotated
+                        placed_parts.append({**part_to_place, 'x': shelf_x, 'y': shelf_y})
+                        
+                        # Advance shelf position, accounting for kerf
+                        shelf_x += part_w + kerf
+                        part_placed_on_shelf = True
+                        break # Move to the next part
+            if part_placed_on_shelf:
+                break
+        
+        # If no part could be placed on the current shelf, start a new one
+        if not part_placed_on_shelf:
+            if shelf_length == 0: # No parts could be placed at all
+                break
+            
+            shelf_y += shelf_length + kerf # Start new shelf above, accounting for kerf
+            shelf_x = 0.0
+            shelf_length = 0.0 # Reset shelf length; it will be set by the next part
+
+            # If the new shelf is off the board, we're done
+            if shelf_y >= sheet_length:
+                break
+                
     return placed_parts, remaining_parts

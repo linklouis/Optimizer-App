@@ -17,7 +17,9 @@ DEFAULT_CONFIG = {
     'default_width': 48,
     'hhos_path': '',
     'offcut_path': '',
-    'stock_path': ''
+    'stock_path': '',
+    'kerf': 0.125,  # Default kerf, e.g., 1/8 inch
+    'allow_rotation': True
 }
 
 def setup_app():
@@ -50,6 +52,9 @@ def home():
         config['stock_path'] = request.form.get('stock_path', '').strip(' "')
         config['default_length'] = request.form.get('default_length', type=int, default=96)
         config['default_width'] = request.form.get('default_width', type=int, default=48)
+        config['kerf'] = request.form.get('kerf', type=float, default=0.125)
+        config['allow_rotation'] = request.form.get('allow_rotation') == 'true'
+
         with open(CONFIG_FILE, 'w') as f:
             json.dump(config, f, indent=4)
         message = "Configuration saved successfully!"
@@ -64,7 +69,6 @@ def home():
                 message = message or "Data loaded successfully."
 
                 # --- Run the Optimization ---
-                # Include the new 'label' column when preparing the parts list
                 parts_to_cut = hhos_df[['part name', 'label', 'length', 'width', 'quantity']].copy()
                 parts_to_cut['length'] = pd.to_numeric(parts_to_cut['length'])
                 parts_to_cut['width'] = pd.to_numeric(parts_to_cut['width'])
@@ -73,7 +77,13 @@ def home():
                 sheet_length = config['default_length']
                 sheet_width = config['default_width']
                 
-                placed_parts, remaining_parts = run_optimization(sheet_length, sheet_width, parts_list)
+                placed_parts, remaining_parts = run_optimization(
+                    sheet_length,
+                    sheet_width,
+                    parts_list,
+                    config['kerf'],
+                    config['allow_rotation']
+                )
 
                 layout_data['placed_parts'] = placed_parts
                 layout_data['sheet_length'] = sheet_length

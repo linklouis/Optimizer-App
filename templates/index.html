@@ -57,6 +57,17 @@
                         <input type="number" id="default_width" name="default_width" value="{{ config.default_width }}">
                     </div>
                 </div>
+                <h3>Optimization Settings</h3>
+                    <div class="size-inputs">
+                        <div>
+                            <label for="kerf">Kerf (Saw Blade Thickness):</label>
+                            <input type="number" step="0.01" id="kerf" name="kerf" value="{{ config.kerf }}">
+                        </div>
+                        <div style="align-self: flex-end;">
+                            <input type="checkbox" id="allow_rotation" name="allow_rotation" value="true" {% if config.allow_rotation %}checked{% endif %}>
+                            <label for="allow_rotation">Allow Part Rotation</label>
+                        </div>
+                    </div>
                 <h3>Data File Paths</h3>
                 <div>
                     <label for="hhos_path">HHOS File Path:</label>
@@ -81,12 +92,16 @@
                     <rect class="sheet" x="0" y="0" width="{{ layout.sheet_width }}" height="{{ layout.sheet_length }}" />
 
                     {% for part in layout.placed_parts %}
-                        {# Calculate the correct Y position for SVG's coordinate system (y=0 at the top) #}
-                        {% set svg_y = layout.sheet_length - part.y - part.length %}
+                        {% set svg_y = layout.sheet_length - part.y - (part.width if part.rotated else part.length) %}
                         <g transform="translate({{ part.x }}, {{ svg_y }})">
-                            <rect class="part" width="{{ part.width }}" height="{{ part.length }}" />
-                            {# Use the new, shorter 'label' for display #}
-                            <text class="part-label" x="{{ part.width / 2 }}" y="{{ part.length / 2 }}">{{ part['label'] }}</text>
+                            {# Swap width and height for drawing if the part is rotated #}
+                            {% if part.rotated %}
+                                <rect class="part" width="{{ part.length }}" height="{{ part.width }}" />
+                                <text class="part-label" x="{{ part.length / 2 }}" y="{{ part.width / 2 }}">{{ part.label }}</text>
+                            {% else %}
+                                <rect class="part" width="{{ part.width }}" height="{{ part.length }}" />
+                                <text class="part-label" x="{{ part.width / 2 }}" y="{{ part.length / 2 }}">{{ part.label }}</text>
+                            {% endif %}
                         </g>
                     {% endfor %}
                 </svg>
