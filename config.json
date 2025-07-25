@@ -5,7 +5,8 @@
     "offcut_path": "",
     "stock_path": "S:\\Temporary\\Louis Link - Temp\\Optimizer\\Demo\\Input\\Stock Part Inventory.xlsx",
     "kerf": 0.125,
-    "allow_rotation": false,
+    "allow_rotation": true,
     "min_offcut_dim": 4.0,
+    "multi_pass": true,
     "default_height": 48
 }

@@ -74,6 +74,10 @@
                             <input type="checkbox" id="allow_rotation" name="allow_rotation" value="true" {% if config.allow_rotation %}checked{% endif %}>
                             <label for="allow_rotation">Allow Part Rotation</label>
                         </div>
+                        <div style="align-self: flex-end; margin-top: 1em;">
+                            <input type="checkbox" id="multi_pass" name="multi_pass" value="true" {% if config.multi_pass %}checked{% endif %}>
+                            <label for="multi_pass">Use Multi-Pass (Higher Quality)</label>
+                        </div>
                     </div>
                     <div>
                         <label for="min_offcut_dim">Min. Usable Offcut Dimension:</label>

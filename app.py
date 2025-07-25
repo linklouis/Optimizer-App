@@ -1,7 +1,6 @@
-# ... (imports and config setup) ...
 from flask import Flask, request, render_template
 from data_processing import process_uploaded_files
-from optimizer import run_optimization
+from optimizer import run_optimization, calculate_layout_score
 import os
 import json
 import pandas as pd
@@ -20,7 +19,8 @@ DEFAULT_CONFIG = {
     'stock_path': '',
     'kerf': 0.125,
     'allow_rotation': True,
-    'min_offcut_dim': 12.0
+    'min_offcut_dim': 4.0,
+    'multi_pass': True  # Default multi-pass to on
 }
 
 def setup_app():
@@ -56,6 +56,7 @@ def home():
         config['kerf'] = request.form.get('kerf', type=float, default=0.125)
         config['allow_rotation'] = request.form.get('allow_rotation') == 'true'
         config['min_offcut_dim'] = request.form.get('min_offcut_dim', type=float, default=4.0)
+        config['multi_pass'] = request.form.get('multi_pass') == 'true' # Handle the new checkbox
 
         with open(CONFIG_FILE, 'w') as f:
             json.dump(config, f, indent=4)
@@ -70,7 +71,6 @@ def home():
             if hhos_df is not None:
                 message = message or "Data loaded successfully."
 
-                # --- Run the Optimization ---
                 parts_to_cut = hhos_df[['part name', 'label', 'length', 'width', 'quantity']].copy()
                 parts_to_cut['length'] = pd.to_numeric(parts_to_cut['length'])
                 parts_to_cut['width'] = pd.to_numeric(parts_to_cut['width'])
@@ -79,35 +79,58 @@ def home():
                 sheet_length = config['default_length']
                 sheet_width = config['default_width']
 
-                placed_parts, remaining_parts, offcuts_and_scrap = run_optimization(
-                    sheet_length,
-                    sheet_width,
-                    parts_list,
-                    config['kerf'],
-                    config['allow_rotation']
-                )
+                best_layout = None
+                best_score = -1.0
 
-                # --- Analyze Results ---
-                # Calculate Yield
+                if config['multi_pass']:
+                    print("--- Running Multi-Pass Optimization ---")
+                    sort_strategies = {
+                        'area': lambda p: p['length'] * p['width'],
+                        'length': lambda p: p['length'],
+                        'width': lambda p: p['width'],
+                        'perimeter': lambda p: 2 * (p['length'] + p['width'])
+                    }
+
+                    for name, sort_key in sort_strategies.items():
+                        print(f"Trying strategy: Sort by {name}")
+                        sorted_parts = sorted(parts_list, key=sort_key, reverse=True)
+                        layout = run_optimization(
+                            sheet_length, sheet_width, sorted_parts,
+                            config['kerf'], config['allow_rotation']
+                        )
+                        score = calculate_layout_score(layout['placed_parts'], sheet_length, sheet_width)
+                        print(f"  - Score: {score:.2f}")
+
+                        if score > best_score:
+                            best_score = score
+                            best_layout = layout
+                            print(f"  - New best layout found!")
+                else:
+                    print("--- Running Single-Pass Optimization ---")
+                    sorted_parts = sorted(parts_list, key=lambda p: p['length'] * p['width'], reverse=True)
+                    best_layout = run_optimization(
+                        sheet_length, sheet_width, sorted_parts,
+                        config['kerf'], config['allow_rotation']
+                    )
+
+                # --- Analyze the final best layout ---
+                placed_parts = best_layout['placed_parts']
+                offcuts_and_scrap = best_layout['offcuts']
+
                 total_parts_area = sum([(p['length'] * p['width']) for p in placed_parts])
                 sheet_area = sheet_length * sheet_width
                 yield_percentage = (total_parts_area / sheet_area) * 100 if sheet_area > 0 else 0
-
-                # Analyze offcuts
+                
                 min_dim = config['min_offcut_dim']
                 usable_offcuts = [r for r in offcuts_and_scrap if r['length'] >= min_dim and r['width'] >= min_dim]
 
-                # --- Prepare data for the template ---
-                layout_data['placed_parts'] = placed_parts
-                layout_data['sheet_length'] = sheet_length
-                layout_data['sheet_width'] = sheet_width
-                layout_data['yield_percentage'] = yield_percentage
-                layout_data['usable_offcuts'] = usable_offcuts
-
-                print(f"\n--- OPTIMIZATION RESULTS ---")
-                print(f"Yield: {yield_percentage:.2f}%")
-                print(f"Placed {len(placed_parts)} parts, {len(usable_offcuts)} usable offcuts found, {len(remaining_parts)} remaining.")
-
+                layout_data.update({
+                    'placed_parts': placed_parts,
+                    'sheet_length': sheet_length,
+                    'sheet_width': sheet_width,
+                    'yield_percentage': yield_percentage,
+                    'usable_offcuts': usable_offcuts
+                })
 
         except Exception as e:
             error = f"An error occurred: {e}"
