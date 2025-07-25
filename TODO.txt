@@ -31,3 +31,4 @@ QUESTIONS
     - Which order do length & width come in?
     - Does yield count saved offcuts as used or wasted?
     - Can we do cuts that only go partway through the material?
+    - If we can fit all parts on one sheet, should we still consider using multiple smaller sheets for better yield?

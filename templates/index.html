@@ -4,142 +4,135 @@
     <meta charset="UTF-8">
     <title>Optimizer Configuration</title>
     <style>
-        body { font-family: sans-serif; margin: 2em; }
+        body { font-family: sans-serif; margin: 2em; background-color: #f4f4f9; color: #333; }
+        h1, h2, h3 { color: #2c3e50; }
         .container { display: flex; gap: 2em; align-items: flex-start; }
-        .config-form { flex: 1; min-width: 350px; }
-        .layout-display { flex: 2; border: 1px solid #ddd; padding: 1em; }
-        form > div { margin-bottom: 1em; }
-        label { display: block; margin-bottom: 0.2em; }
-        input[type="text"], input[type="number"] { width: 100%; padding: 8px; box-sizing: border-box; }
-        .size-inputs { display: flex; gap: 1em; }
-        .size-inputs > div { flex: 1; }
-
-        /* Styles for the SVG layout */
+        .config-form { flex: 1; min-width: 400px; background: #fff; padding: 1.5em; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .results-section { flex: 2; }
+        form > div { margin-bottom: 1.2em; }
+        label { display: block; margin-bottom: 0.5em; font-weight: bold; }
+        input[type="text"], input[type="number"] { width: 100%; padding: 10px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
+        .input-group { display: flex; gap: 1em; }
+        .input-group > div { flex: 1; }
+        .checkbox-group { display: flex; align-items: center; gap: 0.5em; padding-top: 1em; }
+        
+        /* Layout Display Styles */
+        .layout-container { margin-bottom: 2em; background: #fff; padding: 1em; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         .layout-svg { border: 2px solid #333; width: 100%; height: auto; }
         .sheet { fill: #fdfdfd; }
-        .part {
-            fill: #a5c9ca;
-            stroke: #395B64;
-            stroke-width: 0.5;
-            /* This is key: it keeps the border thickness consistent when scaling */
-            vector-effect: non-scaling-stroke;
-        }
-        .part-label {
-            font-size: 3px; /* Smaller font size in SVG units */
-            font-family: monospace;
-            fill: #000;
-            text-anchor: middle; /* Center the text horizontally */
-            dominant-baseline: middle; /* Center the text vertically */
-        }
-        .offcut {
-            fill: #EFEFEF;
-            stroke: #B2B2B2;
-            stroke-width: 0.5;
-            stroke-dasharray: 2 2; /* Make the border dashed */
-            vector-effect: non-scaling-stroke;
-        }
+        .part { fill: #3498db; stroke: #2980b9; stroke-width: 0.5; vector-effect: non-scaling-stroke; }
+        .part-label { font-size: 3px; font-family: monospace; fill: #fff; text-anchor: middle; dominant-baseline: middle; }
+        .offcut { fill: #ecf0f1; stroke: #bdc3c7; stroke-width: 0.5; stroke-dasharray: 2 2; vector-effect: non-scaling-stroke; }
     </style>
 </head>
 <body>
-    <h1>Optimizer</h1>
+    <h1>Multi-Sheet 2D Optimizer</h1>
     <div class="container">
         <div class="config-form">
             <h2>Configuration</h2>
             {% if message %}
-                <p style="color: green;"><b>{{ message }}</b></p>
+                <p style="color: #27ae60;"><b>{{ message }}</b></p>
             {% endif %}
             {% if error %}
-                <p style="color: red;"><b>Error: {{ error }}</b></p>
+                <p style="color: #c0392b;"><b>Error: {{ error }}</b></p>
             {% endif %}
 
             <form method="post">
-                <h3>Default Board Size</h3>
-                <div class="size-inputs">
+                <h3>File Paths</h3>
+                <div>
+                    <label for="hhos_path">HHOS Part List File:</label>
+                    <input type="text" id="hhos_path" name="hhos_path" value="{{ config.hhos_path }}" required>
+                </div>
+                 <div>
+                    <label for="stock_path">Stock Inventory File:</label>
+                    <input type="text" id="stock_path" name="stock_path" value="{{ config.stock_path }}" required>
+                </div>
+                <div>
+                    <label for="offcut_path">Offcut List File (Optional):</label>
+                    <input type="text" id="offcut_path" name="offcut_path" value="{{ config.offcut_path }}" placeholder="Uses internal list if blank">
+                </div>
+
+                <h3>General Settings</h3>
+                <div class="input-group">
                     <div>
                         <label for="default_length">Default Length:</label>
-                        <input type="number" id="default_length" name="default_length" value="{{ config.default_length }}">
+                        <input type="number" step="any" id="default_length" name="default_length" value="{{ config.default_length }}">
                     </div>
                     <div>
                         <label for="default_width">Default Width:</label>
-                        <input type="number" id="default_width" name="default_width" value="{{ config.default_width }}">
+                        <input type="number" step="any" id="default_width" name="default_width" value="{{ config.default_width }}">
                     </div>
                 </div>
-                <h3>Optimization Settings</h3>
-                    <div class="size-inputs">
-                        <div>
-                            <label for="kerf">Kerf (Saw Blade Thickness):</label>
-                            <input type="number" step="0.01" id="kerf" name="kerf" value="{{ config.kerf }}">
-                        </div>
-                        <div style="align-self: flex-end;">
-                            <input type="checkbox" id="allow_rotation" name="allow_rotation" value="true" {% if config.allow_rotation %}checked{% endif %}>
-                            <label for="allow_rotation">Allow Part Rotation</label>
-                        </div>
-                        <div style="align-self: flex-end; margin-top: 1em;">
-                            <input type="checkbox" id="multi_pass" name="multi_pass" value="true" {% if config.multi_pass %}checked{% endif %}>
-                            <label for="multi_pass">Use Multi-Pass (Higher Quality)</label>
-                        </div>
-                    </div>
-                    <div>
-                        <label for="min_offcut_dim">Min. Usable Offcut Dimension:</label>
-                        <input type="number" step="0.1" id="min_offcut_dim" name="min_offcut_dim" value="{{ config.min_offcut_dim }}">
-                    </div>
-                    <div>
-                        <label>Scoring Weights (Yield | Offcuts | Cuts):</label>
-                        <div class="size-inputs">
-                            <input type="number" step="0.1" name="w_yield" value="{{ config.w_yield }}">
-                            <input type="number" step="0.1" name="w_offcut" value="{{ config.w_offcut }}">
-                            <input type="number" step="0.1" name="w_cuts" value="{{ config.w_cuts }}">
-                        </div>
-                    </div>
-                <h3>Data File Paths</h3>
-                <div>
-                    <label for="hhos_path">HHOS File Path:</label>
-                    <input type="text" id="hhos_path" name="hhos_path" value="{{ config.hhos_path }}" required>
+                 <div>
+                    <label for="kerf">Kerf (Saw Blade Thickness):</label>
+                    <input type="number" step="any" id="kerf" name="kerf" value="{{ config.kerf }}">
                 </div>
                 <div>
-                    <label for="offcut_path">Offcut List Path (Optional):</label>
-                    <input type="text" id="offcut_path" name="offcut_path" value="{{ config.offcut_path }}" placeholder="Leave blank to use the app's internal list">
+                    <label for="min_offcut_dim">Min. Usable Offcut Dimension:</label>
+                    <input type="number" step="any" id="min_offcut_dim" name="min_offcut_dim" value="{{ config.min_offcut_dim }}">
                 </div>
-                <div>
-                    <label for="stock_path">Stock Part Inventory Path:</label>
-                    <input type="text" id="stock_path" name="stock_path" value="{{ config.stock_path }}" required>
+                <div class="input-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="allow_rotation" name="allow_rotation" value="true" {% if config.allow_rotation %}checked{% endif %}>
+                        <label for="allow_rotation">Allow Rotation</label>
+                    </div>
+                     <div class="checkbox-group">
+                        <input type="checkbox" id="use_offcuts" name="use_offcuts" value="true" {% if config.use_offcuts %}checked{% endif %}>
+                        <label for="use_offcuts">Use Offcuts</label>
+                    </div>
                 </div>
-                <button type="submit">Save and Process</button>
+                
+                <h3>Scoring Weights</h3>
+                <div class="input-group">
+                    <div><label for="w_yield">Yield</label><input type="number" step="any" name="w_yield" value="{{ config.w_yield }}"></div>
+                    <div><label for="w_offcut">Offcuts</label><input type="number" step="any" name="w_offcut" value="{{ config.w_offcut }}"></div>
+                    <div><label for="w_cuts">Cuts</label><input type="number" step="any" name="w_cuts" value="{{ config.w_cuts }}"></div>
+                </div>
+                <div class="input-group">
+                    <div><label for="w_quantity">Inventory Qty</label><input type="number" step="any" name="w_quantity" value="{{ config.w_quantity }}"></div>
+                    <div><label for="w_sheets"># of Sheets</label><input type="number" step="any" name="w_sheets" value="{{ config.w_sheets }}"></div>
+                </div>
+
+                <button type="submit" style="width: 100%; padding: 12px; background-color: #3498db; color: white; border: none; border-radius: 4px; font-size: 16px; cursor: pointer;">Save and Optimize</button>
             </form>
         </div>
 
-        <div class="layout-display">
-            <h2>Layout Result</h2>
-            {% if layout.placed_parts %}
-                <h3>Yield: {{ layout.yield_percentage|round(2) }}%</h3>
+        <div class="results-section">
+            <h2>Layout Results</h2>
+            {% if result and result.layouts %}
+                <h3>Overall Score: {{ result.final_score|round(2) }}</h3>
+                <p>Used {{ result.layouts|length }} sheet(s). {{ result.remaining_parts|length }} parts could not be placed.</p>
+                <hr>
+                {% for layout in result.layouts %}
+                    <div class="layout-container">
+                        <h4>Sheet: {{ layout.sheet_info.id }} ({{ layout.sheet_info.length }} x {{ layout.sheet_info.width }}) | Yield: {{ layout.yield_percentage|round(2) }}%</h4>
+                        
+                        <svg class="layout-svg" viewBox="0 0 {{ layout.sheet_info.width }} {{ layout.sheet_info.length }}">
+                            <rect class="sheet" x="0" y="0" width="{{ layout.sheet_info.width }}" height="{{ layout.sheet_info.length }}" />
 
-                <svg class="layout-svg" viewBox="0 0 {{ layout.sheet_width }} {{ layout.sheet_length }}">
-                    <rect class="sheet" x="0" y="0" width="{{ layout.sheet_width }}" height="{{ layout.sheet_length }}" />
+                            {% for part in layout.placed_parts %}
+                                {% set p_length = part.width if part.rotated else part.length %}
+                                {% set p_width = part.length if part.rotated else part.width %}
+                                {% set svg_y = layout.sheet_info.length - part.y - p_length %}
+                                <g transform="translate({{ part.x }}, {{ svg_y }})">
+                                    <rect class="part" width="{{ p_width }}" height="{{ p_length }}" />
+                                    <text class="part-label" x="{{ p_width / 2 }}" y="{{ p_length / 2 }}">{{ part.label }}</text>
+                                </g>
+                            {% endfor %}
 
-                    {% for part in layout.placed_parts %}
-                        {% set svg_y = layout.sheet_length - part.y - (part.width if part.rotated else part.length) %}
-                        <g transform="translate({{ part.x }}, {{ svg_y }})">
-                            {% if part.rotated %}
-                                <rect class="part" width="{{ part.length }}" height="{{ part.width }}" />
-                                <text class="part-label" x="{{ part.length / 2 }}" y="{{ part.width / 2 }}">{{ part.label }}</text>
-                            {% else %}
-                                <rect class="part" width="{{ part.width }}" height="{{ part.length }}" />
-                                <text class="part-label" x="{{ part.width / 2 }}" y="{{ part.length / 2 }}">{{ part.label }}</text>
-                            {% endif %}
-                        </g>
-                    {% endfor %}
-
-                    {% for offcut in layout.usable_offcuts %}
-                        {% set svg_y = layout.sheet_length - offcut.y - offcut.length %}
-                        <g transform="translate({{ offcut.x }}, {{ svg_y }})">
-                            <rect class="offcut" width="{{ offcut.width }}" height="{{ offcut.length }}" />
-                        </g>
-                    {% endfor %}
-
-                </svg>
+                            {% for offcut in layout.usable_offcuts %}
+                                {% set svg_y = layout.sheet_info.length - offcut.y - offcut.length %}
+                                <g transform="translate({{ offcut.x }}, {{ svg_y }})">
+                                    <rect class="offcut" width="{{ offcut.width }}" height="{{ offcut.length }}" />
+                                </g>
+                            {% endfor %}
+                        </svg>
+                    </div>
+                {% endfor %}
             {% else %}
-                <p>No layout to display. Process files to see the result.</p>
+                <p>No layout to display. Save configuration and provide valid data files to run the optimization.</p>
             {% endif %}
         </div>
+    </div>
 </body>
 </html>
