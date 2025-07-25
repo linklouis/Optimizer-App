@@ -21,6 +21,7 @@
         .layout-svg { border: 2px solid #333; width: 100%; height: auto; }
         .sheet { fill: #fdfdfd; }
         .part { fill: #3498db; stroke: #2980b9; stroke-width: 0.5; vector-effect: non-scaling-stroke; }
+        .stock-part { fill: #2ecc71; stroke: #27ae60; stroke-width: 0.5; vector-effect: non-scaling-stroke; }
         .part-label { font-size: 3px; font-family: monospace; fill: #fff; text-anchor: middle; dominant-baseline: middle; }
         .offcut { fill: #ecf0f1; stroke: #bdc3c7; stroke-width: 0.5; stroke-dasharray: 2 2; vector-effect: non-scaling-stroke; }
     </style>
@@ -41,11 +42,15 @@
                 <h3>File Paths</h3>
                 <div>
                     <label for="hhos_path">HHOS Part List File:</label>
-                    <input type="text" id="hhos_path" name="hhos_path" value="{{ config.hhos_path }}" required>
+                    <input type="text" id="hhos_path" name="hhos_path" value="{{ config.hhos_path }}">
                 </div>
                  <div>
-                    <label for="stock_path">Stock Inventory File:</label>
+                    <label for="stock_path">Sheet Inventory File:</label>
                     <input type="text" id="stock_path" name="stock_path" value="{{ config.stock_path }}" required>
+                </div>
+                <div>
+                    <label for="stock_inv_path">Stock Part Inventory File:</label>
+                    <input type="text" id="stock_inv_path" name="stock_inv_path" value="{{ config.stock_inv_path }}">
                 </div>
                 <div>
                     <label for="offcut_path">Offcut List File (Optional):</label>
@@ -80,6 +85,10 @@
                         <input type="checkbox" id="use_offcuts" name="use_offcuts" value="true" {% if config.use_offcuts %}checked{% endif %}>
                         <label for="use_offcuts">Use Offcuts</label>
                     </div>
+                     <div class="checkbox-group">
+                        <input type="checkbox" id="add_stock_parts" name="add_stock_parts" value="true" {% if config.add_stock_parts %}checked{% endif %}>
+                        <label for="add_stock_parts">Add Stock Parts to Fill</label>
+                    </div>
                 </div>
                 
                 <h3>Scoring Weights</h3>
@@ -91,6 +100,7 @@
                 <div class="input-group">
                     <div><label for="w_quantity">Inventory Bonus</label><input type="number" step="any" name="w_quantity" value="{{ config.w_quantity }}"></div>
                     <div><label for="w_sheets"># of Sheets Penalty</label><input type="number" step="any" name="w_sheets" value="{{ config.w_sheets }}"></div>
+                    <div><label for="w_stock_fill">Stock Fill Bonus</label><input type="number" step="any" name="w_stock_fill" value="{{ config.w_stock_fill }}"></div>
                 </div>
 
                 <button type="submit" style="width: 100%; padding: 12px; background-color: #3498db; color: white; border: none; border-radius: 4px; font-size: 16px; cursor: pointer;">Save and Optimize</button>
@@ -101,7 +111,7 @@
             <h2>Layout Results</h2>
             {% if result and result.layouts %}
                 <h3>Overall Score: {{ result.final_score|round(2) }}</h3>
-                <p>Used {{ result.layouts|length }} sheet(s). {% if result.remaining_parts|length > 0 %}<span style="color: #c0392b;">{{ result.remaining_parts|length }} parts could not be placed.</span>{% endif %}</p>
+                <p>Used {{ result.layouts|length }} sheet(s). {% if result.remaining_parts|length > 0 %}<span style="color: #c0392b;">{{ result.remaining_parts|length }} required parts could not be placed.</span>{% endif %}</p>
                 <hr>
                 {% for layout in result.layouts %}
                     <div class="layout-container">
@@ -115,8 +125,8 @@
                                 {% set p_width = part.length if part.rotated else part.width %}
                                 {% set svg_y = layout.sheet_info.length - part.y - p_length %}
                                 <g transform="translate({{ part.x }}, {{ svg_y }})">
-                                    <rect class="part" width="{{ p_width }}" height="{{ p_length }}" />
-                                    <text class="part-label" x="{{ p_width / 2 }}" y="{{ p_length / 2 }}">{{ part.label }}</text>
+                                    <rect class="{{ 'stock-part' if part.is_stock_part else 'part' }}" width="{{ p_width }}" height="{{ p_length }}" />
+                                    <text class="part-label" x="{{ p_width / 2 }}" y="{{ p_length / 2 }}">{{ part.label or part.part_name }}</text>
                                 </g>
                             {% endfor %}
 
