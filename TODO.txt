@@ -1,0 +1,19 @@
+FEATURES
+    Features
+        - Probably have it remember the latest file paths?
+    
+    Visual
+        - 
+
+    Code
+        - 
+
+
+
+BUGS
+    - Downcasting issue with replace in extract_hhos_data
+
+
+QUESTIONS
+    - What do the columns mean in the HHOS file again?
+    - Should it be called default "board" size?

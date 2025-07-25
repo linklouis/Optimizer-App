@@ -1,0 +1,17 @@
+- Yield (Aim for 90%)
+- Job due date
+
+- X Try all combos of jobs in the queue
+- Try adding stock parts to each combo, if they reduce waste use them, add more to score if they're low on stock (desired quantity. Don't make too many)
+
+
+- Starting w/ 96x48in panel
+
+- If we have really bad yield, and we can save a full chunk (offcut), do that and add offcut to inv.
+
+- Ask D.J. for the input for Ardis & what it outputs
+- Workaround for custom posts to saw, not through Ardis
+- HHOS files input
+
+- .R41 might be Adis job file?
+- .STK might be post file for saw?
