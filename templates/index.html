@@ -26,12 +26,12 @@
         <h2>Default Board Size</h2>
         <div class="size-inputs">
             <div>
-                <label for="default_width">Default Width:</label>
-                <input type="number" id="default_width" name="default_width" value="{{ config.default_width }}">
-            </div>
-            <div>
                 <label for="default_length">Default length:</label>
                 <input type="number" id="default_length" name="default_length" value="{{ config.default_length }}">
+            </div>
+            <div>
+                <label for="default_width">Default Width:</label>
+                <input type="number" id="default_width" name="default_width" value="{{ config.default_width }}">
             </div>
         </div>
         
@@ -41,8 +41,8 @@
             <input type="text" id="hhos_path" name="hhos_path" value="{{ config.hhos_path }}" required>
         </div>
         <div>
-            <label for="offcut_path">Offcut List Path:</label>
-            <input type="text" id="offcut_path" name="offcut_path" value="{{ config.offcut_path }}" required>
+            <label for="offcut_path">Offcut List Path (Optional):</label>
+            <input type="text" id="offcut_path" name="offcut_path" value="{{ config.offcut_path }}" placeholder="Leave blank to use the app's internal list">
         </div>
         <div>
             <label for="stock_path">Stock Part Inventory Path:</label>

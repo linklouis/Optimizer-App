@@ -1,8 +1,8 @@
 {
-    "default_width": 96,
-    "default_length": 48,
+    "default_length": 96,
+    "default_width": 48,
     "hhos_path": "S:\\Temporary\\Louis Link - Temp\\Optimizer\\Demo\\Input\\HHOS_SC-220492.csv",
-    "offcut_path": "S:\\Temporary\\Louis Link - Temp\\Optimizer\\Demo\\Input\\Offcut list.xlsx",
+    "offcut_path": "",
     "stock_path": "S:\\Temporary\\Louis Link - Temp\\Optimizer\\Demo\\Input\\Stock Part Inventory.xlsx",
     "default_height": 48
 }
