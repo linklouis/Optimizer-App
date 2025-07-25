@@ -1,13 +1,13 @@
+# ... (imports and config setup) ...
 from flask import Flask, request, render_template
 from data_processing import process_uploaded_files
-from optimizer import run_optimization # <-- Import the new function
+from optimizer import run_optimization
 import os
 import json
 import pandas as pd
 
 app = Flask(__name__)
 
-# --- (Keep your existing CONFIG, setup_app, and load_config functions) ---
 CONFIG_FILE = 'config.json'
 UPLOAD_FOLDER = 'uploads'
 MANAGED_OFFCUT_PATH = os.path.join(UPLOAD_FOLDER, 'managed_offcut_list.csv')
@@ -31,16 +31,20 @@ def load_config():
         with open(CONFIG_FILE, 'r') as f:
             config.update(json.load(f))
     return config
-# --- (End of existing functions) ---
 
 @app.route('/', methods=['GET', 'POST'])
 def home():
     message = None
     error = None
     config = load_config()
+    
+    layout_data = {
+        'placed_parts': [],
+        'sheet_length': config.get('default_length'),
+        'sheet_width': config.get('default_width')
+    }
 
     if request.method == 'POST':
-        # (Keep your existing POST logic for saving the config)
         config['hhos_path'] = request.form.get('hhos_path', '').strip(' "')
         config['offcut_path'] = request.form.get('offcut_path', '').strip(' "')
         config['stock_path'] = request.form.get('stock_path', '').strip(' "')
@@ -60,33 +64,29 @@ def home():
                 message = message or "Data loaded successfully."
 
                 # --- Run the Optimization ---
-                # 1. Prepare parts list from the DataFrame
-                parts_to_cut = hhos_df[['part name', 'length', 'width', 'quantity']].copy()
+                # Include the new 'label' column when preparing the parts list
+                parts_to_cut = hhos_df[['part name', 'label', 'length', 'width', 'quantity']].copy()
                 parts_to_cut['length'] = pd.to_numeric(parts_to_cut['length'])
                 parts_to_cut['width'] = pd.to_numeric(parts_to_cut['width'])
                 parts_list = parts_to_cut.to_dict('records')
 
-                # 2. Get sheet dimensions from config
                 sheet_length = config['default_length']
                 sheet_width = config['default_width']
                 
-                # 3. Call the optimizer
                 placed_parts, remaining_parts = run_optimization(sheet_length, sheet_width, parts_list)
 
-                # 4. Print results to console (for now)
-                print("\n--- OPTIMIZATION RESULTS ---")
-                print(f"Placed {len(placed_parts)} parts on the sheet.")
-                for part in placed_parts:
-                    print(f"  - {part['part name']}: at (x={part['x']:.2f}, y={part['y']:.2f})")
+                layout_data['placed_parts'] = placed_parts
+                layout_data['sheet_length'] = sheet_length
+                layout_data['sheet_width'] = sheet_width
                 
-                if remaining_parts:
-                    print(f"\nCould not place {len(remaining_parts)} parts.")
+                print("\n--- OPTIMIZATION RESULTS ---")
+                print(f"Placed {len(placed_parts)} parts. {len(remaining_parts)} remaining.")
 
         except Exception as e:
             error = f"An error occurred: {e}"
             print(f"Error details: {e}")
 
-    return render_template('index.html', message=message, error=error, config=config)
+    return render_template('index.html', message=message, error=error, config=config, layout=layout_data)
 
 if __name__ == '__main__':
     setup_app()
