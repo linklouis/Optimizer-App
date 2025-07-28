@@ -138,7 +138,8 @@ def run_single_sheet_optimization(sheet_info, required_parts, config, optional_s
 
     placed_stock_parts = []
     if optional_stock_parts and remaining_rects:
-        sorted_stock_parts = sorted(optional_stock_parts, key=lambda p: p['length'] * p['width'])
+        # sorted_stock_parts = sorted(optional_stock_parts, key=lambda p: p['length'] * p['width'])
+        sorted_stock_parts = sorted(optional_stock_parts, key=lambda p: p['target_stock'] - p['current_stock'], reverse=True)
         placed_stock_parts, remaining_rects = _place_parts_in_rects(sorted_stock_parts, remaining_rects, kerf, allow_rotation)
     
     all_placed_parts = placed_job_parts + placed_stock_parts

@@ -28,6 +28,8 @@ IDEAS
     - Try every combination of cut order for every sheet? 
     - Does the algorithm consider each part of the final score at the same time?
     - In optimize_multiple_sheets, should we be optimizing by cost-per-part, or by the overall score of the layout?
+    - Does it treat stock parts as regular parts when they are added?
+    - Shouldn't always add stock parts/should treat them the same as the other parts. Otherwise, things like the # of cuts aren't considered when adding stock parts.
 
 
 QUESTIONS
