@@ -25,7 +25,7 @@ DEFAULT_CONFIG = {
     'use_offcuts': True,
     'add_stock_parts': False,
     'search_time_limit': 1.0, 
-    'selected_stock_parts': [], # New: To store user's choices
+    'selected_stock_parts': [],
     'w_waste': 1.0, 
     'w_offcut': 0.5, 
     'w_cuts': 0.2,
@@ -52,15 +52,13 @@ def home():
     error = None
     config = load_config()
     optimization_result = None
-    all_stock_parts_list = [] # New: To hold all parts for selection UI
+    all_stock_parts_list = []
 
     if request.method == 'POST':
-        # --- Update config from form ---
         config['hhos_path'] = request.form.get('hhos_path', '').strip(' "')
         config['offcut_path'] = request.form.get('offcut_path', '').strip(' "')
         config['stock_inv_path'] = request.form.get('stock_inv_path', '').strip(' "')
         
-        # General Settings
         config['default_length'] = request.form.get('default_length', type=float, default=96)
         config['default_width'] = request.form.get('default_width', type=float, default=48)
         config['kerf'] = request.form.get('kerf', type=float, default=0.125)
@@ -70,10 +68,8 @@ def home():
         config['add_stock_parts'] = request.form.get('add_stock_parts') == 'true'
         config['search_time_limit'] = request.form.get('search_time_limit', type=float, default=1.0)
         
-        # New: Get selected stock parts from the form
         config['selected_stock_parts'] = request.form.getlist('selected_stock_parts')
 
-        # Scoring Weights
         config['w_waste'] = request.form.get('w_waste', type=float, default=1.0)
         config['w_offcut'] = request.form.get('w_offcut', type=float, default=0.5)
         config['w_cuts'] = request.form.get('w_cuts', type=float, default=0.2)
@@ -85,9 +81,7 @@ def home():
             json.dump(config, f, indent=4)
         message = "Configuration saved successfully!"
     
-    # --- Always try to load data for UI, even on GET request if path exists ---
     try:
-        # We need to process files to get the list of stock parts for the selection UI
         hhos_df, offcut_df, stock_inv_df = process_uploaded_files(
             config['hhos_path'], 
             config.get('offcut_path') or MANAGED_OFFCUT_PATH, 
@@ -103,17 +97,13 @@ def home():
 
     if request.method == 'POST' and (config.get('hhos_path') or config.get('stock_inv_path')):
         try:
-            # --- Prepare Required Parts ---
             parts_to_cut = []
             if hhos_df is not None and not hhos_df.empty:
                 parts_to_cut = hhos_df[['part name', 'label', 'length', 'width', 'quantity']].to_dict('records')
             
-            # --- Prepare Optional Stock Parts (and filter based on selection) ---
             optional_stock_parts = []
             if config['add_stock_parts'] and stock_inv_df is not None and not stock_inv_df.empty:
-                # Filter the dataframe based on user selection before processing
                 selected_stock_df = stock_inv_df[stock_inv_df['internal_ref'].isin(config['selected_stock_parts'])]
-                
                 needy_stock = selected_stock_df[selected_stock_df['current_stock'] < selected_stock_df['target_stock']].copy()
                 if not needy_stock.empty:
                     needy_stock['is_stock_part'] = True
@@ -121,7 +111,6 @@ def home():
 
             is_stock_only_job = not parts_to_cut and optional_stock_parts
             
-            # --- Prepare Sheet Inventory ---
             stock_sheets = []
             stock_sheets.append({
                 'id': 'default_sheet', 'length': config['default_length'], 'width': config['default_width'],
@@ -132,38 +121,43 @@ def home():
                 offcut_df['type'] = 'Offcut'
                 stock_sheets.extend(offcut_df.to_dict('records'))
             
-            # --- Run Optimization ---
             layouts, remaining_parts, final_score = optimize_multiple_sheets(
-                parts_to_cut,
-                stock_sheets,
-                config,
-                optional_stock_parts=optional_stock_parts,
-                is_stock_only_job=is_stock_only_job
+                parts_to_cut, stock_sheets, config,
+                optional_stock_parts=optional_stock_parts, is_stock_only_job=is_stock_only_job
             )
             
-            # --- Process Results ---
             if layouts:
                 message = message or "Optimization complete."
+                
+                total_placed_area = sum(l['total_placed_area'] for l in layouts)
+                total_sheet_area = sum(l['sheet_info']['length'] * l['sheet_info']['width'] for l in layouts)
+                overall_yield = (total_placed_area / total_sheet_area) * 100 if total_sheet_area > 0 else 0
+
                 processed_layouts = []
                 for layout in layouts:
                     sheet_info = layout['sheet_info']
                     sheet_area = sheet_info['length'] * sheet_info['width']
                     yield_percentage = (layout['total_placed_area'] / sheet_area) * 100 if sheet_area > 0 else 0
-                    
                     min_dim = config['min_offcut_dim']
                     usable_offcuts = [r for r in layout['offcuts'] if r['length'] >= min_dim and r['width'] >= min_dim]
 
+                    # New: Calculate bounding box of placed parts
+                    bounding_box = None
+                    if layout['placed_parts']:
+                        max_x = max(p['x'] + (p['length'] if p['rotated'] else p['width']) for p in layout['placed_parts'])
+                        max_y = max(p['y'] + (p['width'] if p['rotated'] else p['length']) for p in layout['placed_parts'])
+                        bounding_box = {'width': max_x, 'length': max_y}
+
+
                     processed_layouts.append({
-                        'placed_parts': layout['placed_parts'],
-                        'sheet_info': sheet_info,
-                        'yield_percentage': yield_percentage,
-                        'usable_offcuts': usable_offcuts,
+                        'placed_parts': layout['placed_parts'], 'sheet_info': sheet_info,
+                        'yield_percentage': yield_percentage, 'usable_offcuts': usable_offcuts,
+                        'bounding_box': bounding_box
                     })
                 
                 optimization_result = {
-                    'layouts': processed_layouts,
-                    'remaining_parts': remaining_parts,
-                    'final_score': final_score
+                    'layouts': processed_layouts, 'remaining_parts': remaining_parts,
+                    'final_score': final_score, 'overall_yield': overall_yield
                 }
 
         except Exception as e:

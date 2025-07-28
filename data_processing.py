@@ -60,9 +60,9 @@ def standardize_sheet_data(df: pd.DataFrame, file_type: str, default_length: flo
 
 def process_stock_part_inventory(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Standardizes the stock part inventory, extracting dimensions from the 'Name' column.
+    Standardizes the stock part inventory, extracting dimensions from the 'Name' column
+    and cleaning the part name for display.
     """
-    # Use the first 4 columns as per the user's provided file format
     if df.shape[1] < 4:
         raise ValueError("Stock part inventory file must have at least 4 columns for Internal Reference, Name, Quantity On Hand, and Target Quantity.")
     
@@ -71,9 +71,13 @@ def process_stock_part_inventory(df: pd.DataFrame) -> pd.DataFrame:
 
     dimension_regex = re.compile(r'(\d+\.?\d*)\s*x\s*(\d+\.?\d*)\s*$')
 
+    # Extract dimensions
     extracted_dims = df['part_name'].str.extract(dimension_regex)
     df['length'] = extracted_dims[0]
     df['width'] = extracted_dims[1]
+
+    # New: Clean the part name for display by removing the dimensions
+    df['part_name'] = df['part_name'].str.replace(dimension_regex, '', regex=True).str.strip().str.rstrip(' -')
     
     for col in ['length', 'width', 'current_stock', 'target_stock']:
         df[col] = pd.to_numeric(df[col], errors='coerce')

@@ -2,69 +2,231 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Optimizer Configuration</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cutting Stock Optimizer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <style>
-        body { font-family: sans-serif; margin: 2em; background-color: #f4f4f9; color: #333; }
-        h1, h2, h3 { color: #2c3e50; }
-        .container { display: flex; gap: 2em; align-items: flex-start; }
-        .config-form { flex: 1; min-width: 400px; background: #fff; padding: 1.5em; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .results-section { flex: 2; }
-        form > div { margin-bottom: 1.2em; }
-        label { display: block; margin-bottom: 0.5em; font-weight: bold; }
-        input[type="text"], input[type="number"] { width: 100%; padding: 10px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
-        .input-group { display: flex; gap: 1em; }
-        .input-group > div { flex: 1; }
-        .checkbox-group { display: flex; align-items: center; gap: 0.5em; padding-top: 1em; }
+        :root {
+            --primary-color: #007bff;
+            --secondary-color: #6c757d;
+            --success-color: #28a745;
+            --danger-color: #dc3545;
+            --light-color: #f8f9fa;
+            --dark-color: #343a40;
+            --bg-color: #eef2f9;
+            --card-bg: #ffffff;
+            --border-color: #dee2e6;
+            --shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            --border-radius: 8px;
+        }
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            background-color: var(--bg-color);
+            color: var(--dark-color);
+            font-size: 16px;
+        }
+        .main-container {
+            max-width: 1600px;
+            margin: 2em auto;
+            padding: 0 2em;
+        }
+        header {
+            background-color: var(--card-bg);
+            padding: 1em 2em;
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
+            margin-bottom: 2em;
+        }
+        header h1 {
+            margin: 0;
+            color: var(--primary-color);
+            font-size: 1.75em;
+        }
+        .card {
+            background-color: var(--card-bg);
+            padding: 1.5em;
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
+            margin-bottom: 1.5em;
+        }
+        .card h3 {
+            margin-top: 0;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 0.5em;
+            font-size: 1.1em;
+            color: #333;
+        }
+        .card h3 i {
+            margin-right: 0.5em;
+            color: var(--primary-color);
+        }
+        .tabs {
+            display: flex;
+            gap: 0.5em;
+            margin-bottom: 1.5em;
+        }
+        .tab-button {
+            padding: 10px 20px;
+            border: 1px solid var(--border-color);
+            background-color: var(--card-bg);
+            cursor: pointer;
+            border-radius: 6px 6px 0 0;
+            font-size: 1em;
+            font-weight: 500;
+            transition: all 0.2s ease-in-out;
+            border-bottom: none;
+        }
+        .tab-button:hover {
+            background-color: #f1f3f5;
+        }
+        .tab-button.active {
+            background-color: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+        }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
         
-        /* New Styles for Stock Part Selection */
-        .stock-selector { max-height: 250px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; border-radius: 4px; background-color: #fafafa; }
+        /* Form Styles */
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5em;
+        }
+        label {
+            display: block;
+            margin-bottom: 0.5em;
+            font-weight: 500;
+            font-size: 0.9em;
+        }
+        input[type="text"], input[type="number"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            transition: border-color 0.2s;
+        }
+        input[type="text"]:focus, input[type="number"]:focus {
+            outline: none;
+            border-color: var(--primary-color);
+        }
+        .checkbox-group { display: flex; align-items: center; gap: 0.5em; }
+        .checkbox-group label { margin-bottom: 0; }
+        
+        .stock-selector { max-height: 250px; overflow-y: auto; border: 1px solid var(--border-color); padding: 10px; border-radius: 4px; background-color: var(--light-color); }
         .stock-item { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 0.9em; }
         .stock-item input { width: auto; }
         .stock-item-details { flex-grow: 1; }
         .stock-item-details span { color: #555; }
+        
+        .submit-button {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(45deg, var(--success-color), #20c997);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 1.1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .submit-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(40, 167, 69, 0.3);
+        }
+        
+        /* Results Styles */
+        .results-summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5em;
+            margin-bottom: 2em;
+        }
+        .summary-metric {
+            background-color: var(--card-bg);
+            padding: 1.5em;
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
+            text-align: center;
+        }
+        .summary-metric .value {
+            font-size: 2.5em;
+            font-weight: 700;
+            color: var(--primary-color);
+        }
+        .summary-metric .label {
+            font-size: 1em;
+            color: var(--secondary-color);
+        }
+        .results-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 1.5em;
+        }
+        .layout-card {
+            background-color: var(--card-bg);
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
+            padding: 1.5em;
+        }
+        .layout-svg {
+            border: 1px solid var(--border-color);
+            width: 100%;
+            height: auto;
+            background-color: #fff;
+        }
+        .sheet { fill: var(--light-color); }
+        .part { fill: #007bff; stroke: #0056b3; }
+        .stock-part { fill: #28a745; stroke: #1e7e34; }
+        .offcut { fill: #f1f3f5; stroke: #adb5bd; }
+        .part-label { font-size: 4px; }
+        .edge-label, .offcut-label { font-size: 3.5px; }
+        .dim-line { stroke: var(--danger-color); stroke-width: 0.4; }
+        .dim-text { font-size: 3.5px; fill: var(--danger-color); }
 
-
-        /* Layout Display Styles */
-        .layout-container { margin-bottom: 2em; background: #fff; padding: 1em; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .layout-svg { border: 2px solid #333; max-width: 300px; height: auto; }
-        .sheet { fill: #fdfdfd; }
-        .part { fill: #3498db; stroke: #2980b9; stroke-width: 0.5; vector-effect: non-scaling-stroke; }
-        .stock-part { fill: #2ecc71; stroke: #27ae60; stroke-width: 0.5; vector-effect: non-scaling-stroke; }
-        .part-label { font-size: 3px; font-family: monospace; fill: #fff; text-anchor: middle; dominant-baseline: middle; }
-        .edge-label { font-size: 2.8px; font-family: monospace; fill: #1a1a1a; text-anchor: middle; }
-        .offcut { fill: #ecf0f1; stroke: #bdc3c7; stroke-width: 0.5; stroke-dasharray: 2 2; vector-effect: non-scaling-stroke; }
+        .alert { padding: 1em; border-radius: 4px; margin-bottom: 1.5em; }
+        .alert-success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .alert-danger { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
     </style>
 </head>
 <body>
-    <h1>Multi-Sheet 2D Optimizer</h1>
-    <div class="container">
-        <div class="config-form">
-            <h2>Configuration</h2>
-            {% if message %}
-                <p style="color: #27ae60;"><b>{{ message }}</b></p>
-            {% endif %}
-            {% if error %}
-                <p style="color: #c0392b;"><b>Error: {{ error }}</b></p>
-            {% endif %}
+    <div class="main-container">
+        <header>
+            <h1><i class="fa-solid fa-tree"></i> Cutting Stock Optimizer</h1>
+        </header>
 
+        <div class="tabs">
+            <button class="tab-button active" onclick="openTab(event, 'config')"><i class="fa-solid fa-sliders"></i> Configuration</button>
+            <button class="tab-button" onclick="openTab(event, 'results')"><i class="fa-solid fa-chart-pie"></i> Results</button>
+        </div>
+
+        <div id="config" class="tab-content active">
             <form method="post">
-                <h3>File Paths</h3>
-                <div>
-                    <label for="hhos_path">HHOS Part List File:</label>
-                    <input type="text" id="hhos_path" name="hhos_path" value="{{ config.hhos_path }}">
-                </div>
-                <div>
-                    <label for="stock_inv_path">Stock Part Inventory File:</label>
-                    <input type="text" id="stock_inv_path" name="stock_inv_path" value="{{ config.stock_inv_path }}">
-                </div>
-                <div>
-                    <label for="offcut_path">Offcut List File (Optional):</label>
-                    <input type="text" id="offcut_path" name="offcut_path" value="{{ config.offcut_path }}" placeholder="Uses internal list if blank">
+                {% if message %}
+                    <div class="alert alert-success">{{ message }}</div>
+                {% endif %}
+                {% if error %}
+                    <div class="alert alert-danger">{{ error }}</div>
+                {% endif %}
+
+                <div class="card">
+                    <h3><i class="fa-solid fa-file-alt"></i> File Paths</h3>
+                    <div class="form-grid">
+                        <div><label for="hhos_path">HHOS Part List File:</label><input type="text" id="hhos_path" name="hhos_path" value="{{ config.hhos_path }}"></div>
+                        <div><label for="stock_inv_path">Stock Part Inventory File:</label><input type="text" id="stock_inv_path" name="stock_inv_path" value="{{ config.stock_inv_path }}"></div>
+                        <div><label for="offcut_path">Offcut List File (Optional):</label><input type="text" id="offcut_path" name="offcut_path" value="{{ config.offcut_path }}" placeholder="Uses internal list if blank"></div>
+                    </div>
                 </div>
 
                 {% if all_stock_parts %}
-                <div>
-                    <h3>Select Stock Parts to Include</h3>
+                <div class="card">
+                    <h3><i class="fa-solid fa-boxes-stacked"></i> Select Stock Parts to Include</h3>
                     <div class="stock-selector">
                         {% for part in all_stock_parts %}
                         <div class="stock-item">
@@ -78,105 +240,127 @@
                     </div>
                 </div>
                 {% endif %}
-
-                <h3>General Settings</h3>
-                <div class="input-group">
-                    <div>
-                        <label for="default_length">Default Length:</label>
-                        <input type="number" step="any" id="default_length" name="default_length" value="{{ config.default_length }}">
-                    </div>
-                    <div>
-                        <label for="default_width">Default Width:</label>
-                        <input type="number" step="any" id="default_width" name="default_width" value="{{ config.default_width }}">
-                    </div>
-                </div>
-                 <div>
-                    <label for="kerf">Kerf (Saw Blade Thickness):</label>
-                    <input type="number" step="any" id="kerf" name="kerf" value="{{ config.kerf }}">
-                </div>
-                <div class="input-group">
-                    <div>
-                        <label for="min_offcut_dim">Min. Usable Offcut Dimension:</label>
-                        <input type="number" step="any" id="min_offcut_dim" name="min_offcut_dim" value="{{ config.min_offcut_dim }}">
-                    </div>
-                    <div>
-                        <label for="search_time_limit">Search Time Limit (s):</label>
-                        <input type="number" step="any" id="search_time_limit" name="search_time_limit" value="{{ config.search_time_limit }}">
-                    </div>
-                </div>
-                <div class="input-group">
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="allow_rotation" name="allow_rotation" value="true" {% if config.allow_rotation %}checked{% endif %}>
-                        <label for="allow_rotation">Allow Rotation</label>
-                    </div>
-                     <div class="checkbox-group">
-                        <input type="checkbox" id="use_offcuts" name="use_offcuts" value="true" {% if config.use_offcuts %}checked{% endif %}>
-                        <label for="use_offcuts">Use Offcuts</label>
-                    </div>
-                     <div class="checkbox-group">
-                        <input type="checkbox" id="add_stock_parts" name="add_stock_parts" value="true" {% if config.add_stock_parts %}checked{% endif %}>
-                        <label for="add_stock_parts">Add Stock Parts to Fill</label>
-                    </div>
-                </div>
                 
-                <h3>Scoring Weights</h3>
-                <div class="input-group">
-                    <div><label for="w_waste">Waste Penalty</label><input type="number" step="any" name="w_waste" value="{{ config.w_waste }}"></div>
-                    <div><label for="w_offcut">Offcut Penalty</label><input type="number" step="any" name="w_offcut" value="{{ config.w_offcut }}"></div>
-                    <div><label for="w_cuts">Cuts Penalty</label><input type="number" step="any" name="w_cuts" value="{{ config.w_cuts }}"></div>
-                </div>
-                <div class="input-group">
-                    <div><label for="w_quantity">Inventory Bonus</label><input type="number" step="any" name="w_quantity" value="{{ config.w_quantity }}"></div>
-                    <div><label for="w_sheets"># of Sheets Penalty</label><input type="number" step="any" name="w_sheets" value="{{ config.w_sheets }}"></div>
-                    <div><label for="w_stock_fill">Stock Fill Bonus</label><input type="number" step="any" name="w_stock_fill" value="{{ config.w_stock_fill }}"></div>
+                <div class="card">
+                    <h3><i class="fa-solid fa-cogs"></i> General Settings</h3>
+                    <div class="form-grid">
+                        <div><label for="default_length">Default Length:</label><input type="number" step="any" id="default_length" name="default_length" value="{{ config.default_length }}"></div>
+                        <div><label for="default_width">Default Width:</label><input type="number" step="any" id="default_width" name="default_width" value="{{ config.default_width }}"></div>
+                        <div><label for="kerf">Kerf (Saw Blade):</label><input type="number" step="any" id="kerf" name="kerf" value="{{ config.kerf }}"></div>
+                        <div><label for="min_offcut_dim">Min. Usable Offcut:</label><input type="number" step="any" id="min_offcut_dim" name="min_offcut_dim" value="{{ config.min_offcut_dim }}"></div>
+                        <div><label for="search_time_limit">Search Time (s):</label><input type="number" step="any" id="search_time_limit" name="search_time_limit" value="{{ config.search_time_limit }}"></div>
+                    </div>
+                    <div class="form-grid" style="margin-top: 1em;">
+                        <div class="checkbox-group"><input type="checkbox" id="allow_rotation" name="allow_rotation" value="true" {% if config.allow_rotation %}checked{% endif %}><label for="allow_rotation">Allow Rotation</label></div>
+                        <div class="checkbox-group"><input type="checkbox" id="use_offcuts" name="use_offcuts" value="true" {% if config.use_offcuts %}checked{% endif %}><label for="use_offcuts">Use Offcuts</label></div>
+                        <div class="checkbox-group"><input type="checkbox" id="add_stock_parts" name="add_stock_parts" value="true" {% if config.add_stock_parts %}checked{% endif %}><label for="add_stock_parts">Add Stock Parts</label></div>
+                    </div>
                 </div>
 
-                <button type="submit" style="width: 100%; padding: 12px; background-color: #3498db; color: white; border: none; border-radius: 4px; font-size: 16px; cursor: pointer;">Save and Optimize</button>
+                <div class="card">
+                    <h3><i class="fa-solid fa-balance-scale"></i> Scoring Weights</h3>
+                    <div class="form-grid">
+                        <div><label for="w_waste">Waste Penalty</label><input type="number" step="any" name="w_waste" value="{{ config.w_waste }}"></div>
+                        <div><label for="w_offcut">Offcut Penalty</label><input type="number" step="any" name="w_offcut" value="{{ config.w_offcut }}"></div>
+                        <div><label for="w_cuts">Cuts Penalty</label><input type="number" step="any" name="w_cuts" value="{{ config.w_cuts }}"></div>
+                        <div><label for="w_quantity">Inv. Bonus</label><input type="number" step="any" name="w_quantity" value="{{ config.w_quantity }}"></div>
+                        <div><label for="w_sheets">Sheet Penalty</label><input type="number" step="any" name="w_sheets" value="{{ config.w_sheets }}"></div>
+                        <div><label for="w_stock_fill">Stock Fill Bonus</label><input type="number" step="any" name="w_stock_fill" value="{{ config.w_stock_fill }}"></div>
+                    </div>
+                </div>
+
+                <button type="submit" class="submit-button"><i class="fa-solid fa-cogs"></i> Save & Optimize</button>
             </form>
         </div>
 
-        <div class="results-section">
-            <h2>Layout Results</h2>
+        <div id="results" class="tab-content">
             {% if result and result.layouts %}
-                <h3>Overall Score: {{ result.final_score|round(2) }}</h3>
-                <p>Used {{ result.layouts|length }} sheet(s). {% if result.remaining_parts|length > 0 %}<span style="color: #c0392b;">{{ result.remaining_parts|length }} required parts could not be placed.</span>{% endif %}</p>
-                <hr>
-                {% for layout in result.layouts %}
-                    <div class="layout-container">
-                        <h4>Sheet: {{ layout.sheet_info.id }} ({{ layout.sheet_info.length }} x {{ layout.sheet_info.width }}) | Yield: {{ layout.yield_percentage|round(2) }}%</h4>
-                        
-                        <svg class="layout-svg" viewBox="0 0 {{ layout.sheet_info.width }} {{ layout.sheet_info.length }}">
-                            <rect class="sheet" x="0" y="0" width="{{ layout.sheet_info.width }}" height="{{ layout.sheet_info.length }}" />
-
-                            {% for part in layout.placed_parts %}
-                                {% set p_length = part.width if part.rotated else part.length %}
-                                {% set p_width = part.length if part.rotated else part.width %}
-                                {% set svg_y = layout.sheet_info.length - part.y - p_length %}
-                                <g transform="translate({{ part.x }}, {{ svg_y }})">
-                                    <rect class="{{ 'stock-part' if part.is_stock_part else 'part' }}" width="{{ p_width }}" height="{{ p_length }}" />
-                                    <text class="part-label" x="{{ p_width / 2 }}" y="{{ p_length / 2 }}">{{ part.label or part.part_name }}</text>
-                                    
-                                    <text class="edge-label" x="{{ p_width / 2 }}" y="{{ p_length + 3 }}">{{ p_width|round(2) }}</text>
-                                    <text class="edge-label" x="-3" y="{{ p_length / 2 }}" transform="rotate(-90, -3, {{ p_length/2 }})">{{ p_length|round(2) }}</text>
-                                </g>
-                            {% endfor %}
-
-                            {% for offcut in layout.usable_offcuts %}
-                                {% set svg_y = layout.sheet_info.length - offcut.y - offcut.length %}
-                                <g transform="translate({{ offcut.x }}, {{ svg_y }})">
-                                    <rect class="offcut" width="{{ offcut.width }}" height="{{ offcut.length }}" />
-
-                                    <text class="edge-label" x="{{ offcut.width / 2 }}" y="{{ offcut.length + 3 }}">{{ offcut.width|round(2) }}</text>
-                                    <text class="edge-label" x="-3" y="{{ offcut.length / 2 }}" transform="rotate(-90, -3, {{ offcut.length/2 }})">{{ offcut.length|round(2) }}</text>
-                                </g>
-                            {% endfor %}
-                        </svg>
+                <div class="results-summary">
+                    <div class="summary-metric"><div class="value">{{ result.final_score|round(2) }}</div><div class="label">Overall Score</div></div>
+                    <div class="summary-metric"><div class="value">{{ result.layouts|length }}</div><div class="label">Sheets Used</div></div>
+                    <div class="summary-metric"><div class="value">{{ result.overall_yield|round(2) }}%</div><div class="label">Overall Yield</div></div>
+                    <div class="summary-metric {% if result.remaining_parts|length > 0 %}alert-danger{% endif %}">
+                        <div class="value">{{ result.remaining_parts|length }}</div>
+                        <div class="label">Parts Not Placed</div>
                     </div>
-                {% endfor %}
+                </div>
+                <div class="results-grid">
+                    {% for layout in result.layouts %}
+                        <div class="layout-card">
+                            <h3>Sheet: {{ layout.sheet_info.id }} ({{ layout.sheet_info.length }} x {{ layout.sheet_info.width }}) | Yield: {{ layout.yield_percentage|round(2) }}%</h4>
+                            <svg class="layout-svg" viewBox="-10 -10 {{ layout.sheet_info.width + 20 }} {{ layout.sheet_info.length + 20 }}">
+                                <defs>
+                                    <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="3" markerHeight="3" orient="auto-start-reverse">
+                                      <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--danger-color)" />
+                                    </marker>
+                                </defs>
+
+                                <rect class="sheet" x="0" y="0" width="{{ layout.sheet_info.width }}" height="{{ layout.sheet_info.length }}" stroke="#ccc" stroke-width="0.2"/>
+                                {% for part in layout.placed_parts %}
+                                    {% set p_length = part.width if part.rotated else part.length %}
+                                    {% set p_width = part.length if part.rotated else part.width %}
+                                    {% set svg_y = layout.sheet_info.length - part.y - p_length %}
+                                    <g transform="translate({{ part.x }}, {{ svg_y }})">
+                                        <rect class="{{ 'stock-part' if part.is_stock_part else 'part' }}" width="{{ p_width }}" height="{{ p_length }}" stroke-width="0.2"/>
+                                        <text class="part-label" x="{{ p_width / 2 }}" y="{{ p_length / 2 }}" fill="white" dominant-baseline="middle" text-anchor="middle">{{ part.label or part.part_name }}</text>
+                                    </g>
+                                {% endfor %}
+                                {% for offcut in layout.usable_offcuts %}
+                                    {% set svg_y = layout.sheet_info.length - offcut.y - offcut.length %}
+                                    <g transform="translate({{ offcut.x }}, {{ svg_y }})">
+                                        <rect class="offcut" width="{{ offcut.width }}" height="{{ offcut.length }}" stroke-width="0.2"/>
+                                        {% if offcut.width > 10 and offcut.length > 10 %}
+                                            <text class="offcut-label" x="{{ offcut.width / 2 }}" y="{{ offcut.length / 2 }}" dominant-baseline="middle" text-anchor="middle" fill="#333">
+                                                {{ offcut.width|round(1) }}x{{ offcut.length|round(1) }}
+                                            </text>
+                                        {% endif %}
+                                    </g>
+                                {% endfor %}
+                                
+                                {% if layout.bounding_box %}
+                                    {% set bb_w = layout.bounding_box.width %}
+                                    {% set bb_l = layout.sheet_info.length - layout.bounding_box.length %}
+                                    {% set bb_y_start = layout.sheet_info.length %}
+
+                                    <g>
+                                        <line class="dim-line" x1="0" y1="{{ bb_y_start + 5 }}" x2="{{ bb_w }}" y2="{{ bb_y_start + 5 }}" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+                                        <text class="dim-text" x="{{ bb_w / 2 }}" y="{{ bb_y_start + 8 }}" text-anchor="middle">{{ bb_w|round(2) }}</text>
+                                    </g>
+                                    <g>
+                                        <line class="dim-line" y1="{{ bb_l }}" x1="{{ bb_w + 5 }}" y2="{{ bb_y_start }}" x2="{{ bb_w + 5 }}" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+                                        <text class="dim-text" y="{{ bb_l + (bb_y_start - bb_l) / 2 }}" x="{{ bb_w + 8 }}" dominant-baseline="middle" transform="rotate(-90, {{ bb_w + 8 }}, {{ bb_l + (bb_y_start - bb_l) / 2 }})">{{ layout.bounding_box.length|round(2) }}</text>
+                                    </g>
+                                {% endif %}
+                            </svg>
+                        </div>
+                    {% endfor %}
+                </div>
             {% else %}
-                <p>No layout to display. Save configuration and provide valid data files to run the optimization.</p>
+                <div class="card">
+                    <h3>No Results</h3>
+                    <p>No layout to display. Please set your configuration and run the optimizer.</p>
+                </div>
             {% endif %}
         </div>
     </div>
+    <script>
+        function openTab(evt, tabName) {
+            let i, tabcontent, tablinks;
+            tabcontent = document.getElementsByClassName("tab-content");
+            for (i = 0; i < tabcontent.length; i++) {
+                tabcontent[i].style.display = "none";
+            }
+            tablinks = document.getElementsByClassName("tab-button");
+            for (i = 0; i < tablinks.length; i++) {
+                tablinks[i].className = tablinks[i].className.replace(" active", "");
+            }
+            document.getElementById(tabName).style.display = "block";
+            evt.currentTarget.className += " active";
+        }
+        // To keep the results tab active after a POST request
+        {% if result %}
+            document.querySelector('.tab-button[onclick*="results"]').click();
+        {% endif %}
+    </script>
 </body>
 </html>
