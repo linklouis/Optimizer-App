@@ -69,9 +69,15 @@
                     <label for="kerf">Kerf (Saw Blade Thickness):</label>
                     <input type="number" step="any" id="kerf" name="kerf" value="{{ config.kerf }}">
                 </div>
-                <div>
-                    <label for="min_offcut_dim">Min. Usable Offcut Dimension:</label>
-                    <input type="number" step="any" id="min_offcut_dim" name="min_offcut_dim" value="{{ config.min_offcut_dim }}">
+                <div class="input-group">
+                    <div>
+                        <label for="min_offcut_dim">Min. Usable Offcut Dimension:</label>
+                        <input type="number" step="any" id="min_offcut_dim" name="min_offcut_dim" value="{{ config.min_offcut_dim }}">
+                    </div>
+                    <div>
+                        <label for="search_time_limit">Search Time Limit (s):</label>
+                        <input type="number" step="any" id="search_time_limit" name="search_time_limit" value="{{ config.search_time_limit }}">
+                    </div>
                 </div>
                 <div class="input-group">
                     <div class="checkbox-group">

@@ -24,6 +24,7 @@ DEFAULT_CONFIG = {
     'min_offcut_dim': 4.0,
     'use_offcuts': True,
     'add_stock_parts': False,
+    'search_time_limit': 1.0, # Time in seconds to search for better stock layouts
     'w_waste': 1.0, 
     'w_offcut': 0.5, 
     'w_cuts': 0.2,
@@ -65,6 +66,8 @@ def home():
         config['min_offcut_dim'] = request.form.get('min_offcut_dim', type=float, default=4.0)
         config['use_offcuts'] = request.form.get('use_offcuts') == 'true'
         config['add_stock_parts'] = request.form.get('add_stock_parts') == 'true'
+        config['search_time_limit'] = request.form.get('search_time_limit', type=float, default=1.0)
+
 
         # Scoring Weights
         config['w_waste'] = request.form.get('w_waste', type=float, default=1.0)

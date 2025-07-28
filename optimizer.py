@@ -1,4 +1,6 @@
 import uuid
+import time
+import random
 
 def find_best_fit(part_l, part_w, empty_rects):
     """Finds the best empty rectangle to place a part in using a shortest-side-fit heuristic."""
@@ -32,8 +34,8 @@ def calculate_layout_score(layout, sheet_info, weights, min_offcut_dim, is_stock
     offcut_area = sum((o['length'] * o['width']) for o in usable_offcuts)
     waste_area = sheet_area - used_area - offcut_area
     
-    offcut_penalty = offcut_area * weights.get('w_offcut', 0.5)
-    waste_penalty = waste_area * weights.get('w_waste', 1.0)
+    offcut_penalty = (offcut_area / sheet_area) * weights.get('w_offcut', 0.5)
+    waste_penalty = (waste_area / sheet_area) * weights.get('w_waste', 1.0)
     area_based_score = -(offcut_penalty + waste_penalty)
 
     # --- Bonus & Constraint Calculation ---
@@ -47,7 +49,7 @@ def calculate_layout_score(layout, sheet_info, weights, min_offcut_dim, is_stock
             deficit = part.get('target_stock', 1) - part.get('current_stock', 0)
             if part.get('target_stock', 0) > 0 and deficit > 0:
                 part_area = part['length'] * part['width']
-                stock_fill_bonus += (deficit / part['target_stock']) * part_area * weights.get('w_stock_fill', 1.0)
+                stock_fill_bonus += (deficit / part['target_stock']) * (part_area / sheet_area) * weights.get('w_stock_fill', 1.0)
         else:
             has_required_parts = True
 
@@ -71,7 +73,7 @@ def _get_split_penalty(rect1, rect2):
     def get_rect_penalty(r_len, r_wid):
         if min(r_len, r_wid) > 0:
             return max(r_len, r_wid) / min(r_len, r_wid)
-        return 0 # Ignore empty or invalid rectangles in penalty calculation
+        return 0 
     
     return get_rect_penalty(rect1['length'], rect1['width']) + get_rect_penalty(rect2['length'], rect2['width'])
 
@@ -103,20 +105,15 @@ def _place_parts_in_rects(parts_to_place, initial_rects, kerf, allow_rotation):
             placed_part.update({'rotated': rotated, 'x': rect['x'], 'y': rect['y']})
             placed_parts.append(placed_part)
 
-            # --- Smarter Split Heuristic (based on aspect ratio) ---
-            # Option 1: Horizontal cut first, creating rects above and to the right of the part.
             rect_above = {'x': rect['x'], 'y': rect['y'] + part_l + kerf, 'length': rect['length'] - part_l - kerf, 'width': rect['width']}
             rect_right_of_part = {'x': rect['x'] + part_w + kerf, 'y': rect['y'], 'length': part_l, 'width': rect['width'] - part_w - kerf}
-            
-            # Option 2: Vertical cut first, creating rects to the right and above the part.
             rect_right = {'x': rect['x'] + part_w + kerf, 'y': rect['y'], 'length': rect['length'], 'width': rect['width'] - part_w - kerf}
             rect_above_part = {'x': rect['x'], 'y': rect['y'] + part_l + kerf, 'length': rect['length'] - part_l - kerf, 'width': part_w}
 
-            # Choose the split that results in more "square-like" (lower aspect ratio) offcuts.
             split1_penalty = _get_split_penalty(rect_above, rect_right_of_part)
             split2_penalty = _get_split_penalty(rect_right, rect_above_part)
             
-            if split1_penalty <= split2_penalty: # Lower penalty is better
+            if split1_penalty <= split2_penalty:
                 if rect_above['length'] > 0 and rect_above['width'] > 0: empty_rects.append(rect_above)
                 if rect_right_of_part['length'] > 0 and rect_right_of_part['width'] > 0: empty_rects.append(rect_right_of_part)
             else:
@@ -125,37 +122,87 @@ def _place_parts_in_rects(parts_to_place, initial_rects, kerf, allow_rotation):
 
     return placed_parts, empty_rects
 
+def _place_randomized_stock(stock_parts_to_place, initial_rects, kerf, allow_rotation):
+    """
+    Places stock parts using a randomized greedy approach to explore different layout configurations.
+    """
+    parts_to_attempt = list(stock_parts_to_place)
+    random.shuffle(parts_to_attempt) # Randomize the order to explore different paths
+
+    # Prioritize placing more needed parts by only considering a random subset of the most-needed parts
+    # This adds another layer of exploration to find better solutions.
+    k = min(len(parts_to_attempt), 10) # Consider the top 10 most needed parts, or fewer if not available
+    parts_to_attempt = random.sample(parts_to_attempt, k=k)
+
+    return _place_parts_in_rects(parts_to_attempt, initial_rects, kerf, allow_rotation)
+
+
 def run_single_sheet_optimization(sheet_info, required_parts, config, optional_stock_parts=None):
     """
-    Places required parts and then fills remaining space with optional stock parts.
+    Finds the best layout for a single sheet by comparing a version with no stock parts
+    against multiple, randomized configurations of stock parts over a time limit.
     """
     kerf = config['kerf']
     allow_rotation = config['allow_rotation']
+    time_limit = config.get('search_time_limit', 1.0)
+    is_stock_only_job = not required_parts and optional_stock_parts
 
-    placed_job_parts, remaining_rects = _place_parts_in_rects(required_parts, 
-        [{'x': 0, 'y': 0, 'length': sheet_info['length'], 'width': sheet_info['width']}], 
-        kerf, allow_rotation)
-
-    placed_stock_parts = []
-    if optional_stock_parts and remaining_rects:
-        # sorted_stock_parts = sorted(optional_stock_parts, key=lambda p: p['length'] * p['width'])
-        sorted_stock_parts = sorted(optional_stock_parts, key=lambda p: p['target_stock'] - p['current_stock'], reverse=True)
-        placed_stock_parts, remaining_rects = _place_parts_in_rects(sorted_stock_parts, remaining_rects, kerf, allow_rotation)
+    # --- Step 1: Establish Baseline (No Stock Parts) ---
+    placed_job_parts, remaining_rects_after_job = _place_parts_in_rects(
+        required_parts, [{'x': 0, 'y': 0, 'length': sheet_info['length'], 'width': sheet_info['width']}], kerf, allow_rotation
+    )
     
-    all_placed_parts = placed_job_parts + placed_stock_parts
-    total_placed_area = sum(p['length'] * p['width'] for p in all_placed_parts)
-
-    return {
-        "placed_parts": all_placed_parts,
-        "offcuts": remaining_rects,
+    baseline_layout = {
+        "placed_parts": placed_job_parts,
+        "offcuts": remaining_rects_after_job,
         "sheet_info": sheet_info,
-        "total_placed_area": total_placed_area
+        "total_placed_area": sum(p['length'] * p['width'] for p in placed_job_parts)
     }
+    
+    best_layout_so_far = baseline_layout
+    best_score_so_far = calculate_layout_score(best_layout_so_far, sheet_info, config, config['min_offcut_dim'], is_stock_only_job)
+
+    # --- Step 2: Time-boxed Search for Stock Part Configurations ---
+    if optional_stock_parts and remaining_rects_after_job:
+        sorted_stock_parts = sorted(optional_stock_parts, key=lambda p: p['target_stock'] - p['current_stock'], reverse=True)
+        
+        start_time = time.time()
+        iterations = 0
+        while time.time() - start_time < time_limit:
+            # Generate a new candidate layout by placing a randomized set of stock parts
+            placed_stock_parts, final_rects = _place_randomized_stock(
+                sorted_stock_parts, remaining_rects_after_job, kerf, allow_rotation
+            )
+            
+            if not placed_stock_parts: # No need to score if we couldn't place any stock parts
+                iterations += 1
+                if iterations > 10: # If we can't place anything after a few tries, stop.
+                    break
+                continue
+
+            candidate_placed_parts = placed_job_parts + placed_stock_parts
+            candidate_layout = {
+                "placed_parts": candidate_placed_parts,
+                "offcuts": final_rects,
+                "sheet_info": sheet_info,
+                "total_placed_area": sum(p['length'] * p['width'] for p in candidate_placed_parts)
+            }
+            
+            candidate_score = calculate_layout_score(candidate_layout, sheet_info, config, config['min_offcut_dim'], is_stock_only_job)
+
+            if candidate_score > best_score_so_far:
+                best_score_so_far = candidate_score
+                best_layout_so_far = candidate_layout
+            
+            iterations += 1
+    
+    return best_layout_so_far
+
 
 def optimize_multiple_sheets(parts_to_cut, stock_sheets, config, optional_stock_parts=None, is_stock_only_job=False):
     """
     Main orchestrator that finds the best combination of sheets by minimizing
-    the "cost-per-part" in each pass.
+    the "cost-per-part" in each pass, using the time-boxed search for each sheet.
     """
     required_parts_list = []
     for part in parts_to_cut:
