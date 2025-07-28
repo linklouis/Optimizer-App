@@ -18,11 +18,12 @@
         
         /* Layout Display Styles */
         .layout-container { margin-bottom: 2em; background: #fff; padding: 1em; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .layout-svg { border: 2px solid #333; width: 100%; height: auto; }
+        .layout-svg { border: 2px solid #333; max-width: 300px; height: auto; }
         .sheet { fill: #fdfdfd; }
         .part { fill: #3498db; stroke: #2980b9; stroke-width: 0.5; vector-effect: non-scaling-stroke; }
         .stock-part { fill: #2ecc71; stroke: #27ae60; stroke-width: 0.5; vector-effect: non-scaling-stroke; }
         .part-label { font-size: 3px; font-family: monospace; fill: #fff; text-anchor: middle; dominant-baseline: middle; }
+        .edge-label { font-size: 2.8px; font-family: monospace; fill: #1a1a1a; text-anchor: middle; }
         .offcut { fill: #ecf0f1; stroke: #bdc3c7; stroke-width: 0.5; stroke-dasharray: 2 2; vector-effect: non-scaling-stroke; }
     </style>
 </head>
@@ -43,10 +44,6 @@
                 <div>
                     <label for="hhos_path">HHOS Part List File:</label>
                     <input type="text" id="hhos_path" name="hhos_path" value="{{ config.hhos_path }}">
-                </div>
-                 <div>
-                    <label for="stock_path">Sheet Inventory File:</label>
-                    <input type="text" id="stock_path" name="stock_path" value="{{ config.stock_path }}" required>
                 </div>
                 <div>
                     <label for="stock_inv_path">Stock Part Inventory File:</label>
@@ -127,6 +124,9 @@
                                 <g transform="translate({{ part.x }}, {{ svg_y }})">
                                     <rect class="{{ 'stock-part' if part.is_stock_part else 'part' }}" width="{{ p_width }}" height="{{ p_length }}" />
                                     <text class="part-label" x="{{ p_width / 2 }}" y="{{ p_length / 2 }}">{{ part.label or part.part_name }}</text>
+                                    
+                                    <text class="edge-label" x="{{ p_width / 2 }}" y="{{ p_length + 3 }}">{{ p_width|round(2) }}</text>
+                                    <text class="edge-label" x="-3" y="{{ p_length / 2 }}" transform="rotate(-90, -3, {{ p_length/2 }})">{{ p_length|round(2) }}</text>
                                 </g>
                             {% endfor %}
 
@@ -134,6 +134,9 @@
                                 {% set svg_y = layout.sheet_info.length - offcut.y - offcut.length %}
                                 <g transform="translate({{ offcut.x }}, {{ svg_y }})">
                                     <rect class="offcut" width="{{ offcut.width }}" height="{{ offcut.length }}" />
+
+                                    <text class="edge-label" x="{{ offcut.width / 2 }}" y="{{ offcut.length + 3 }}">{{ offcut.width|round(2) }}</text>
+                                    <text class="edge-label" x="-3" y="{{ offcut.length / 2 }}" transform="rotate(-90, -3, {{ offcut.length/2 }})">{{ offcut.length|round(2) }}</text>
                                 </g>
                             {% endfor %}
                         </svg>

@@ -18,7 +18,6 @@ DEFAULT_CONFIG = {
     'default_width': 48,
     'hhos_path': '',
     'offcut_path': '',
-    'stock_path': '',
     'stock_inv_path': '',
     'kerf': 0.125,
     'allow_rotation': True,
@@ -56,7 +55,6 @@ def home():
         # --- Update config from form ---
         config['hhos_path'] = request.form.get('hhos_path', '').strip(' "')
         config['offcut_path'] = request.form.get('offcut_path', '').strip(' "')
-        config['stock_path'] = request.form.get('stock_path', '').strip(' "')
         config['stock_inv_path'] = request.form.get('stock_inv_path', '').strip(' "')
         
         # General Settings
@@ -81,13 +79,12 @@ def home():
             json.dump(config, f, indent=4)
         message = "Configuration saved successfully!"
     
-    if config.get('stock_path'):
+    if config.get('hhos_path') or config.get('stock_inv_path'): # Logic to run optimization
         try:
             # --- Data Loading ---
-            hhos_df, offcut_df, stock_df, stock_inv_df = process_uploaded_files(
+            hhos_df, offcut_df, stock_inv_df = process_uploaded_files(
                 config['hhos_path'], 
                 config.get('offcut_path') or MANAGED_OFFCUT_PATH, 
-                config['stock_path'],
                 config['stock_inv_path'],
                 config['default_length'],
                 config['default_width']
@@ -101,7 +98,6 @@ def home():
             # --- Prepare Optional Stock Parts ---
             optional_stock_parts = []
             if config['add_stock_parts'] and stock_inv_df is not None and not stock_inv_df.empty:
-                # Filter for parts that are below their target inventory
                 needy_stock = stock_inv_df[stock_inv_df['current_stock'] < stock_inv_df['target_stock']].copy()
                 if not needy_stock.empty:
                     needy_stock['is_stock_part'] = True
@@ -115,10 +111,6 @@ def home():
                 'id': 'default_sheet', 'length': config['default_length'], 'width': config['default_width'],
                 'quantity': float('inf'), 'type': 'Default'
             })
-            if stock_df is not None and not stock_df.empty:
-                stock_df['id'] = 'stock_' + stock_df.index.astype(str)
-                stock_df['type'] = 'Stock'
-                stock_sheets.extend(stock_df.to_dict('records'))
             if config.get('use_offcuts') and offcut_df is not None and not offcut_df.empty:
                 offcut_df['id'] = 'offcut_' + offcut_df.index.astype(str)
                 offcut_df['type'] = 'Offcut'
@@ -167,4 +159,4 @@ def home():
 
 if __name__ == '__main__':
     setup_app()
-    app.run(debug=True)
+    app.run(debug=True, port=5001)

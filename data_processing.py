@@ -69,42 +69,32 @@ def process_stock_part_inventory(df: pd.DataFrame) -> pd.DataFrame:
     df = df.iloc[:, :4].copy()
     df.columns = ['internal_ref', 'part_name', 'current_stock', 'target_stock']
 
-    # Regex to find dimensions like "12.6 x 12.6" or "14x14" at the end of the part name
-    # It captures floating point numbers or integers.
     dimension_regex = re.compile(r'(\d+\.?\d*)\s*x\s*(\d+\.?\d*)\s*$')
 
-    # Extract dimensions into new columns
     extracted_dims = df['part_name'].str.extract(dimension_regex)
     df['length'] = extracted_dims[0]
     df['width'] = extracted_dims[1]
     
-    # Convert all relevant columns to numeric types, coercing errors
     for col in ['length', 'width', 'current_stock', 'target_stock']:
         df[col] = pd.to_numeric(df[col], errors='coerce')
     
-    # Drop any row where dimension extraction failed or data was invalid
     df.dropna(subset=['length', 'width', 'current_stock', 'target_stock'], inplace=True)
     
-    # Ensure stock levels are integers
     df[['current_stock', 'target_stock']] = df[['current_stock', 'target_stock']].astype(int)
     
     return df
 
 
-def process_uploaded_files(hhos_file: str, offcut_file: str, stock_file: str, stock_inv_file: str, default_length: float, default_width: float) -> tuple:
+def process_uploaded_files(hhos_file: str, offcut_file: str, stock_inv_file: str, default_length: float, default_width: float) -> tuple:
     """
     Reads all uploaded files into Pandas DataFrames and performs initial processing.
     """
-    hhos_df, offcut_df, stock_df, stock_inv_df = (pd.DataFrame(), None, pd.DataFrame(), None)
+    hhos_df, offcut_df, stock_inv_df = (pd.DataFrame(), None, None)
     
     try:
         if hhos_file and os.path.exists(hhos_file):
             hhos_df = pd.read_csv(hhos_file, header=None)
             hhos_df = extract_hhos_data(hhos_df)
-
-        if stock_file and os.path.exists(stock_file):
-            stock_df = pd.read_excel(stock_file)
-            stock_df = standardize_sheet_data(stock_df, "Sheet Inventory")
 
         if offcut_file and os.path.exists(offcut_file):
             if offcut_file.lower().endswith('.csv'):
@@ -116,14 +106,13 @@ def process_uploaded_files(hhos_file: str, offcut_file: str, stock_file: str, st
                 offcut_df = standardize_sheet_data(temp_offcut_df, "Offcut", default_length, default_width)
         
         if stock_inv_file and os.path.exists(stock_inv_file):
-            # The stock inventory can be CSV or Excel
             if stock_inv_file.lower().endswith('.csv'):
                 stock_inv_df = pd.read_csv(stock_inv_file)
             else:
                 stock_inv_df = pd.read_excel(stock_inv_file)
             stock_inv_df = process_stock_part_inventory(stock_inv_df)
 
-        return hhos_df, offcut_df, stock_df, stock_inv_df
+        return hhos_df, offcut_df, stock_inv_df
 
     except Exception as e:
         raise e

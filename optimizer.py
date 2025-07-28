@@ -47,14 +47,12 @@ def calculate_layout_score(layout, sheet_info, weights, min_offcut_dim, is_stock
             deficit = part.get('target_stock', 1) - part.get('current_stock', 0)
             if part.get('target_stock', 0) > 0 and deficit > 0:
                 part_area = part['length'] * part['width']
-                # Bonus is proportional to the inventory deficit
                 stock_fill_bonus += (deficit / part['target_stock']) * part_area * weights.get('w_stock_fill', 1.0)
         else:
             has_required_parts = True
 
-    # --- Constraint: Penalize sheets with only stock parts (unless it's a stock-only job) ---
     if not has_required_parts and has_stock_parts and not is_stock_only_job:
-        return -float('inf') # Disqualify this layout completely
+        return -float('inf')
 
     # --- Other Adjustments ---
     quantity_bonus = 0
@@ -68,17 +66,28 @@ def calculate_layout_score(layout, sheet_info, weights, min_offcut_dim, is_stock
     
     return final_score
 
+def _get_split_penalty(rect1, rect2):
+    """Calculates a penalty for a split based on the aspect ratios of the two resulting rectangles."""
+    def get_rect_penalty(r_len, r_wid):
+        if min(r_len, r_wid) > 0:
+            return max(r_len, r_wid) / min(r_len, r_wid)
+        return 0 # Ignore empty or invalid rectangles in penalty calculation
+    
+    return get_rect_penalty(rect1['length'], rect1['width']) + get_rect_penalty(rect2['length'], rect2['width'])
+
+
 def _place_parts_in_rects(parts_to_place, initial_rects, kerf, allow_rotation):
     """A helper to run the placement algorithm on a set of parts and rectangles."""
     placed_parts = []
     empty_rects = [r.copy() for r in initial_rects]
 
     for part in parts_to_place:
+        best_fit = {'rect_index': -1, 'orientation': None}
+        
         orientations = [(part['length'], part['width'], False)]
         if allow_rotation and part['length'] != part['width']:
             orientations.append((part['width'], part['length'], True))
 
-        best_fit = {'rect_index': -1, 'orientation': None}
         for part_l, part_w, rotated in orientations:
             rect_index = find_best_fit(part_l, part_w, empty_rects)
             if rect_index != -1:
@@ -90,18 +99,29 @@ def _place_parts_in_rects(parts_to_place, initial_rects, kerf, allow_rotation):
             part_l, part_w, rotated = best_fit['orientation']
             rect = empty_rects.pop(best_fit['rect_index'])
             
-            # Create a copy to avoid modifying the original part dict
             placed_part = part.copy()
             placed_part.update({'rotated': rotated, 'x': rect['x'], 'y': rect['y']})
             placed_parts.append(placed_part)
 
-            top_rect = {'x': rect['x'], 'y': rect['y'] + part_l + kerf, 'length': rect['length'] - part_l - kerf, 'width': rect['width']}
-            right_rect = {'x': rect['x'] + part_w + kerf, 'y': rect['y'], 'length': part_l, 'width': rect['width'] - part_w - kerf}
+            # --- Smarter Split Heuristic (based on aspect ratio) ---
+            # Option 1: Horizontal cut first, creating rects above and to the right of the part.
+            rect_above = {'x': rect['x'], 'y': rect['y'] + part_l + kerf, 'length': rect['length'] - part_l - kerf, 'width': rect['width']}
+            rect_right_of_part = {'x': rect['x'] + part_w + kerf, 'y': rect['y'], 'length': part_l, 'width': rect['width'] - part_w - kerf}
             
-            if top_rect['length'] > 0 and top_rect['width'] > 0:
-                empty_rects.append(top_rect)
-            if right_rect['length'] > 0 and right_rect['width'] > 0:
-                empty_rects.append(right_rect)
+            # Option 2: Vertical cut first, creating rects to the right and above the part.
+            rect_right = {'x': rect['x'] + part_w + kerf, 'y': rect['y'], 'length': rect['length'], 'width': rect['width'] - part_w - kerf}
+            rect_above_part = {'x': rect['x'], 'y': rect['y'] + part_l + kerf, 'length': rect['length'] - part_l - kerf, 'width': part_w}
+
+            # Choose the split that results in more "square-like" (lower aspect ratio) offcuts.
+            split1_penalty = _get_split_penalty(rect_above, rect_right_of_part)
+            split2_penalty = _get_split_penalty(rect_right, rect_above_part)
+            
+            if split1_penalty <= split2_penalty: # Lower penalty is better
+                if rect_above['length'] > 0 and rect_above['width'] > 0: empty_rects.append(rect_above)
+                if rect_right_of_part['length'] > 0 and rect_right_of_part['width'] > 0: empty_rects.append(rect_right_of_part)
+            else:
+                if rect_right['length'] > 0 and rect_right['width'] > 0: empty_rects.append(rect_right)
+                if rect_above_part['length'] > 0 and rect_above_part['width'] > 0: empty_rects.append(rect_above_part)
 
     return placed_parts, empty_rects
 
@@ -112,15 +132,12 @@ def run_single_sheet_optimization(sheet_info, required_parts, config, optional_s
     kerf = config['kerf']
     allow_rotation = config['allow_rotation']
 
-    # Phase 1: Place required parts for the job
     placed_job_parts, remaining_rects = _place_parts_in_rects(required_parts, 
         [{'x': 0, 'y': 0, 'length': sheet_info['length'], 'width': sheet_info['width']}], 
         kerf, allow_rotation)
 
-    # Phase 2: Fill remaining space with optional stock parts
     placed_stock_parts = []
     if optional_stock_parts and remaining_rects:
-        # Sort stock parts to prioritize smaller ones first to fill small gaps
         sorted_stock_parts = sorted(optional_stock_parts, key=lambda p: p['length'] * p['width'])
         placed_stock_parts, remaining_rects = _place_parts_in_rects(sorted_stock_parts, remaining_rects, kerf, allow_rotation)
     
@@ -139,7 +156,6 @@ def optimize_multiple_sheets(parts_to_cut, stock_sheets, config, optional_stock_
     Main orchestrator that finds the best combination of sheets by minimizing
     the "cost-per-part" in each pass.
     """
-    # Prepare the list of required parts, expanding by quantity
     required_parts_list = []
     for part in parts_to_cut:
         for _ in range(int(part.get('quantity', 1))):
@@ -147,25 +163,38 @@ def optimize_multiple_sheets(parts_to_cut, stock_sheets, config, optional_stock_
             p_copy['part_id'] = uuid.uuid4()
             p_copy['is_stock_part'] = False
             required_parts_list.append(p_copy)
+    
+    live_optional_stock_parts = []
+    if optional_stock_parts:
+        for part in optional_stock_parts:
+            deficit = int(part['target_stock'] - part['current_stock'])
+            if deficit > 0:
+                for _ in range(deficit):
+                    p_copy = part.copy()
+                    p_copy['part_id'] = uuid.uuid4()
+                    live_optional_stock_parts.append(p_copy)
 
     available_sheets = [s.copy() for s in stock_sheets]
     final_layouts = []
     
-    while required_parts_list:
+    loop_condition = required_parts_list or (is_stock_only_job and live_optional_stock_parts)
+    while loop_condition:
         best_layout_for_pass = None
         min_cost_per_part = float('inf')
         best_sheet_idx = -1
+
+        parts_for_this_pass = required_parts_list if not is_stock_only_job else live_optional_stock_parts
 
         for i, sheet in enumerate(available_sheets):
             if sheet.get('quantity', 0) <= 0:
                 continue
 
             layout_attempt = run_single_sheet_optimization(
-                sheet, required_parts_list, config, optional_stock_parts
+                sheet, parts_for_this_pass, config, live_optional_stock_parts if not is_stock_only_job else []
             )
             
-            num_placed_required = sum(1 for p in layout_attempt['placed_parts'] if not p.get('is_stock_part'))
-            if num_placed_required == 0:
+            num_placed_primary = sum(1 for p in layout_attempt['placed_parts'] if p['part_id'] in {part['part_id'] for part in parts_for_this_pass})
+            if num_placed_primary == 0:
                 continue
             
             layout_score = calculate_layout_score(
@@ -173,7 +202,7 @@ def optimize_multiple_sheets(parts_to_cut, stock_sheets, config, optional_stock_
             )
             
             total_pass_cost = -layout_score + config.get('w_sheets', 1.0)
-            cost_per_part = total_pass_cost / num_placed_required
+            cost_per_part = total_pass_cost / num_placed_primary
 
             if cost_per_part < min_cost_per_part:
                 min_cost_per_part = cost_per_part
@@ -181,23 +210,18 @@ def optimize_multiple_sheets(parts_to_cut, stock_sheets, config, optional_stock_
                 best_sheet_idx = i
         
         if best_sheet_idx == -1:
-            print(f"Warning: Could not place all required parts. {len(required_parts_list)} parts remaining.")
+            print(f"Warning: Could not place all primary parts. {len(parts_for_this_pass)} parts remaining.")
             break
 
         final_layouts.append(best_layout_for_pass)
         available_sheets[best_sheet_idx]['quantity'] -= 1
         
-        placed_part_ids = {p['part_id'] for p in best_layout_for_pass['placed_parts'] if not p.get('is_stock_part')}
-        required_parts_list = [p for p in required_parts_list if p['part_id'] not in placed_part_ids]
+        placed_ids = {p['part_id'] for p in best_layout_for_pass['placed_parts']}
+        required_parts_list = [p for p in required_parts_list if p['part_id'] not in placed_ids]
+        live_optional_stock_parts = [p for p in live_optional_stock_parts if p['part_id'] not in placed_ids]
+        
+        loop_condition = required_parts_list or (is_stock_only_job and live_optional_stock_parts)
 
-    # Handle case where the job is ONLY to make stock parts
-    if not parts_to_cut and optional_stock_parts:
-        # This is a simplified loop for stock-only jobs
-        layout_attempt = run_single_sheet_optimization(stock_sheets[0], [], config, optional_stock_parts)
-        if layout_attempt['placed_parts']:
-            final_layouts.append(layout_attempt)
-
-    # Calculate the final, overall score for display
     total_score = sum(calculate_layout_score(layout, layout['sheet_info'], config, config['min_offcut_dim'], is_stock_only_job) for layout in final_layouts)
     final_score = total_score - (config.get('w_sheets', 1.0) * len(final_layouts))
 
