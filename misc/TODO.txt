@@ -2,10 +2,11 @@ FEATURES
     Features
         - ✓ Probably have it remember the latest file paths?
         - ✓ Should save its own version of the offcut list, rather than pointing.
+        - ✓ Allow picking only certain stock parts to use
 
         - [ASK] Maybe allow uploading a temp Offcut List that doesn't override the current one?
         - Save offcuts
-        - Allow picking only certain stock parts to use
+        - Add "select all" and "select none" options to stock part list
     
     Optimizer
         - 

@@ -24,7 +24,8 @@ DEFAULT_CONFIG = {
     'min_offcut_dim': 4.0,
     'use_offcuts': True,
     'add_stock_parts': False,
-    'search_time_limit': 1.0, # Time in seconds to search for better stock layouts
+    'search_time_limit': 1.0, 
+    'selected_stock_parts': [], # New: To store user's choices
     'w_waste': 1.0, 
     'w_offcut': 0.5, 
     'w_cuts': 0.2,
@@ -51,6 +52,7 @@ def home():
     error = None
     config = load_config()
     optimization_result = None
+    all_stock_parts_list = [] # New: To hold all parts for selection UI
 
     if request.method == 'POST':
         # --- Update config from form ---
@@ -67,7 +69,9 @@ def home():
         config['use_offcuts'] = request.form.get('use_offcuts') == 'true'
         config['add_stock_parts'] = request.form.get('add_stock_parts') == 'true'
         config['search_time_limit'] = request.form.get('search_time_limit', type=float, default=1.0)
-
+        
+        # New: Get selected stock parts from the form
+        config['selected_stock_parts'] = request.form.getlist('selected_stock_parts')
 
         # Scoring Weights
         config['w_waste'] = request.form.get('w_waste', type=float, default=1.0)
@@ -77,31 +81,40 @@ def home():
         config['w_sheets'] = request.form.get('w_sheets', type=float, default=1.0)
         config['w_stock_fill'] = request.form.get('w_stock_fill', type=float, default=1.0)
 
-
         with open(CONFIG_FILE, 'w') as f:
             json.dump(config, f, indent=4)
         message = "Configuration saved successfully!"
     
-    if config.get('hhos_path') or config.get('stock_inv_path'): # Logic to run optimization
+    # --- Always try to load data for UI, even on GET request if path exists ---
+    try:
+        # We need to process files to get the list of stock parts for the selection UI
+        hhos_df, offcut_df, stock_inv_df = process_uploaded_files(
+            config['hhos_path'], 
+            config.get('offcut_path') or MANAGED_OFFCUT_PATH, 
+            config['stock_inv_path'],
+            config['default_length'],
+            config['default_width']
+        )
+        if stock_inv_df is not None and not stock_inv_df.empty:
+            all_stock_parts_list = stock_inv_df.to_dict('records')
+
+    except Exception as e:
+        error = f"Error loading files for display: {e}"
+
+    if request.method == 'POST' and (config.get('hhos_path') or config.get('stock_inv_path')):
         try:
-            # --- Data Loading ---
-            hhos_df, offcut_df, stock_inv_df = process_uploaded_files(
-                config['hhos_path'], 
-                config.get('offcut_path') or MANAGED_OFFCUT_PATH, 
-                config['stock_inv_path'],
-                config['default_length'],
-                config['default_width']
-            )
-            
             # --- Prepare Required Parts ---
             parts_to_cut = []
-            if not hhos_df.empty:
+            if hhos_df is not None and not hhos_df.empty:
                 parts_to_cut = hhos_df[['part name', 'label', 'length', 'width', 'quantity']].to_dict('records')
             
-            # --- Prepare Optional Stock Parts ---
+            # --- Prepare Optional Stock Parts (and filter based on selection) ---
             optional_stock_parts = []
             if config['add_stock_parts'] and stock_inv_df is not None and not stock_inv_df.empty:
-                needy_stock = stock_inv_df[stock_inv_df['current_stock'] < stock_inv_df['target_stock']].copy()
+                # Filter the dataframe based on user selection before processing
+                selected_stock_df = stock_inv_df[stock_inv_df['internal_ref'].isin(config['selected_stock_parts'])]
+                
+                needy_stock = selected_stock_df[selected_stock_df['current_stock'] < selected_stock_df['target_stock']].copy()
                 if not needy_stock.empty:
                     needy_stock['is_stock_part'] = True
                     optional_stock_parts = needy_stock.to_dict('records')
@@ -158,7 +171,7 @@ def home():
             import traceback
             traceback.print_exc()
 
-    return render_template('index.html', message=message, error=error, config=config, result=optimization_result)
+    return render_template('index.html', message=message, error=error, config=config, result=optimization_result, all_stock_parts=all_stock_parts_list)
 
 if __name__ == '__main__':
     setup_app()

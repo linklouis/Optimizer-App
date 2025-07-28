@@ -16,6 +16,14 @@
         .input-group > div { flex: 1; }
         .checkbox-group { display: flex; align-items: center; gap: 0.5em; padding-top: 1em; }
         
+        /* New Styles for Stock Part Selection */
+        .stock-selector { max-height: 250px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; border-radius: 4px; background-color: #fafafa; }
+        .stock-item { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 0.9em; }
+        .stock-item input { width: auto; }
+        .stock-item-details { flex-grow: 1; }
+        .stock-item-details span { color: #555; }
+
+
         /* Layout Display Styles */
         .layout-container { margin-bottom: 2em; background: #fff; padding: 1em; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         .layout-svg { border: 2px solid #333; max-width: 300px; height: auto; }
@@ -53,6 +61,23 @@
                     <label for="offcut_path">Offcut List File (Optional):</label>
                     <input type="text" id="offcut_path" name="offcut_path" value="{{ config.offcut_path }}" placeholder="Uses internal list if blank">
                 </div>
+
+                {% if all_stock_parts %}
+                <div>
+                    <h3>Select Stock Parts to Include</h3>
+                    <div class="stock-selector">
+                        {% for part in all_stock_parts %}
+                        <div class="stock-item">
+                            <input type="checkbox" name="selected_stock_parts" id="stock_{{ part.internal_ref }}" value="{{ part.internal_ref }}" {% if part.internal_ref in config.selected_stock_parts %}checked{% endif %}>
+                            <label for="stock_{{ part.internal_ref }}" class="stock-item-details">
+                                <strong>{{ part.part_name }}</strong> 
+                                <span>(Need: {{ (part.target_stock - part.current_stock) | int }})</span>
+                            </label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
 
                 <h3>General Settings</h3>
                 <div class="input-group">
