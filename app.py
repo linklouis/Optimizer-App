@@ -26,6 +26,7 @@ DEFAULT_CONFIG = {
     'add_stock_parts': False,
     'search_time_limit': 1.0, 
     'selected_stock_parts': [],
+    'dark_mode': False, # New: To store theme preference
     'w_waste': 1.0, 
     'w_offcut': 0.5, 
     'w_cuts': 0.2,
@@ -69,6 +70,7 @@ def home():
         config['search_time_limit'] = request.form.get('search_time_limit', type=float, default=1.0)
         
         config['selected_stock_parts'] = request.form.getlist('selected_stock_parts')
+        config['dark_mode'] = request.form.get('dark_mode_state') == 'on'
 
         config['w_waste'] = request.form.get('w_waste', type=float, default=1.0)
         config['w_offcut'] = request.form.get('w_offcut', type=float, default=0.5)
@@ -141,7 +143,6 @@ def home():
                     min_dim = config['min_offcut_dim']
                     usable_offcuts = [r for r in layout['offcuts'] if r['length'] >= min_dim and r['width'] >= min_dim]
 
-                    # New: Calculate bounding box of placed parts
                     bounding_box = None
                     if layout['placed_parts']:
                         max_x = max(p['x'] + (p['length'] if p['rotated'] else p['width']) for p in layout['placed_parts'])

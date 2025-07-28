@@ -14,6 +14,7 @@ FEATURES
 
     Visual
         - Add measurements to layout display
+        - Needs to look good in greyscale
 
     Code
         - 
@@ -45,3 +46,5 @@ QUESTIONS
     - How should we prioritize useable offcuts vs filling in with a bunch of stock parts?
       Maybe weight space used by stock parts as slightly worse than normal parts, but better than offcuts?(slightly negative) [See screenshot]
     - How should we handle deciding what the goal stock is for a stock part?
+
+    - Always rotate labels to be on the widest axis, or just when they don't fit?

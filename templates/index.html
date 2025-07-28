@@ -8,197 +8,19 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <style>
-        :root {
-            --primary-color: #007bff;
-            --secondary-color: #6c757d;
-            --success-color: #28a745;
-            --danger-color: #dc3545;
-            --light-color: #f8f9fa;
-            --dark-color: #343a40;
-            --bg-color: #eef2f9;
-            --card-bg: #ffffff;
-            --border-color: #dee2e6;
-            --shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-            --border-radius: 8px;
-        }
-        * { box-sizing: border-box; }
-        body {
-            font-family: 'Inter', sans-serif;
-            margin: 0;
-            background-color: var(--bg-color);
-            color: var(--dark-color);
-            font-size: 16px;
-        }
-        .main-container {
-            max-width: 1600px;
-            margin: 2em auto;
-            padding: 0 2em;
-        }
-        header {
-            background-color: var(--card-bg);
-            padding: 1em 2em;
-            border-radius: var(--border-radius);
-            box-shadow: var(--shadow);
-            margin-bottom: 2em;
-        }
-        header h1 {
-            margin: 0;
-            color: var(--primary-color);
-            font-size: 1.75em;
-        }
-        .card {
-            background-color: var(--card-bg);
-            padding: 1.5em;
-            border-radius: var(--border-radius);
-            box-shadow: var(--shadow);
-            margin-bottom: 1.5em;
-        }
-        .card h3 {
-            margin-top: 0;
-            border-bottom: 1px solid var(--border-color);
-            padding-bottom: 0.5em;
-            font-size: 1.1em;
-            color: #333;
-        }
-        .card h3 i {
-            margin-right: 0.5em;
-            color: var(--primary-color);
-        }
-        .tabs {
-            display: flex;
-            gap: 0.5em;
-            margin-bottom: 1.5em;
-        }
-        .tab-button {
-            padding: 10px 20px;
-            border: 1px solid var(--border-color);
-            background-color: var(--card-bg);
-            cursor: pointer;
-            border-radius: 6px 6px 0 0;
-            font-size: 1em;
-            font-weight: 500;
-            transition: all 0.2s ease-in-out;
-            border-bottom: none;
-        }
-        .tab-button:hover {
-            background-color: #f1f3f5;
-        }
-        .tab-button.active {
-            background-color: var(--primary-color);
-            color: white;
-            border-color: var(--primary-color);
-        }
-        .tab-content { display: none; }
-        .tab-content.active { display: block; }
-        
-        /* Form Styles */
-        .form-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1.5em;
-        }
-        label {
-            display: block;
-            margin-bottom: 0.5em;
-            font-weight: 500;
-            font-size: 0.9em;
-        }
-        input[type="text"], input[type="number"] {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid var(--border-color);
-            border-radius: 4px;
-            transition: border-color 0.2s;
-        }
-        input[type="text"]:focus, input[type="number"]:focus {
-            outline: none;
-            border-color: var(--primary-color);
-        }
-        .checkbox-group { display: flex; align-items: center; gap: 0.5em; }
-        .checkbox-group label { margin-bottom: 0; }
-        
-        .stock-selector { max-height: 250px; overflow-y: auto; border: 1px solid var(--border-color); padding: 10px; border-radius: 4px; background-color: var(--light-color); }
-        .stock-item { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 0.9em; }
-        .stock-item input { width: auto; }
-        .stock-item-details { flex-grow: 1; }
-        .stock-item-details span { color: #555; }
-        
-        .submit-button {
-            width: 100%;
-            padding: 12px;
-            background: linear-gradient(45deg, var(--success-color), #20c997);
-            color: white;
-            border: none;
-            border-radius: 4px;
-            font-size: 1.1em;
-            font-weight: 600;
-            cursor: pointer;
-            transition: transform 0.2s, box-shadow 0.2s;
-        }
-        .submit-button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 12px rgba(40, 167, 69, 0.3);
-        }
-        
-        /* Results Styles */
-        .results-summary {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1.5em;
-            margin-bottom: 2em;
-        }
-        .summary-metric {
-            background-color: var(--card-bg);
-            padding: 1.5em;
-            border-radius: var(--border-radius);
-            box-shadow: var(--shadow);
-            text-align: center;
-        }
-        .summary-metric .value {
-            font-size: 2.5em;
-            font-weight: 700;
-            color: var(--primary-color);
-        }
-        .summary-metric .label {
-            font-size: 1em;
-            color: var(--secondary-color);
-        }
-        .results-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-            gap: 1.5em;
-        }
-        .layout-card {
-            background-color: var(--card-bg);
-            border-radius: var(--border-radius);
-            box-shadow: var(--shadow);
-            padding: 1.5em;
-        }
-        .layout-svg {
-            border: 1px solid var(--border-color);
-            width: 100%;
-            height: auto;
-            background-color: #fff;
-        }
-        .sheet { fill: var(--light-color); }
-        .part { fill: #007bff; stroke: #0056b3; }
-        .stock-part { fill: #28a745; stroke: #1e7e34; }
-        .offcut { fill: #f1f3f5; stroke: #adb5bd; }
-        .part-label { font-size: 4px; }
-        .edge-label, .offcut-label { font-size: 3.5px; }
-        .dim-line { stroke: var(--danger-color); stroke-width: 0.4; }
-        .dim-text { font-size: 3.5px; fill: var(--danger-color); }
-
-        .alert { padding: 1em; border-radius: 4px; margin-bottom: 1.5em; }
-        .alert-success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
-        .alert-danger { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
-<body>
+<body class="{{ 'dark-mode' if config.dark_mode else '' }}" data-has-results="{{ 'true' if result else 'false' }}">
     <div class="main-container">
         <header>
             <h1><i class="fa-solid fa-tree"></i> Cutting Stock Optimizer</h1>
+            <div class="theme-switch-wrapper">
+                <i class="fas fa-moon" style="margin-right: 10px;"></i>
+                <label class="theme-switch" for="darkmode-toggle">
+                    <input type="checkbox" id="darkmode-toggle" {% if config.dark_mode %}checked{% endif %}>
+                    <span class="slider round"></span>
+                </label>
+            </div>
         </header>
 
         <div class="tabs">
@@ -208,12 +30,9 @@
 
         <div id="config" class="tab-content active">
             <form method="post">
-                {% if message %}
-                    <div class="alert alert-success">{{ message }}</div>
-                {% endif %}
-                {% if error %}
-                    <div class="alert alert-danger">{{ error }}</div>
-                {% endif %}
+                <input type="hidden" name="dark_mode_state" id="dark_mode_state" value="{{ 'on' if config.dark_mode else 'off' }}">
+                {% if message %} <div class="alert alert-success">{{ message }}</div> {% endif %}
+                {% if error %} <div class="alert alert-danger">{{ error }}</div> {% endif %}
 
                 <div class="card">
                     <h3><i class="fa-solid fa-file-alt"></i> File Paths</h3>
@@ -226,13 +45,19 @@
 
                 {% if all_stock_parts %}
                 <div class="card">
-                    <h3><i class="fa-solid fa-boxes-stacked"></i> Select Stock Parts to Include</h3>
+                    <div class="stock-selector-header">
+                        <h3><i class="fa-solid fa-boxes-stacked"></i> Select Stock Parts to Include</h3>
+                        <div class="selection-buttons">
+                            <button type="button" id="select-all-stock">Select All</button>
+                            <button type="button" id="deselect-all-stock">Deselect All</button>
+                        </div>
+                    </div>
                     <div class="stock-selector">
                         {% for part in all_stock_parts %}
                         <div class="stock-item">
                             <input type="checkbox" name="selected_stock_parts" id="stock_{{ part.internal_ref }}" value="{{ part.internal_ref }}" {% if part.internal_ref in config.selected_stock_parts %}checked{% endif %}>
                             <label for="stock_{{ part.internal_ref }}" class="stock-item-details">
-                                <strong>{{ part.part_name }}</strong> 
+                                <strong>{{ part.length|round(2) }} x {{ part.width|round(2) }}</strong> 
                                 <span>(Need: {{ (part.target_stock - part.current_stock) | int }})</span>
                             </label>
                         </div>
@@ -302,7 +127,18 @@
                                     {% set svg_y = layout.sheet_info.length - part.y - p_length %}
                                     <g transform="translate({{ part.x }}, {{ svg_y }})">
                                         <rect class="{{ 'stock-part' if part.is_stock_part else 'part' }}" width="{{ p_width }}" height="{{ p_length }}" stroke-width="0.2"/>
-                                        <text class="part-label" x="{{ p_width / 2 }}" y="{{ p_length / 2 }}" fill="white" dominant-baseline="middle" text-anchor="middle">{{ part.label or part.part_name }}</text>
+                                        <text class="part-label" 
+                                            x="{{ p_width / 2 }}" y="{{ p_length / 2 }}" 
+                                            fill="white" dominant-baseline="middle" text-anchor="middle"
+                                            {% if p_length > p_width * 1.2 %}
+                                                transform="rotate(-90, {{ p_width / 2 }}, {{ p_length / 2 }})"
+                                            {% endif %}>
+                                            {% if part.is_stock_part %}
+                                                STOCK {{ p_width|round(1) }}x{{ p_length|round(1) }}
+                                            {% else %}
+                                                {{ part.label or part.part_name }}
+                                            {% endif %}
+                                        </text>
                                     </g>
                                 {% endfor %}
                                 {% for offcut in layout.usable_offcuts %}
@@ -310,7 +146,7 @@
                                     <g transform="translate({{ offcut.x }}, {{ svg_y }})">
                                         <rect class="offcut" width="{{ offcut.width }}" height="{{ offcut.length }}" stroke-width="0.2"/>
                                         {% if offcut.width > 10 and offcut.length > 10 %}
-                                            <text class="offcut-label" x="{{ offcut.width / 2 }}" y="{{ offcut.length / 2 }}" dominant-baseline="middle" text-anchor="middle" fill="#333">
+                                            <text class="offcut-label" x="{{ offcut.width / 2 }}" y="{{ offcut.length / 2 }}" dominant-baseline="middle" text-anchor="middle">
                                                 {{ offcut.width|round(1) }}x{{ offcut.length|round(1) }}
                                             </text>
                                         {% endif %}
@@ -343,24 +179,6 @@
             {% endif %}
         </div>
     </div>
-    <script>
-        function openTab(evt, tabName) {
-            let i, tabcontent, tablinks;
-            tabcontent = document.getElementsByClassName("tab-content");
-            for (i = 0; i < tabcontent.length; i++) {
-                tabcontent[i].style.display = "none";
-            }
-            tablinks = document.getElementsByClassName("tab-button");
-            for (i = 0; i < tablinks.length; i++) {
-                tablinks[i].className = tablinks[i].className.replace(" active", "");
-            }
-            document.getElementById(tabName).style.display = "block";
-            evt.currentTarget.className += " active";
-        }
-        // To keep the results tab active after a POST request
-        {% if result %}
-            document.querySelector('.tab-button[onclick*="results"]').click();
-        {% endif %}
-    </script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>
 </html>
