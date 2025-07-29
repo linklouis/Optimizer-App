@@ -219,7 +219,7 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
     for part in parts_to_cut:
         for _ in range(int(part.get('quantity', 1))):
             p_copy = part.copy()
-            p_copy['part_id'] = uuid.uuid4()
+            p_copy['part_id'] = str(uuid.uuid4()) # MODIFIED: Convert UUID to string
             p_copy['is_stock_part'] = False
             required_parts_list.append(p_copy)
     
@@ -229,7 +229,7 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
             deficit = int(part['target_stock'] - part['current_stock'])
             for _ in range(deficit):
                 p_copy = part.copy()
-                p_copy['part_id'] = uuid.uuid4()
+                p_copy['part_id'] = str(uuid.uuid4()) # MODIFIED: Convert UUID to string
                 live_optional_stock_parts.append(p_copy)
 
     available_sheets = [s.copy() for s in stock_sheets]

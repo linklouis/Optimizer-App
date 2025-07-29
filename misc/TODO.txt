@@ -4,6 +4,9 @@ FEATURES
         - ✓ Should save its own version of the offcut list, rather than pointing.
         - ✓ Allow picking only certain stock parts to use
         - ✓ Add "select all" and "select none" options to stock part list
+        - X [ASK] Unit switcher?
+        - ✓ Multiple HHOS files at once (Keep them separate) Each file needs to have a multiplier.
+        - ✓ Each sheet layout should only be displayed once, and also have a multiplier.
 
         - Allow uploading a temp Offcut List that doesn't override the current one?
         - Save offcuts
@@ -15,9 +18,6 @@ FEATURES
         - Add description of scoring weight/all settings on hover
         - Multiple parts list files
         - Tell user when the files they're pointing to don't exist
-        - X [ASK] Unit switcher?
-        - Multiple HHOS files at once (Keep them separate) Each file needs to have a multiplier.
-        - Each sheet layout should only be displayed once, and also have a multiplier.
         - Allow specific parts to be removed from a job
         - Be able to click on stock parts and remove them from the sheet layout
         - Allow the quantity of a given layout to be adjusted manually after optimization?
@@ -26,6 +26,7 @@ FEATURES
     Optimizer
         - Rerun the optimizor on the remaining parts after a set of sheet layouts have been standardized?
         - ---> Only keep reusing a layout of stock parts until another layout is better because the number of the original stock parts needed has been filled.
+        - Needs to be smarter about handling jobs with high quantities
 
     Visual
         - Add measurements to layout display
@@ -42,6 +43,7 @@ BUGS
     - Doesn't remember theme selection
     - Adding a new HHOS file doesn't make it pop up in the Loaded Parts List until after optimization
     - Overall Yield not consistant?
+    - 30 sec (w/o standardize stock layouts) took like 5+ minutes.
 
 IDEAS
     - X Try every combination of cut order for every sheet? 

@@ -1,9 +1,9 @@
 from flask import Flask, request, render_template, flash
-from werkzeug.utils import secure_filename
 import os
 import json
 import pandas as pd
 import traceback
+from collections import Counter
 
 from data_processing import process_uploaded_files, extract_hhos_data
 from optimizer import (
@@ -72,6 +72,9 @@ def update_config_from_form(config, form_data):
 # --- Main Application Logic ---
 def run_optimization(config, hhos_df, offcut_df, stock_inv_df):
     parts_to_cut = hhos_df.to_dict('records') if hhos_df is not None and not hhos_df.empty else []
+    
+    # This logic is now duplicated to get the initial list for standardization
+    # A refactor could create a single function for this if desired
     optional_stock_parts = []
     if config['add_stock_parts'] and stock_inv_df is not None:
         mask = (stock_inv_df['internal_ref'].isin(config['selected_stock_parts'])) & \
@@ -92,30 +95,94 @@ def run_optimization(config, hhos_df, offcut_df, stock_inv_df):
 
     return optimize_multiple_sheets(parts_to_cut, stock_sheets, config, optional_stock_parts, is_stock_only_job)
 
-def standardize_layouts_post_optimization(layouts, config):
+def calculate_dynamic_score(layout, live_deficit_tracker, config):
     """
-    Finds the best variation for each layout signature and replaces all similar layouts
-    with that best variation.
+    A wrapper around the original scoring function that uses a live deficit tracker
+    to calculate a more accurate, state-aware stock_fill_bonus.
     """
     reference_area = config.get('default_length', 96) * config.get('default_width', 48)
-    best_layouts_by_sig = {}
-
-    # First pass: find the best layout for each signature
-    for layout in layouts:
-        signature = get_required_parts_signature(layout)
-        is_stock_only_job = not any(not p.get('is_stock_part', False) for p in layout['placed_parts'])
-        score = calculate_layout_score(layout, layout['sheet_info'], config, config['min_offcut_dim'], reference_area, is_stock_only_job)
-
-        if signature not in best_layouts_by_sig or score > best_layouts_by_sig[signature]['score']:
-            best_layouts_by_sig[signature] = {'layout': layout, 'score': score}
-
-    # Second pass: build the new standardized list
-    standardized_layouts = []
-    for layout in layouts:
-        signature = get_required_parts_signature(layout)
-        standardized_layouts.append(best_layouts_by_sig[signature]['layout'])
     
-    return standardized_layouts
+    # Create a deep copy of the layout to avoid modifying the original
+    temp_layout = json.loads(json.dumps(layout))
+    
+    # Temporarily adjust part info to reflect the live deficit
+    for part in temp_layout['placed_parts']:
+        if part.get('is_stock_part'):
+            ref = part.get('internal_ref')
+            live_deficit = live_deficit_tracker.get(ref, 0)
+            # Trick the scoring function by setting target_stock to the live deficit
+            part['target_stock'] = live_deficit
+            part['current_stock'] = 0
+
+    is_stock_only_job = not any(not p.get('is_stock_part', False) for p in temp_layout['placed_parts'])
+    
+    return calculate_layout_score(temp_layout, temp_layout['sheet_info'], config, config['min_offcut_dim'], reference_area, is_stock_only_job)
+
+def standardize_iteratively(layouts, initial_optional_parts, config):
+    """
+    Performs an iterative, state-aware standardization of layouts.
+    """
+    # 1. Create a live tracker for stock part deficits
+    live_deficit_tracker = Counter()
+    for part in initial_optional_parts:
+        deficit = int(part['target_stock'] - part['current_stock'])
+        live_deficit_tracker[part['internal_ref']] += deficit
+
+    # 2. Group raw layouts by their required parts signature
+    grouped_raw_layouts = {}
+    for i, layout in enumerate(layouts):
+        layout['original_index'] = i # Keep track of original position
+        signature = get_required_parts_signature(layout)
+        if signature not in grouped_raw_layouts:
+            grouped_raw_layouts[signature] = []
+        grouped_raw_layouts[signature].append(layout)
+    
+    final_standardized_layouts = [None] * len(layouts)
+
+    # 3. For each group, perform iterative replacement
+    for signature, group_layouts in grouped_raw_layouts.items():
+        if len(group_layouts) <= 1:
+            for layout in group_layouts:
+                final_standardized_layouts[layout['original_index']] = layout
+            continue
+
+        # Get unique variations within the group
+        unique_variations = {get_full_layout_signature(l): l for l in group_layouts}.values()
+
+        # Create a mutable list of the layouts in this group to modify
+        mutable_group = list(group_layouts)
+
+        while len({get_full_layout_signature(l) for l in mutable_group}) > 1:
+            # Re-rank variations based on the current deficit tracker
+            ranked_variations = sorted(
+                unique_variations, 
+                key=lambda v: calculate_dynamic_score(v, live_deficit_tracker, config),
+                reverse=True
+            )
+            
+            best_variation = ranked_variations[0]
+            worst_variation = ranked_variations[-1]
+            
+            # Find an instance of the worst variation in the mutable group and replace it
+            worst_sig = get_full_layout_signature(worst_variation)
+            for i, layout in enumerate(mutable_group):
+                if get_full_layout_signature(layout) == worst_sig:
+                    mutable_group[i] = best_variation
+                    break
+            
+            # Update the deficit tracker by "consuming" the parts from the best layout
+            for part in best_variation['placed_parts']:
+                if part.get('is_stock_part'):
+                    ref = part.get('internal_ref')
+                    if live_deficit_tracker[ref] > 0:
+                        live_deficit_tracker[ref] -= 1
+        
+        # Place the now-standardized layouts back into their original positions
+        for original_layout, standardized_layout in zip(group_layouts, mutable_group):
+            final_standardized_layouts[original_layout['original_index']] = standardized_layout
+
+    return final_standardized_layouts
+
 
 def prepare_results_for_render(layouts, remaining_parts, final_score, config):
     """Processes and groups layout data for Jinja rendering."""
@@ -127,13 +194,8 @@ def prepare_results_for_render(layouts, remaining_parts, final_score, config):
 
     grouped_layouts = {}
     for layout in layouts:
-        # --- MODIFIED: Use the correct signature based on the config setting ---
-        if config.get('standardize_stock_layouts', False):
-            # If standardized, all layouts with same required parts are identical.
-            signature = get_required_parts_signature(layout)
-        else:
-            # If not standardized, every geometric variation is unique.
-            signature = get_full_layout_signature(layout)
+        signature = get_full_layout_signature(layout) if not config.get('standardize_stock_layouts', False) \
+                    else get_required_parts_signature(layout)
             
         if signature not in grouped_layouts:
             sheet_info = layout['sheet_info']
@@ -152,6 +214,19 @@ def prepare_results_for_render(layouts, remaining_parts, final_score, config):
         'layouts': list(grouped_layouts.values()), 'remaining_parts': remaining_parts,
         'final_score': final_score, 'overall_yield': overall_yield
     }
+
+def get_initial_optional_parts(stock_inv_df, config):
+    """Helper to get the initial list of needed stock parts."""
+    if not config['add_stock_parts'] or stock_inv_df is None:
+        return []
+    mask = (stock_inv_df['internal_ref'].isin(config['selected_stock_parts'])) & \
+           (stock_inv_df['current_stock'] < stock_inv_df['target_stock'])
+    needy_stock = stock_inv_df[mask].copy()
+    if needy_stock.empty:
+        return []
+    needy_stock['is_stock_part'] = True
+    return needy_stock.to_dict('records')
+
 
 @app.route('/', methods=['GET', 'POST'])
 def home():
@@ -194,7 +269,8 @@ def home():
             
             final_layouts = layouts
             if config.get('standardize_stock_layouts', False):
-                final_layouts = standardize_layouts_post_optimization(layouts, config)
+                initial_optional_parts = get_initial_optional_parts(stock_inv_df, config)
+                final_layouts = standardize_iteratively(layouts, initial_optional_parts, config)
 
             reference_area = config.get('default_length', 96) * config.get('default_width', 48)
             total_score = 0
