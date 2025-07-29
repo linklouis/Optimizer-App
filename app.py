@@ -7,10 +7,9 @@ from collections import Counter
 
 from data_processing import process_uploaded_files, extract_hhos_data
 from optimizer import (
-    optimize_multiple_sheets, 
-    calculate_layout_score, 
-    get_required_parts_signature, 
-    get_full_layout_signature
+    optimize_multiple_sheets,
+    calculate_layout_score,
+    get_layout_signature # Replaced the two old functions with the new one
 )
 
 # --- Constants ---
@@ -132,7 +131,7 @@ def standardize_iteratively(layouts, initial_optional_parts, config):
     grouped_raw_layouts = {}
     for i, layout in enumerate(layouts):
         layout['original_index'] = i # Keep track of original position
-        signature = get_required_parts_signature(layout)
+        signature = get_layout_signature(layout, required_only=True)
         if signature not in grouped_raw_layouts:
             grouped_raw_layouts[signature] = []
         grouped_raw_layouts[signature].append(layout)
@@ -147,12 +146,12 @@ def standardize_iteratively(layouts, initial_optional_parts, config):
             continue
 
         # Get unique variations within the group
-        unique_variations = {get_full_layout_signature(l): l for l in group_layouts}.values()
+        unique_variations = {get_layout_signature(l): l for l in group_layouts}.values()
 
         # Create a mutable list of the layouts in this group to modify
         mutable_group = list(group_layouts)
 
-        while len({get_full_layout_signature(l) for l in mutable_group}) > 1:
+        while len({get_layout_signature(l) for l in mutable_group}) > 1:
             # Re-rank variations based on the current deficit tracker
             ranked_variations = sorted(
                 unique_variations, 
@@ -164,9 +163,9 @@ def standardize_iteratively(layouts, initial_optional_parts, config):
             worst_variation = ranked_variations[-1]
             
             # Find an instance of the worst variation in the mutable group and replace it
-            worst_sig = get_full_layout_signature(worst_variation)
+            worst_sig = get_layout_signature(worst_variation)
             for i, layout in enumerate(mutable_group):
-                if get_full_layout_signature(layout) == worst_sig:
+                if get_layout_signature(layout) == worst_sig:
                     mutable_group[i] = best_variation
                     break
             
@@ -194,8 +193,8 @@ def prepare_results_for_render(layouts, remaining_parts, final_score, config):
 
     grouped_layouts = {}
     for layout in layouts:
-        signature = get_full_layout_signature(layout) if not config.get('standardize_stock_layouts', False) \
-                    else get_required_parts_signature(layout)
+        use_required_sig = config.get('standardize_stock_layouts', False)
+        signature = get_layout_signature(layout, required_only=use_required_sig)
             
         if signature not in grouped_layouts:
             sheet_info = layout['sheet_info']

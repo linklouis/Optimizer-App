@@ -1,4 +1,3 @@
-import uuid
 import time
 import random
 from typing import List, Dict, Any, Tuple, Optional
@@ -7,41 +6,35 @@ from typing import List, Dict, Any, Tuple, Optional
 Part = Dict[str, Any]
 Rect = Dict[str, float]
 
-def get_required_parts_signature(layout: Dict[str, Any]) -> str:
-    """
-    Creates a signature based on REQUIRED part geometry only.
-    Used for finding layouts that can be standardized.
-    """
-    sheet_info = layout['sheet_info']
-    sig_parts = [f"sheet_{sheet_info['length']:.3f}x{sheet_info['width']:.3f}"]
-    
-    required_parts = [p for p in layout['placed_parts'] if not p.get('is_stock_part', False)]
-    sorted_parts = sorted(required_parts, key=lambda p: (p['x'], p['y']))
-    
-    for part in sorted_parts:
-        p_length = part['width'] if part.get('rotated') else part['length']
-        p_width = part['length'] if part.get('rotated') else part['width']
-        sig_parts.append(f"part_{part['x']:.3f},{part['y']:.3f}_{p_width:.3f}x{p_length:.3f}")
-        
-    return "|".join(sig_parts)
+# --- Consolidated & Optimized Helper Functions ---
 
-def get_full_layout_signature(layout: Dict[str, Any]) -> str:
+def get_layout_signature(layout: Dict[str, Any], required_only: bool = False) -> str:
     """
-    Creates a signature based on ALL part geometry.
-    Used for finding layouts that are 100% identical.
+    Creates a signature for a layout. Can be configured for required parts only or all parts.
+    (Consolidates get_required_parts_signature and get_full_layout_signature)
     """
     sheet_info = layout['sheet_info']
     sig_parts = [f"sheet_{sheet_info['length']:.3f}x{sheet_info['width']:.3f}"]
+
+    parts_to_sign = (
+        [p for p in layout['placed_parts'] if not p.get('is_stock_part', False)]
+        if required_only
+        else layout['placed_parts']
+    )
     
-    # Sort all parts for a consistent signature
-    sorted_parts = sorted(layout['placed_parts'], key=lambda p: (p['x'], p['y']))
+    # Sorting ensures the signature is consistent regardless of part placement order
+    sorted_parts = sorted(parts_to_sign, key=lambda p: (p['x'], p['y']))
+
+    sig_strings = [
+        (
+            f"part_{p['x']:.3f},{p['y']:.3f}_"
+            f"{p['length'] if p.get('rotated') else p['width']:.3f}x"
+            f"{p['width'] if p.get('rotated') else p['length']:.3f}"
+        )
+        for p in sorted_parts
+    ]
     
-    for part in sorted_parts:
-        p_length = part['width'] if part.get('rotated') else part['length']
-        p_width = part['length'] if part.get('rotated') else part['width']
-        sig_parts.append(f"part_{part['x']:.3f},{part['y']:.3f}_{p_width:.3f}x{p_length:.3f}")
-        
-    return "|".join(sig_parts)
+    return "|".join(sig_parts + sig_strings)
 
 
 def find_best_fit(part_length: float, part_width: float, empty_rects: List[Rect]) -> int:
@@ -55,20 +48,17 @@ def find_best_fit(part_length: float, part_width: float, empty_rects: List[Rect]
         if part_length <= rect['length'] and part_width <= rect['width']:
             remaining_length = rect['length'] - part_length
             remaining_width = rect['width'] - part_width
-            
             short_side_fit = min(remaining_length, remaining_width)
-
             if short_side_fit < min_short_side_fit:
                 min_short_side_fit = short_side_fit
                 best_fit_index = i
     
     return best_fit_index
 
+
 def calculate_layout_score(layout: Dict[str, Any], sheet_info: Dict[str, Any], weights: Dict[str, float], 
                            min_offcut_dim: float, reference_area: float, is_stock_only_job: bool = False) -> float:
-    """
-    Calculates a score for a given layout. Higher is better.
-    """
+    """Calculates a score for a given layout. Higher is better."""
     sheet_area = sheet_info['length'] * sheet_info['width']
     if sheet_area == 0 or reference_area == 0:
         return -float('inf')
@@ -76,9 +66,8 @@ def calculate_layout_score(layout: Dict[str, Any], sheet_info: Dict[str, Any], w
     used_area = layout['total_placed_area']
     usable_offcuts = [o for o in layout['offcuts'] if o['length'] >= min_offcut_dim and o['width'] >= min_offcut_dim]
     offcut_area = sum(o['length'] * o['width'] for o in usable_offcuts)
-    waste_area = sheet_area - used_area - offcut_area
     
-    waste_penalty = (waste_area / reference_area) * weights.get('w_waste', 1.0)
+    waste_penalty = ((sheet_area - used_area - offcut_area) / reference_area) * weights.get('w_waste', 1.0)
     offcut_penalty = (offcut_area / reference_area) * weights.get('w_offcut', 0.5)
     area_based_score = -(waste_penalty + offcut_penalty)
 
@@ -99,20 +88,21 @@ def calculate_layout_score(layout: Dict[str, Any], sheet_info: Dict[str, Any], w
     if not has_required_parts and has_stock_parts and not is_stock_only_job:
         return -float('inf')
 
-    quantity_bonus = 0
-    if sheet_info.get('type') != 'Default':
-        quantity_bonus = sheet_info.get('quantity', 1) * weights.get('w_quantity', 0.1)
-
+    quantity_bonus = (sheet_info.get('quantity', 1) * weights.get('w_quantity', 0.1)) if sheet_info.get('type') != 'Default' else 0
     cuts_penalty = len(layout['placed_parts']) * weights.get('w_cuts', 0.2)
 
     return area_based_score + stock_fill_bonus + quantity_bonus - cuts_penalty
 
+
 def _get_split_penalty(rect1: Rect, rect2: Rect) -> float:
     """Calculates a penalty for splitting a rectangle."""
     def get_ratio_penalty(r_len: float, r_wid: float) -> float:
-        if min(r_len, r_wid) > 0: return max(r_len, r_wid) / min(r_len, r_wid)
-        return 0 
+        min_dim = min(r_len, r_wid)
+        return max(r_len, r_wid) / min_dim if min_dim > 0 else 0
     return get_ratio_penalty(rect1['length'], rect1['width']) + get_ratio_penalty(rect2['length'], rect2['width'])
+
+
+# --- Core Placement Logic ---
 
 def _place_parts_in_rects(parts_to_place: List[Part], initial_rects: List[Rect], 
                           kerf: float, allow_rotation: bool) -> Tuple[List[Part], List[Rect]]:
@@ -135,14 +125,21 @@ def _place_parts_in_rects(parts_to_place: List[Part], initial_rects: List[Rect],
         
         if best_fit['rect_index'] != -1:
             part_l, part_w, rotated = best_fit['orientation']
-            rect = empty_rects.pop(best_fit['rect_index'])
             
+            # OPTIMIZATION: O(1) removal of the rectangle by swapping with the last element first.
+            rect_idx = best_fit['rect_index']
+            rect = empty_rects[rect_idx]
+            empty_rects[rect_idx] = empty_rects[-1]
+            empty_rects.pop()
+
             placed_part = part.copy()
             placed_part.update({'rotated': rotated, 'x': rect['x'], 'y': rect['y']})
             placed_parts.append(placed_part)
 
+            # Split the remaining space into two new rectangles
             rect_above = {'x': rect['x'], 'y': rect['y'] + part_l + kerf, 'length': rect['length'] - part_l - kerf, 'width': rect['width']}
             rect_right_of_part = {'x': rect['x'] + part_w + kerf, 'y': rect['y'], 'length': part_l, 'width': rect['width'] - part_w - kerf}
+            
             rect_right = {'x': rect['x'] + part_w + kerf, 'y': rect['y'], 'length': rect['length'], 'width': rect['width'] - part_w - kerf}
             rect_above_part = {'x': rect['x'], 'y': rect['y'] + part_l + kerf, 'length': rect['length'] - part_l - kerf, 'width': part_w}
             
@@ -152,16 +149,11 @@ def _place_parts_in_rects(parts_to_place: List[Part], initial_rects: List[Rect],
             else:
                 if rect_right['length'] > 0 and rect_right['width'] > 0: empty_rects.append(rect_right)
                 if rect_above_part['length'] > 0 and rect_above_part['width'] > 0: empty_rects.append(rect_above_part)
+                
     return placed_parts, empty_rects
 
-def _place_randomized_stock(stock_parts_to_place: List[Part], initial_rects: List[Rect], 
-                            kerf: float, allow_rotation: bool) -> Tuple[List[Part], List[Rect]]:
-    """Places optional stock parts using a randomized greedy approach."""
-    parts_to_attempt = list(stock_parts_to_place)
-    random.shuffle(parts_to_attempt)
-    k = min(len(parts_to_attempt), 10)
-    parts_to_attempt = random.sample(parts_to_attempt, k=k)
-    return _place_parts_in_rects(parts_to_attempt, initial_rects, kerf, allow_rotation)
+
+# --- Optimization Orchestrators ---
 
 def run_single_sheet_optimization(sheet_info: Dict, required_parts: List[Part], config: Dict, 
                                   reference_area: float, optional_stock_parts: Optional[List[Part]] = None) -> Dict:
@@ -184,14 +176,21 @@ def run_single_sheet_optimization(sheet_info: Dict, required_parts: List[Part], 
     best_score = calculate_layout_score(best_layout, sheet_info, config, config['min_offcut_dim'], reference_area, is_stock_only_job)
 
     if optional_stock_parts and remaining_rects_after_job:
-        sorted_stock_parts = sorted(optional_stock_parts, key=lambda p: p['target_stock'] - p['current_stock'], reverse=True)
+        # Sort stock parts by need once
+        sorted_stock_parts = sorted(optional_stock_parts, key=lambda p: p.get('target_stock', 1) - p.get('current_stock', 0), reverse=True)
         
         start_time = time.time()
         iterations = 0
+        # OPTIMIZATION: Inlined _place_randomized_stock and simplified the loop
         while time.time() - start_time < time_limit:
-            placed_stock_parts, final_rects = _place_randomized_stock(
-                sorted_stock_parts, remaining_rects_after_job, kerf, allow_rotation
+            # Randomly sample a small number of parts to attempt placing
+            k = min(len(sorted_stock_parts), 10)
+            parts_to_attempt = random.sample(sorted_stock_parts, k=k)
+            
+            placed_stock_parts, final_rects = _place_parts_in_rects(
+                parts_to_attempt, remaining_rects_after_job, kerf, allow_rotation
             )
+            
             if not placed_stock_parts and iterations > 10: break
             
             candidate_placed_parts = placed_job_parts + placed_stock_parts
@@ -209,55 +208,60 @@ def run_single_sheet_optimization(sheet_info: Dict, required_parts: List[Part], 
     
     return best_layout
 
+
 def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict], config: Dict, 
                              optional_stock_parts: Optional[List[Part]] = None, 
                              is_stock_only_job: bool = False) -> Tuple[List[Dict], List[Part], float]:
     """Main orchestrator that selects the best sheets and layouts to fulfill the part requirements."""
     reference_area = config.get('default_length', 96) * config.get('default_width', 48)
 
-    required_parts_list: List[Part] = []
+    # OPTIMIZATION: Use a simple integer counter instead of uuid for speed.
+    part_id_counter = 0
+    # OPTIMIZATION: Use dictionaries for parts for fast O(1) lookup and deletion.
+    required_parts_dict: Dict[int, Part] = {}
     for part in parts_to_cut:
         for _ in range(int(part.get('quantity', 1))):
             p_copy = part.copy()
-            p_copy['part_id'] = str(uuid.uuid4()) # MODIFIED: Convert UUID to string
+            p_copy['part_id'] = part_id_counter
             p_copy['is_stock_part'] = False
-            required_parts_list.append(p_copy)
+            required_parts_dict[part_id_counter] = p_copy
+            part_id_counter += 1
     
-    live_optional_stock_parts: List[Part] = []
+    optional_stock_parts_dict: Dict[int, Part] = {}
     if optional_stock_parts:
         for part in optional_stock_parts:
             deficit = int(part['target_stock'] - part['current_stock'])
             for _ in range(deficit):
                 p_copy = part.copy()
-                p_copy['part_id'] = str(uuid.uuid4()) # MODIFIED: Convert UUID to string
-                live_optional_stock_parts.append(p_copy)
+                p_copy['part_id'] = part_id_counter
+                optional_stock_parts_dict[part_id_counter] = p_copy
+                part_id_counter += 1
 
     available_sheets = [s.copy() for s in stock_sheets]
     final_layouts = []
     
-    while required_parts_list or (is_stock_only_job and live_optional_stock_parts):
+    primary_parts_dict = required_parts_dict if not is_stock_only_job else optional_stock_parts_dict
+    
+    while primary_parts_dict:
         best_layout_for_pass = None
         min_cost_per_part = float('inf')
         best_sheet_idx = -1
 
-        primary_parts_for_pass = required_parts_list if not is_stock_only_job else live_optional_stock_parts
+        primary_parts_for_pass = list(primary_parts_dict.values())
+        optional_parts_for_pass = list(optional_stock_parts_dict.values()) if not is_stock_only_job else []
 
         for i, sheet in enumerate(available_sheets):
             if sheet.get('quantity', 0) <= 0: continue
 
             layout_attempt = run_single_sheet_optimization(
-                sheet, primary_parts_for_pass, config, reference_area, 
-                live_optional_stock_parts if not is_stock_only_job else []
+                sheet, primary_parts_for_pass, config, reference_area, optional_parts_for_pass
             )
             
-            primary_part_ids = {p['part_id'] for p in primary_parts_for_pass}
-            num_placed_primary = sum(1 for p in layout_attempt['placed_parts'] if p['part_id'] in primary_part_ids)
+            num_placed_primary = sum(1 for p in layout_attempt['placed_parts'] if p['part_id'] in primary_parts_dict)
             if num_placed_primary == 0: continue
             
             layout_score = calculate_layout_score(layout_attempt, sheet, config, config['min_offcut_dim'], reference_area, is_stock_only_job)
-            
-            total_pass_cost = -layout_score + config.get('w_sheets', 1.0)
-            cost_per_part = total_pass_cost / num_placed_primary
+            cost_per_part = (-layout_score + config.get('w_sheets', 1.0)) / num_placed_primary
 
             if cost_per_part < min_cost_per_part:
                 min_cost_per_part = cost_per_part
@@ -265,18 +269,22 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
                 best_sheet_idx = i
         
         if best_sheet_idx == -1:
-            print(f"Warning: Could not place any more primary parts. {len(primary_parts_for_pass)} parts remaining.")
+            print(f"Warning: Could not place any more primary parts. {len(primary_parts_dict)} parts remaining.")
             break
 
         final_layouts.append(best_layout_for_pass)
         available_sheets[best_sheet_idx]['quantity'] -= 1
         
         placed_ids = {p['part_id'] for p in best_layout_for_pass['placed_parts']}
-        required_parts_list = [p for p in required_parts_list if p['part_id'] not in placed_ids]
-        live_optional_stock_parts = [p for p in live_optional_stock_parts if p['part_id'] not in placed_ids]
+        
+        # OPTIMIZATION: Fast removal of placed parts from dictionaries.
+        for pid in placed_ids:
+            primary_parts_dict.pop(pid, None)
+            if not is_stock_only_job:
+                optional_stock_parts_dict.pop(pid, None)
 
     total_score = sum(calculate_layout_score(l, l['sheet_info'], config, config['min_offcut_dim'], reference_area, is_stock_only_job) for l in final_layouts)
     final_score = total_score - (config.get('w_sheets', 1.0) * len(final_layouts))
 
-    remaining_parts = required_parts_list if not is_stock_only_job else live_optional_stock_parts
+    remaining_parts = list(primary_parts_dict.values())
     return final_layouts, remaining_parts, final_score
