@@ -138,7 +138,7 @@ input[type="text"]:focus, input[type="number"]:focus { outline: none; border-col
 .sheet { fill: var(--light-color); }
 .part { fill: #007bff; stroke: #0056b3; }
 .stock-part { fill: #28a745; stroke: #1e7e34; }
-.offcut { fill: #e9ecef; stroke: #adb5bd; }
+.offcut { fill: #d0d3d6; stroke: #adb5bd; }
 .part-label { font-size: 4px; }
 .offcut-label { font-size: 3.5px; fill: var(--dark-color); }
 .dim-line { stroke: var(--danger-color); stroke-width: 0.4; }

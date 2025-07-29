@@ -3,14 +3,21 @@ FEATURES
         - ✓ Probably have it remember the latest file paths?
         - ✓ Should save its own version of the offcut list, rather than pointing.
         - ✓ Allow picking only certain stock parts to use
+        - ✓ Add "select all" and "select none" options to stock part list
 
         - [ASK] Maybe allow uploading a temp Offcut List that doesn't override the current one?
         - Save offcuts
-        - Add "select all" and "select none" options to stock part list
+        - Clear Offcut List File after optimization
+        - Notes section for offcuts
+        - Allow user to select what offcuts to consider like the stock parts
+        - -> Using % of sheets, doesn't consider the actual ammount of material each layout wastes.
+          Probably means it doesn't try as many other sheets, since a smaller one might have a higher % of waste, but actually waste less material.
+        - Add description of scoring weight/all settings on hover
+        - Multiple parts list files
+        - Tell user when the files they're pointing to don't exist
     
     Optimizer
         - 
-
 
     Visual
         - Add measurements to layout display
@@ -19,32 +26,32 @@ FEATURES
     Code
         - 
 
-
-
 BUGS
     - ✓ Allow part rotation check box not working?
 
     - Downcasting issue with replace in extract_hhos_data
+    - Stock text doesn't go sidways
 
 IDEAS
-    - Try every combination of cut order for every sheet? 
-    - Does the algorithm consider each part of the final score at the same time?
-    - In optimize_multiple_sheets, should we be optimizing by cost-per-part, or by the overall score of the layout?
-    - Does it treat stock parts as regular parts when they are added?
-    - Shouldn't always add stock parts/should treat them the same as the other parts. Otherwise, things like the # of cuts aren't considered when adding stock parts.
-    - Does it prune a branch based on logic, like will the part fit?
+    - X Try every combination of cut order for every sheet? 
+    - X Does the algorithm consider each part of the final score at the same time?
+    - X In optimize_multiple_sheets, should we be optimizing by cost-per-part, or by the overall score of the layout?
+    - X Does it treat stock parts as regular parts when they are added? -> No
+    - X Shouldn't always add stock parts/should treat them the same as the other parts. Otherwise, things like the # of cuts aren't considered when adding stock parts.
+   
+    - Does it prune a branch based on logic, like will the part fit, or just the score?
 
 QUESTIONS
-    - What do the columns mean in the HHOS file again?
-    - Should it be called default "board" size?
-    - Notes section in Offcut List? -> Accessible through program
-    - Which order do length & width come in?
+    - ✓ What do the columns mean in the HHOS file again?
+    - ✓ Notes section in Offcut List? -> Accessible through program
+    - X Which order do length & width come in?
     - X Does yield count saved offcuts as used or wasted?
-    - Can we do cuts that only go partway through the material? -> No
-    - If we can fit all parts on one sheet, should we still consider using multiple smaller sheets for better yield?    -> Yes
-    - Is the length & width of the stock parts measured in inches or cm?    -> Inches
-    - How should we prioritize useable offcuts vs filling in with a bunch of stock parts?
+    - ✓ Can we do cuts that only go partway through the material? -> No
+    - ✓ If we can fit all parts on one sheet, should we still consider using multiple smaller sheets for better yield?    -> Yes
+    - ✓ Is the length & width of the stock parts measured in inches or cm?    -> Inches
+    - ✓ How should we prioritize useable offcuts vs filling in with a bunch of stock parts?
       Maybe weight space used by stock parts as slightly worse than normal parts, but better than offcuts?(slightly negative) [See screenshot]
-    - How should we handle deciding what the goal stock is for a stock part?
-
+    - ✓ How should we handle deciding what the goal stock is for a stock part? -> Don't worry abt it for now
+    - X Should it be called default "board" size?
+    
     - Always rotate labels to be on the widest axis, or just when they don't fit?
