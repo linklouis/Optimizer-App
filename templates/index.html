@@ -165,6 +165,7 @@
                                 <label class="checkbox-group" for="allow_rotation"><input type="checkbox" id="allow_rotation" name="allow_rotation" value="true" {% if config.allow_rotation %}checked{% endif %}>Allow Rotation</label>
                                 <label class="checkbox-group" for="use_offcuts"><input type="checkbox" id="use_offcuts" name="use_offcuts" value="true" {% if config.use_offcuts %}checked{% endif %}>Use Available Offcuts</label>
                                 <label class="checkbox-group" for="add_stock_parts"><input type="checkbox" id="add_stock_parts" name="add_stock_parts" value="true" {% if config.add_stock_parts %}checked{% endif %}>Add Stock Parts</label>
+                                <label class="checkbox-group" for="standardize_stock_layouts"><input type="checkbox" id="standardize_stock_layouts" name="standardize_stock_layouts" value="true" {% if config.standardize_stock_layouts %}checked{% endif %}>Standardize Stock Layouts</label>
                             </div>
                         </section>
 
@@ -204,7 +205,7 @@
             </div>
 
             <div id="results" class="tab-content">
-                {% if result and result.layouts %}
+                 {% if result and result.layouts %}
                     <section class="results-summary">
                         <div class="summary-metric"><span class="value">{{ result.final_score|round(2) }}</span><span class="label">Overall Score</span></div>
                         <div class="summary-metric"><span class="value">{{ result.layouts|map(attribute='quantity')|sum }}</span><span class="label">Total Sheets Used</span></div>

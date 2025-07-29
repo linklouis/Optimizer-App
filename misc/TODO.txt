@@ -20,9 +20,12 @@ FEATURES
         - Each sheet layout should only be displayed once, and also have a multiplier.
         - Allow specific parts to be removed from a job
         - Be able to click on stock parts and remove them from the sheet layout
+        - Allow the quantity of a given layout to be adjusted manually after optimization?
+        - Way to automatically stop when the score is sufficient? Maybe calculate the 
     
     Optimizer
-        - 
+        - Rerun the optimizor on the remaining parts after a set of sheet layouts have been standardized?
+        - ---> Only keep reusing a layout of stock parts until another layout is better because the number of the original stock parts needed has been filled.
 
     Visual
         - Add measurements to layout display
@@ -37,6 +40,8 @@ BUGS
     - Downcasting issue with replace in extract_hhos_data
     - Stock text doesn't go sidways
     - Doesn't remember theme selection
+    - Adding a new HHOS file doesn't make it pop up in the Loaded Parts List until after optimization
+    - Overall Yield not consistant?
 
 IDEAS
     - X Try every combination of cut order for every sheet? 
@@ -46,6 +51,8 @@ IDEAS
     - X Shouldn't always add stock parts/should treat them the same as the other parts. Otherwise, things like the # of cuts aren't considered when adding stock parts.
    
     - Does it prune a branch based on logic, like will the part fit, or just the score?
+    - If we've already optimized the stock parts for one layout, no need to do it again
+    - Multithreading?
 
 QUESTIONS
     - ✓ What do the columns mean in the HHOS file again?
@@ -62,3 +69,4 @@ QUESTIONS
     
     - Always rotate labels to be on the widest axis, or just when they don't fit?
     - Should the smaller sheets be zoomed in more (like now) or displayed at their relative size?
+    - We can always standardize the stock part layout, but for a big job, that might have us make way more of a stock part than we need.

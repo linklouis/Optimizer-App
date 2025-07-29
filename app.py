@@ -6,7 +6,12 @@ import pandas as pd
 import traceback
 
 from data_processing import process_uploaded_files, extract_hhos_data
-from optimizer import optimize_multiple_sheets
+from optimizer import (
+    optimize_multiple_sheets, 
+    calculate_layout_score, 
+    get_required_parts_signature, 
+    get_full_layout_signature
+)
 
 # --- Constants ---
 CONFIG_FILE = 'config.json'
@@ -16,15 +21,15 @@ DEFAULT_CONFIG = {
     'min_offcut_dim': 4.0, 'use_offcuts': True, 'add_stock_parts': False,
     'search_time_limit': 1.0, 'selected_stock_parts': [], 'dark_mode': False,
     'w_waste': 1.0, 'w_offcut': 0.5, 'w_cuts': 0.2, 'w_quantity': 0.1,
-    'w_sheets': 1.0, 'w_stock_fill': 1.0
+    'w_sheets': 1.0, 'w_stock_fill': 1.0,
+    'standardize_stock_layouts': True
 }
 
 app = Flask(__name__)
-app.secret_key = os.urandom(24) # Required for flashing messages
+app.secret_key = os.urandom(24)
 
 # --- Configuration Handling ---
 def load_config():
-    """Loads configuration from JSON file, falling back to defaults."""
     config = DEFAULT_CONFIG.copy()
     if os.path.exists(CONFIG_FILE):
         with open(CONFIG_FILE, 'r') as f:
@@ -32,30 +37,21 @@ def load_config():
     return config
 
 def save_config(config):
-    """Saves configuration to a JSON file."""
     with open(CONFIG_FILE, 'w') as f:
         json.dump(config, f, indent=4)
 
 def update_config_from_form(config, form_data):
-    """Updates the config dictionary from form data."""
-    # --- NEW: Handle Multiple HHOS Files ---
     hhos_paths = form_data.getlist('hhos_paths')
     hhos_multipliers = form_data.getlist('hhos_multipliers')
     config['hhos_files'] = []
     for path, mult_str in zip(hhos_paths, hhos_multipliers):
         path = path.strip(' "')
-        if path: # Only add entries with a valid path
-            try:
-                multiplier = int(mult_str)
-            except (ValueError, TypeError):
-                multiplier = 1 # Default to 1 if multiplier is invalid
+        if path:
+            multiplier = int(mult_str) if mult_str.isdigit() else 1
             config['hhos_files'].append({'path': path, 'multiplier': multiplier})
 
-    # Other file paths
     config['offcut_path'] = form_data.get('offcut_path', '').strip(' "')
     config['stock_inv_path'] = form_data.get('stock_inv_path', '').strip(' "')
-
-    # General Settings
     config['default_length'] = form_data.get('default_length', type=float)
     config['default_width'] = form_data.get('default_width', type=float)
     config['kerf'] = form_data.get('kerf', type=float)
@@ -64,12 +60,10 @@ def update_config_from_form(config, form_data):
     config['allow_rotation'] = form_data.get('allow_rotation') == 'true'
     config['use_offcuts'] = form_data.get('use_offcuts') == 'true'
     config['add_stock_parts'] = form_data.get('add_stock_parts') == 'true'
-
-    # UI & Stock Selection
     config['dark_mode'] = form_data.get('dark_mode_state') == 'on'
     config['selected_stock_parts'] = form_data.getlist('selected_stock_parts')
+    config['standardize_stock_layouts'] = form_data.get('standardize_stock_layouts') == 'true'
 
-    # Scoring Weights
     for key in ['w_waste', 'w_offcut', 'w_cuts', 'w_quantity', 'w_sheets', 'w_stock_fill']:
         config[key] = form_data.get(key, type=float)
     
@@ -77,54 +71,54 @@ def update_config_from_form(config, form_data):
 
 # --- Main Application Logic ---
 def run_optimization(config, hhos_df, offcut_df, stock_inv_df):
-    """Orchestrates the optimization process."""
-    parts_to_cut = []
-    if hhos_df is not None and not hhos_df.empty:
-        parts_to_cut = hhos_df.to_dict('records')
-
+    parts_to_cut = hhos_df.to_dict('records') if hhos_df is not None and not hhos_df.empty else []
     optional_stock_parts = []
     if config['add_stock_parts'] and stock_inv_df is not None:
-        selected_mask = stock_inv_df['internal_ref'].isin(config['selected_stock_parts'])
-        needy_mask = stock_inv_df['current_stock'] < stock_inv_df['target_stock']
-        needy_stock = stock_inv_df[selected_mask & needy_mask].copy()
+        mask = (stock_inv_df['internal_ref'].isin(config['selected_stock_parts'])) & \
+               (stock_inv_df['current_stock'] < stock_inv_df['target_stock'])
+        needy_stock = stock_inv_df[mask].copy()
         if not needy_stock.empty:
             needy_stock['is_stock_part'] = True
             optional_stock_parts = needy_stock.to_dict('records')
             
     is_stock_only_job = not parts_to_cut and optional_stock_parts
 
-    # Prepare stock sheets (Default + Offcuts)
-    stock_sheets = [{
-        'id': 'default_sheet', 'length': config['default_length'], 
-        'width': config['default_width'], 'quantity': float('inf'), 'type': 'Default'
-    }]
+    stock_sheets = [{'id': 'default_sheet', 'length': config['default_length'], 'width': config['default_width'], 'quantity': float('inf'), 'type': 'Default'}]
     if config['use_offcuts'] and offcut_df is not None:
         offcuts_with_id = offcut_df.copy()
         offcuts_with_id['id'] = 'offcut_' + offcuts_with_id.index.astype(str)
         offcuts_with_id['type'] = 'Offcut'
         stock_sheets.extend(offcuts_with_id.to_dict('records'))
 
-    layouts, remaining_parts, final_score = optimize_multiple_sheets(
-        parts_to_cut, stock_sheets, config, optional_stock_parts, is_stock_only_job
-    )
-    return layouts, remaining_parts, final_score
+    return optimize_multiple_sheets(parts_to_cut, stock_sheets, config, optional_stock_parts, is_stock_only_job)
 
-def get_layout_signature(layout):
-    """Creates a unique string signature for a layout based on its geometry."""
-    sheet_info = layout['sheet_info']
-    sig_parts = [f"sheet_{sheet_info['length']:.3f}x{sheet_info['width']:.3f}"]
+def standardize_layouts_post_optimization(layouts, config):
+    """
+    Finds the best variation for each layout signature and replaces all similar layouts
+    with that best variation.
+    """
+    reference_area = config.get('default_length', 96) * config.get('default_width', 48)
+    best_layouts_by_sig = {}
+
+    # First pass: find the best layout for each signature
+    for layout in layouts:
+        signature = get_required_parts_signature(layout)
+        is_stock_only_job = not any(not p.get('is_stock_part', False) for p in layout['placed_parts'])
+        score = calculate_layout_score(layout, layout['sheet_info'], config, config['min_offcut_dim'], reference_area, is_stock_only_job)
+
+        if signature not in best_layouts_by_sig or score > best_layouts_by_sig[signature]['score']:
+            best_layouts_by_sig[signature] = {'layout': layout, 'score': score}
+
+    # Second pass: build the new standardized list
+    standardized_layouts = []
+    for layout in layouts:
+        signature = get_required_parts_signature(layout)
+        standardized_layouts.append(best_layouts_by_sig[signature]['layout'])
     
-    sorted_parts = sorted(layout['placed_parts'], key=lambda p: (p['x'], p['y']))
-    
-    for part in sorted_parts:
-        p_length = part['width'] if part.get('rotated') else part['length']
-        p_width = part['length'] if part.get('rotated') else part['width']
-        sig_parts.append(f"part_{part['x']:.3f},{part['y']:.3f}_{p_width:.3f}x{p_length:.3f}")
-        
-    return "|".join(sig_parts)
+    return standardized_layouts
 
 def prepare_results_for_render(layouts, remaining_parts, final_score, config):
-    """Processes and groups raw layout data for Jinja rendering."""
+    """Processes and groups layout data for Jinja rendering."""
     if not layouts: return None
 
     total_placed_area = sum(l['total_placed_area'] for l in layouts)
@@ -133,18 +127,24 @@ def prepare_results_for_render(layouts, remaining_parts, final_score, config):
 
     grouped_layouts = {}
     for layout in layouts:
-        signature = get_layout_signature(layout)
+        # --- MODIFIED: Use the correct signature based on the config setting ---
+        if config.get('standardize_stock_layouts', False):
+            # If standardized, all layouts with same required parts are identical.
+            signature = get_required_parts_signature(layout)
+        else:
+            # If not standardized, every geometric variation is unique.
+            signature = get_full_layout_signature(layout)
+            
         if signature not in grouped_layouts:
             sheet_info = layout['sheet_info']
             sheet_area = sheet_info['length'] * sheet_info['width']
-            processed_layout = {
+            grouped_layouts[signature] = {
                 'placed_parts': layout['placed_parts'],
                 'sheet_info': sheet_info,
                 'yield_percentage': (layout['total_placed_area'] / sheet_area) * 100 if sheet_area > 0 else 0,
                 'usable_offcuts': [r for r in layout['offcuts'] if r['length'] >= config['min_offcut_dim'] and r['width'] >= config['min_offcut_dim']],
                 'quantity': 1
             }
-            grouped_layouts[signature] = processed_layout
         else:
             grouped_layouts[signature]['quantity'] += 1
 
@@ -153,28 +153,23 @@ def prepare_results_for_render(layouts, remaining_parts, final_score, config):
         'final_score': final_score, 'overall_yield': overall_yield
     }
 
-# --- Flask Route ---
 @app.route('/', methods=['GET', 'POST'])
 def home():
     config = load_config()
-    optimization_result = None
-    all_stock_parts_list = []
-    hhos_file_contents = []
+    optimization_result, hhos_file_contents, all_stock_parts_list = None, [], []
 
     if request.method == 'POST':
         config = update_config_from_form(config, request.form)
         save_config(config)
         flash("Configuration saved successfully!", "success")
 
-    # --- NEW: Load HHOS file contents for display ---
     for hhos_file in config.get('hhos_files', []):
         path = hhos_file.get('path')
         content_item = {'path': path, 'parts': [], 'error': None}
         if path and os.path.exists(path):
             try:
                 df = extract_hhos_data(pd.read_csv(path, header=None))
-                # Apply multiplier for display purposes
-                df['quantity'] = df['quantity'] * hhos_file.get('multiplier', 1)
+                df['quantity'] *= hhos_file.get('multiplier', 1)
                 content_item['parts'] = df.to_dict('records')
             except Exception as e:
                 content_item['error'] = str(e)
@@ -190,13 +185,25 @@ def home():
         if stock_inv_df is not None:
             all_stock_parts_list = stock_inv_df.to_dict('records')
     except Exception as e:
-        flash(f"Error processing files for optimization: {e}", "danger")
+        flash(f"Error processing files: {e}", "danger")
         hhos_df, offcut_df, stock_inv_df = pd.DataFrame(), None, None
 
     if request.method == 'POST' and (config.get('hhos_files') or config['stock_inv_path']):
         try:
-            layouts, remaining, score = run_optimization(config, hhos_df, offcut_df, stock_inv_df)
-            optimization_result = prepare_results_for_render(layouts, remaining, score, config)
+            layouts, remaining_parts, _ = run_optimization(config, hhos_df, offcut_df, stock_inv_df)
+            
+            final_layouts = layouts
+            if config.get('standardize_stock_layouts', False):
+                final_layouts = standardize_layouts_post_optimization(layouts, config)
+
+            reference_area = config.get('default_length', 96) * config.get('default_width', 48)
+            total_score = 0
+            for l in final_layouts:
+                 is_stock_only_job = not any(not p.get('is_stock_part', False) for p in l['placed_parts'])
+                 total_score += calculate_layout_score(l, l['sheet_info'], config, config['min_offcut_dim'], reference_area, is_stock_only_job)
+            final_score = total_score - (config.get('w_sheets', 1.0) * len(final_layouts))
+            
+            optimization_result = prepare_results_for_render(final_layouts, remaining_parts, final_score, config)
             if optimization_result:
                 flash("Optimization complete.", "success")
         except Exception as e:
@@ -204,11 +211,8 @@ def home():
             traceback.print_exc()
 
     return render_template(
-        'index.html', 
-        config=config, 
-        result=optimization_result, 
-        all_stock_parts=all_stock_parts_list,
-        hhos_file_contents=hhos_file_contents
+        'index.html', config=config, result=optimization_result, 
+        all_stock_parts=all_stock_parts_list, hhos_file_contents=hhos_file_contents
     )
 
 if __name__ == '__main__':
