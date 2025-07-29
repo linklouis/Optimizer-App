@@ -173,7 +173,7 @@ input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 2px
     align-items: flex-start;
 }
 .layout-card { padding: 1rem; flex-shrink: 0; } /* Allow cards to shrink but not grow */
-.layout-title { margin: 0 0 1rem; font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); text-align: center;}
+.layout-title { margin: 0 0 0; font-size: 1rem; font-weight: 600; color: var(--text-secondary); text-align: center;}
 .svg-container { border: 1px solid var(--border-color); border-radius: 0.5rem; overflow: hidden; background-color: var(--bg-primary); }
 .svg-container svg { width: 100%; height: auto; display: block; }
 

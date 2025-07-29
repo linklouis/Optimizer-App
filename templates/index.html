@@ -152,7 +152,7 @@
                             {% set display_width = (layout.sheet_info.width / config.default_width) * max_card_width %}
                             
                             <div class="layout-card card" style="width: {{ display_width }}px;">
-                                <h3 class="layout-title">{{ layout.sheet_info.type }} {{ layout.sheet_info.length|round(1) }}x{{ layout.sheet_info.width|round(1) }} | x1 | Yield: {{ layout.yield_percentage|round(2) }}%</h3>
+                                <h3 class="layout-title">{{ layout.sheet_info.type }} {{ layout.sheet_info.length|round(1) }}x{{ layout.sheet_info.width|round(1) }} | x{{ layout.quantity }} | Yield: {{ layout.yield_percentage|round(2) }}%</h3>
                                 <div class="svg-container">
                                     <svg viewBox="-2 -2 {{ layout.sheet_info.width + 4 }} {{ layout.sheet_info.length + 4 }}">
                                         

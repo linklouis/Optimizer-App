@@ -97,8 +97,23 @@ def run_optimization(config, hhos_df, offcut_df, stock_inv_df):
     )
     return layouts, remaining_parts, final_score
 
+def get_layout_signature(layout):
+    """Creates a unique string signature for a layout based on its geometry."""
+    sheet_info = layout['sheet_info']
+    sig_parts = [f"sheet_{sheet_info['length']:.3f}x{sheet_info['width']:.3f}"]
+    
+    # Sort parts by position to ensure consistent signature
+    sorted_parts = sorted(layout['placed_parts'], key=lambda p: (p['x'], p['y']))
+    
+    for part in sorted_parts:
+        p_length = part['width'] if part.get('rotated') else part['length']
+        p_width = part['length'] if part.get('rotated') else part['width']
+        sig_parts.append(f"part_{part['x']:.3f},{part['y']:.3f}_{p_width:.3f}x{p_length:.3f}")
+        
+    return "|".join(sig_parts)
+
 def prepare_results_for_render(layouts, remaining_parts, final_score, config):
-    """Processes raw layout data into a format for Jinja rendering."""
+    """Processes and groups raw layout data for Jinja rendering."""
     if not layouts:
         return None
 
@@ -106,29 +121,31 @@ def prepare_results_for_render(layouts, remaining_parts, final_score, config):
     total_sheet_area = sum(l['sheet_info']['length'] * l['sheet_info']['width'] for l in layouts)
     overall_yield = (total_placed_area / total_sheet_area) * 100 if total_sheet_area > 0 else 0
 
-    processed_layouts = []
+    grouped_layouts = {}
     for layout in layouts:
-        sheet_info = layout['sheet_info']
-        sheet_area = sheet_info['length'] * sheet_info['width']
-        
-        # Bounding box calculation
-        bounding_box = None
-        if layout['placed_parts']:
-            max_x = max(p['x'] + (p['length'] if p['rotated'] else p['width']) for p in layout['placed_parts'])
-            max_y = max(p['y'] + (p['width'] if p['rotated'] else p['length']) for p in layout['placed_parts'])
-            bounding_box = {'width': max_x, 'length': max_y}
+        signature = get_layout_signature(layout)
+        if signature not in grouped_layouts:
+            sheet_info = layout['sheet_info']
+            sheet_area = sheet_info['length'] * sheet_info['width']
             
-        processed_layouts.append({
-            'placed_parts': layout['placed_parts'],
-            'sheet_info': sheet_info,
-            'yield_percentage': (layout['total_placed_area'] / sheet_area) * 100 if sheet_area > 0 else 0,
-            'usable_offcuts': [r for r in layout['offcuts'] if r['length'] >= config['min_offcut_dim'] and r['width'] >= config['min_offcut_dim']],
-            'bounding_box': bounding_box
-        })
+            # This is the first time we see this layout, so process it
+            processed_layout = {
+                'placed_parts': layout['placed_parts'],
+                'sheet_info': sheet_info,
+                'yield_percentage': (layout['total_placed_area'] / sheet_area) * 100 if sheet_area > 0 else 0,
+                'usable_offcuts': [r for r in layout['offcuts'] if r['length'] >= config['min_offcut_dim'] and r['width'] >= config['min_offcut_dim']],
+                'quantity': 1 # Initialize quantity
+            }
+            grouped_layouts[signature] = processed_layout
+        else:
+            # We've seen this layout before, just increment the quantity
+            grouped_layouts[signature]['quantity'] += 1
 
     return {
-        'layouts': processed_layouts, 'remaining_parts': remaining_parts,
-        'final_score': final_score, 'overall_yield': overall_yield
+        'layouts': list(grouped_layouts.values()), 
+        'remaining_parts': remaining_parts,
+        'final_score': final_score, 
+        'overall_yield': overall_yield
     }
 
 # --- Flask Route ---
