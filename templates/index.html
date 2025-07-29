@@ -48,12 +48,84 @@
 
                     <section class="card">
                         <h2 class="card-title"><i class="fa-solid fa-file-alt"></i> File Paths</h2>
+                        
+                        <div id="hhos-file-list" class="dynamic-file-list">
+                            <label class="form-label">HHOS Part Lists</label>
+                            {% if config.hhos_files %}
+                                {% for file in config.hhos_files %}
+                                <div class="file-input-group">
+                                    <input type="text" name="hhos_paths" placeholder="Path to HHOS file..." value="{{ file.path }}">
+                                    <input type="number" name="hhos_multipliers" class="multiplier-input" value="{{ file.multiplier }}" min="1">
+                                    <button type="button" class="btn-remove-file"><i class="fa-solid fa-trash"></i></button>
+                                </div>
+                                {% endfor %}
+                            {% else %}
+                                <div class="file-input-group">
+                                    <input type="text" name="hhos_paths" placeholder="Path to HHOS file...">
+                                    <input type="number" name="hhos_multipliers" class="multiplier-input" value="1" min="1">
+                                    <button type="button" class="btn-remove-file"><i class="fa-solid fa-trash"></i></button>
+                                </div>
+                            {% endif %}
+                        </div>
+                        <button type="button" id="add-hhos-file" class="btn-add-file"><i class="fa-solid fa-plus"></i> Add HHOS File</button>
+                        
+                        <hr class="form-divider">
+
                         <div class="form-grid">
-                            <div><label for="hhos_path">HHOS Part List</label><input type="text" id="hhos_path" name="hhos_path" value="{{ config.hhos_path }}"></div>
                             <div><label for="stock_inv_path">Stock Part Inventory</label><input type="text" id="stock_inv_path" name="stock_inv_path" value="{{ config.stock_inv_path }}"></div>
                             <div><label for="offcut_path">Offcut List (Optional)</label><input type="text" id="offcut_path" name="offcut_path" value="{{ config.offcut_path }}"></div>
                         </div>
                     </section>
+                    
+                    {% if hhos_file_contents %}
+                    <section class="card">
+                        <h2 class="card-title"><i class="fa-solid fa-list-check"></i> Loaded Part Lists</h2>
+                        <div class="accordion">
+                            {% for file_content in hhos_file_contents %}
+                            <details class="accordion-item">
+                                <summary class="accordion-header">
+                                    <span class="accordion-title">{{ file_content.path.split('/')[-1].split('\\')[-1] }}</span>
+                                    {% if file_content.error %}
+                                        <span class="status-badge error">Error: {{ file_content.error }}</span>
+                                    {% else %}
+                                        <span class="status-badge success">{{ file_content.parts|length }} Parts</span>
+                                    {% endif %}
+                                </summary>
+                                <div class="accordion-content">
+                                    {% if not file_content.error and file_content.parts %}
+                                    <div class="table-container">
+                                        <table>
+                                            <thead>
+                                                <tr>
+                                                    <th>Material</th>
+                                                    <th>Length</th>
+                                                    <th>Width</th>
+                                                    <th>Qty</th>
+                                                    <th>Crate (Part Name)</th>
+                                                    <th>Ref (Label)</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% for part in file_content.parts %}
+                                                <tr>
+                                                    <td>{{ part.material }}</td>
+                                                    <td>{{ part.length }}</td>
+                                                    <td>{{ part.width }}</td>
+                                                    <td>{{ part.quantity|int }}</td>
+                                                    <td>{{ part.part_name }}</td>
+                                                    <td>{{ part.label }}</td>
+                                                </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </details>
+                            {% endfor %}
+                        </div>
+                    </section>
+                    {% endif %}
                     
                     {% if all_stock_parts %}
                     <section class="card">
@@ -135,7 +207,7 @@
                 {% if result and result.layouts %}
                     <section class="results-summary">
                         <div class="summary-metric"><span class="value">{{ result.final_score|round(2) }}</span><span class="label">Overall Score</span></div>
-                        <div class="summary-metric"><span class="value">{{ result.layouts|length }}</span><span class="label">Sheets Used</span></div>
+                        <div class="summary-metric"><span class="value">{{ result.layouts|map(attribute='quantity')|sum }}</span><span class="label">Total Sheets Used</span></div>
                         <div class="summary-metric"><span class="value">{{ result.overall_yield|round(2) }}%</span><span class="label">Overall Yield</span></div>
                         <div class="summary-metric {% if result.remaining_parts|length > 0 %}is-alert{% endif %}">
                             <span class="value">{{ result.remaining_parts|length }}</span>
@@ -144,52 +216,39 @@
                     </section>
                     
                     <div class="results-grid">
-                        {# Set a max width for the largest possible sheet (e.g., the default) #}
                         {% set max_card_width = 450 %}
-                        
                         {% for layout in result.layouts %}
-                            {# Calculate the display width of the card relative to the default sheet size #}
                             {% set display_width = (layout.sheet_info.width / config.default_width) * max_card_width %}
                             
                             <div class="layout-card card" style="width: {{ display_width }}px;">
                                 <h3 class="layout-title">{{ layout.sheet_info.type }} {{ layout.sheet_info.length|round(1) }}x{{ layout.sheet_info.width|round(1) }} | x{{ layout.quantity }} | Yield: {{ layout.yield_percentage|round(2) }}%</h3>
                                 <div class="svg-container">
                                     <svg viewBox="-2 -2 {{ layout.sheet_info.width + 4 }} {{ layout.sheet_info.length + 4 }}">
-                                        
                                         <rect class="sheet-bg" x="0" y="0" width="{{ layout.sheet_info.width }}" height="{{ layout.sheet_info.length }}"/>
-                                        
                                         {% for part in layout.placed_parts %}
                                             {% set p_length = part.width if part.rotated else part.length %}
                                             {% set p_width = part.length if part.rotated else part.width %}
                                             {% set svg_y = layout.sheet_info.length - part.y - p_length %}
-                                            
                                             <g class="part-group" transform="translate({{ part.x }}, {{ svg_y }})">
                                                 <rect class="{{ 'stock-part' if part.is_stock_part else 'job-part' }}" width="{{ p_width }}" height="{{ p_length }}"/>
                                                 <text class="part-label" x="{{ p_width / 2 }}" y="{{ p_length / 2 }}" dominant-baseline="middle" text-anchor="middle">
                                                     {% if part.is_stock_part %}STOCK{% else %}{{ part.label }}{% endif %}
                                                 </text>
-
-                                                {# --- In-Part Dimensions (Formatted to 3 decimal places) --- #}
                                                 {% set text_padding = 1.5 %}
                                                 <text class="inner-dim-text" text-anchor="middle" dominant-baseline="hanging" x="{{ p_width / 2 }}" y="{{ text_padding }}">{{ '%.3f' % p_width }}</text>
                                                 <text class="inner-dim-text" text-anchor="middle" transform="translate({{ text_padding }}, {{ p_length / 2 }}) rotate(-90)">{{ '%.3f' % p_length }}</text>
                                             </g>
                                         {% endfor %}
-                                        
                                         {% for offcut in layout.usable_offcuts %}
                                             {% set svg_y = layout.sheet_info.length - offcut.y - offcut.length %}
                                             <g class="offcut-group" transform="translate({{ offcut.x }}, {{ svg_y }})">
                                                 <rect class="offcut" width="{{ offcut.width }}" height="{{ offcut.length }}"/>
-                                                <text class="offcut-label" x="{{ offcut.width / 2 }}" y="{{ offcut.length / 2 }}" dominant-baseline="middle" text-anchor="middle">
-                                                    Offcut
-                                                </text>
-                                                {# --- In-Part Dimensions for Offcuts (Formatted to 3 decimal places) --- #}
+                                                <text class="offcut-label" x="{{ offcut.width / 2 }}" y="{{ offcut.length / 2 }}" dominant-baseline="middle" text-anchor="middle">Offcut</text>
                                                 {% set text_padding = 1.5 %}
                                                 <text class="inner-dim-text" text-anchor="middle" dominant-baseline="hanging" x="{{ offcut.width / 2 }}" y="{{ text_padding }}">{{ '%.3f' % offcut.width }}</text>
                                                 <text class="inner-dim-text" text-anchor="middle" transform="translate({{ text_padding }}, {{ offcut.length / 2 }}) rotate(-90)">{{ '%.3f' % offcut.length }}</text>
                                             </g>
                                         {% endfor %}
-
                                         <g class="cut-line-group">
                                             {% for part in layout.placed_parts %}
                                                 {% set p_length = part.width if part.rotated else part.length %}
@@ -199,7 +258,6 @@
                                                 <line class="cut-line" x1="{{ part.x + p_width }}" y1="{{ svg_y }}" x2="{{ part.x + p_width }}" y2="{{ svg_y + p_length }}" />
                                             {% endfor %}
                                         </g>
-                                        
                                     </svg>
                                 </div>
                             </div>

@@ -5,13 +5,13 @@ import json
 import pandas as pd
 import traceback
 
-from data_processing import process_uploaded_files
+from data_processing import process_uploaded_files, extract_hhos_data
 from optimizer import optimize_multiple_sheets
 
 # --- Constants ---
 CONFIG_FILE = 'config.json'
 DEFAULT_CONFIG = {
-    'default_length': 96, 'default_width': 48, 'hhos_path': '', 'offcut_path': '',
+    'default_length': 96, 'default_width': 48, 'hhos_files': [], 'offcut_path': '',
     'stock_inv_path': '', 'kerf': 0.125, 'allow_rotation': True,
     'min_offcut_dim': 4.0, 'use_offcuts': True, 'add_stock_parts': False,
     'search_time_limit': 1.0, 'selected_stock_parts': [], 'dark_mode': False,
@@ -38,8 +38,20 @@ def save_config(config):
 
 def update_config_from_form(config, form_data):
     """Updates the config dictionary from form data."""
-    # File Paths
-    config['hhos_path'] = form_data.get('hhos_path', '').strip(' "')
+    # --- NEW: Handle Multiple HHOS Files ---
+    hhos_paths = form_data.getlist('hhos_paths')
+    hhos_multipliers = form_data.getlist('hhos_multipliers')
+    config['hhos_files'] = []
+    for path, mult_str in zip(hhos_paths, hhos_multipliers):
+        path = path.strip(' "')
+        if path: # Only add entries with a valid path
+            try:
+                multiplier = int(mult_str)
+            except (ValueError, TypeError):
+                multiplier = 1 # Default to 1 if multiplier is invalid
+            config['hhos_files'].append({'path': path, 'multiplier': multiplier})
+
+    # Other file paths
     config['offcut_path'] = form_data.get('offcut_path', '').strip(' "')
     config['stock_inv_path'] = form_data.get('stock_inv_path', '').strip(' "')
 
@@ -102,7 +114,6 @@ def get_layout_signature(layout):
     sheet_info = layout['sheet_info']
     sig_parts = [f"sheet_{sheet_info['length']:.3f}x{sheet_info['width']:.3f}"]
     
-    # Sort parts by position to ensure consistent signature
     sorted_parts = sorted(layout['placed_parts'], key=lambda p: (p['x'], p['y']))
     
     for part in sorted_parts:
@@ -114,8 +125,7 @@ def get_layout_signature(layout):
 
 def prepare_results_for_render(layouts, remaining_parts, final_score, config):
     """Processes and groups raw layout data for Jinja rendering."""
-    if not layouts:
-        return None
+    if not layouts: return None
 
     total_placed_area = sum(l['total_placed_area'] for l in layouts)
     total_sheet_area = sum(l['sheet_info']['length'] * l['sheet_info']['width'] for l in layouts)
@@ -127,25 +137,20 @@ def prepare_results_for_render(layouts, remaining_parts, final_score, config):
         if signature not in grouped_layouts:
             sheet_info = layout['sheet_info']
             sheet_area = sheet_info['length'] * sheet_info['width']
-            
-            # This is the first time we see this layout, so process it
             processed_layout = {
                 'placed_parts': layout['placed_parts'],
                 'sheet_info': sheet_info,
                 'yield_percentage': (layout['total_placed_area'] / sheet_area) * 100 if sheet_area > 0 else 0,
                 'usable_offcuts': [r for r in layout['offcuts'] if r['length'] >= config['min_offcut_dim'] and r['width'] >= config['min_offcut_dim']],
-                'quantity': 1 # Initialize quantity
+                'quantity': 1
             }
             grouped_layouts[signature] = processed_layout
         else:
-            # We've seen this layout before, just increment the quantity
             grouped_layouts[signature]['quantity'] += 1
 
     return {
-        'layouts': list(grouped_layouts.values()), 
-        'remaining_parts': remaining_parts,
-        'final_score': final_score, 
-        'overall_yield': overall_yield
+        'layouts': list(grouped_layouts.values()), 'remaining_parts': remaining_parts,
+        'final_score': final_score, 'overall_yield': overall_yield
     }
 
 # --- Flask Route ---
@@ -154,24 +159,41 @@ def home():
     config = load_config()
     optimization_result = None
     all_stock_parts_list = []
+    hhos_file_contents = []
 
     if request.method == 'POST':
         config = update_config_from_form(config, request.form)
         save_config(config)
         flash("Configuration saved successfully!", "success")
 
+    # --- NEW: Load HHOS file contents for display ---
+    for hhos_file in config.get('hhos_files', []):
+        path = hhos_file.get('path')
+        content_item = {'path': path, 'parts': [], 'error': None}
+        if path and os.path.exists(path):
+            try:
+                df = extract_hhos_data(pd.read_csv(path, header=None))
+                # Apply multiplier for display purposes
+                df['quantity'] = df['quantity'] * hhos_file.get('multiplier', 1)
+                content_item['parts'] = df.to_dict('records')
+            except Exception as e:
+                content_item['error'] = str(e)
+        else:
+            content_item['error'] = "File not found."
+        hhos_file_contents.append(content_item)
+
     try:
         hhos_df, offcut_df, stock_inv_df = process_uploaded_files(
-            config['hhos_path'], config['offcut_path'], config['stock_inv_path'],
+            config.get('hhos_files', []), config['offcut_path'], config['stock_inv_path'],
             config['default_length'], config['default_width']
         )
         if stock_inv_df is not None:
             all_stock_parts_list = stock_inv_df.to_dict('records')
     except Exception as e:
-        flash(f"Error loading files for display: {e}", "danger")
+        flash(f"Error processing files for optimization: {e}", "danger")
         hhos_df, offcut_df, stock_inv_df = pd.DataFrame(), None, None
 
-    if request.method == 'POST' and (config['hhos_path'] or config['stock_inv_path']):
+    if request.method == 'POST' and (config.get('hhos_files') or config['stock_inv_path']):
         try:
             layouts, remaining, score = run_optimization(config, hhos_df, offcut_df, stock_inv_df)
             optimization_result = prepare_results_for_render(layouts, remaining, score, config)
@@ -185,7 +207,8 @@ def home():
         'index.html', 
         config=config, 
         result=optimization_result, 
-        all_stock_parts=all_stock_parts_list
+        all_stock_parts=all_stock_parts_list,
+        hhos_file_contents=hhos_file_contents
     )
 
 if __name__ == '__main__':

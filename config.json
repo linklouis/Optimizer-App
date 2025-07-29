@@ -1,7 +1,12 @@
 {
     "default_length": 96.0,
     "default_width": 48.0,
-    "hhos_path": "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv",
+    "hhos_files": [
+        {
+            "path": "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv",
+            "multiplier": 2
+        }
+    ],
     "offcut_path": "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\Offcut list.xlsx",
     "stock_inv_path": "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\Stock Part Inventory.xlsx",
     "kerf": 0.17,
@@ -50,9 +55,10 @@
     "w_waste": 1.0,
     "w_offcut": 0.5,
     "w_cuts": 0.2,
-    "w_quantity": 0.5,
+    "w_quantity": 0.1,
     "w_sheets": 1.0,
-    "w_stock_fill": 1.5,
+    "w_stock_fill": 5.0,
+    "hhos_path": "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv",
     "paths": {
         "parts_list": "\"S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv\"",
         "stock_inventory": "\"S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\Stock Part Inventory.xlsx\"",

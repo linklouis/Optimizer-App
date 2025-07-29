@@ -37,9 +37,9 @@ body.dark-mode {
     --primary-hover: #93c5fd;
     --secondary: #9ca3af;
     --success: #34d399;
-    --success-bg: #111827;
+    --success-bg: #1f2937;
     --danger: #f87171;
-    --danger-bg: #1f2937;
+    --danger-bg: #4b1f1f;
 
     --sheet-fill: #374151;
     --sheet-border: #eeecec;
@@ -96,9 +96,10 @@ header h1 { margin: 0; font-size: 1.75rem; font-weight: 700; display: flex; alig
 .tab-content.active { display: block; animation: fadeIn 0.5s; }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-/* --- Forms --- */
+/* --- Forms & Inputs --- */
+.form-label { display: block; margin-bottom: 0.5rem; font-weight: 600; font-size: 0.9rem; color: var(--text-primary); }
 .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }
-label, .label { display: block; margin-bottom: 0.25rem; font-weight: 500; font-size: 0.875rem; color: var(--text-secondary); }
+label { display: block; margin-bottom: 0.25rem; font-weight: 500; font-size: 0.875rem; color: var(--text-secondary); }
 input[type="text"], input[type="number"] {
     width: 100%; padding: 0.6rem 0.75rem; border: 1px solid var(--border-color); border-radius: 0.375rem;
     transition: border-color 0.2s, box-shadow 0.2s; background-color: var(--bg-primary); color: var(--text-primary);
@@ -113,37 +114,29 @@ input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 2px
 }
 .submit-button:hover { background-color: #059669; }
 .submit-button:active { transform: translateY(1px); }
+.form-divider { border: 0; height: 1px; background-color: var(--border-color); margin: 1.5rem 0; }
+
+/* NEW: Dynamic File Inputs */
+.dynamic-file-list { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 0.75rem; }
+.file-input-group { display: flex; align-items: center; gap: 0.5rem; }
+.file-input-group input[name="hhos_paths"] { flex-grow: 1; }
+.file-input-group .multiplier-input { width: 80px; text-align: center; }
+.btn-remove-file, .btn-add-file {
+    padding: 0.5rem 0.75rem; border: 1px solid var(--border-color); background-color: var(--bg-secondary);
+    color: var(--text-secondary); border-radius: 0.375rem; cursor: pointer; transition: all 0.2s;
+}
+.btn-remove-file:hover { color: var(--danger); border-color: var(--danger); }
+.btn-add-file { margin-top: 0.5rem; background-color: transparent; }
+.btn-add-file:hover { color: var(--primary); border-color: var(--primary); background-color: var(--bg-primary); }
 
 /* --- Tooltips --- */
-.tooltip {
-    position: relative;
-    display: inline-block;
-    cursor: pointer;
-    border-bottom: 1px dotted var(--text-secondary);
-    color: var(--text-secondary);
-}
+.tooltip { position: relative; display: inline-block; cursor: pointer; border-bottom: 1px dotted var(--text-secondary); color: var(--text-secondary); }
 .tooltip::before {
-    content: attr(data-tooltip);
-    position: absolute;
-    width: 220px;
-    background-color: #333;
-    color: #fff;
-    text-align: center;
-    padding: 8px;
-    border-radius: 6px;
-    z-index: 1;
-    bottom: 125%;
-    left: 50%;
-    margin-left: -110px;
-    opacity: 0;
-    transition: opacity 0.3s;
-    font-size: 0.8rem;
-    font-weight: 400;
-    pointer-events: none;
+    content: attr(data-tooltip); position: absolute; width: 220px; background-color: #333; color: #fff;
+    text-align: center; padding: 8px; border-radius: 6px; z-index: 1; bottom: 125%; left: 50%;
+    margin-left: -110px; opacity: 0; transition: opacity 0.3s; font-size: 0.8rem; font-weight: 400; pointer-events: none;
 }
-.tooltip:hover::before {
-    opacity: 1;
-}
+.tooltip:hover::before { opacity: 1; }
 
 /* --- Stock Selector --- */
 .card-header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 1rem; }
@@ -157,61 +150,45 @@ input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 2px
 .stock-item-details { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; flex-grow: 1; }
 .stock-status { color: var(--secondary); font-size: 0.875rem; }
 
+/* NEW: Accordion for Part Display */
+.accordion-item { border-bottom: 1px solid var(--border-color); }
+.accordion-item:last-child { border-bottom: none; }
+.accordion-header { cursor: pointer; padding: 1rem 0; display: flex; justify-content: space-between; align-items: center; }
+.accordion-header::-webkit-details-marker { display: none; }
+.accordion-header::before { content: '\f078'; font-family: 'Font Awesome 6 Free'; font-weight: 900; margin-right: 0.75rem; transition: transform 0.2s; }
+details[open] > summary.accordion-header::before { transform: rotate(180deg); }
+.accordion-title { font-weight: 500; }
+.status-badge { font-size: 0.8rem; padding: 0.2rem 0.5rem; border-radius: 1rem; }
+.status-badge.success { background-color: var(--success-bg); color: var(--success); }
+.status-badge.error { background-color: var(--danger-bg); color: var(--danger); }
+.accordion-content { padding-bottom: 1rem; }
+.table-container { max-height: 300px; overflow-y: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+th, td { padding: 0.5rem; text-align: left; border-bottom: 1px solid var(--border-color); }
+th { font-weight: 600; }
+tbody tr:last-child td { border-bottom: none; }
+
 /* --- Results --- */
 .results-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
-.summary-metric {
-    background-color: var(--bg-secondary); padding: 1.5rem; border-radius: 0.75rem;
-    border: 1px solid var(--border-color); text-align: center; display: flex; flex-direction: column;
-}
+.summary-metric { background-color: var(--bg-secondary); padding: 1.5rem; border-radius: 0.75rem; border: 1px solid var(--border-color); text-align: center; display: flex; flex-direction: column; }
 .summary-metric .value { font-size: 2.25rem; font-weight: 700; color: var(--primary); line-height: 1; }
 .summary-metric .label { font-size: 0.9rem; color: var(--text-secondary); margin-top: 0.25rem; }
 .summary-metric.is-alert .value { color: var(--danger); }
-.results-grid { 
-    display: flex; 
-    flex-wrap: wrap;
-    gap: 1.5rem; 
-    align-items: flex-start;
-}
-.layout-card { padding: 1rem; flex-shrink: 0; } /* Allow cards to shrink but not grow */
-.layout-title { margin: 0 0 0; font-size: 1rem; font-weight: 600; color: var(--text-secondary); text-align: center;}
+.results-grid { display: flex; flex-wrap: wrap; gap: 1.5rem; align-items: flex-start; }
+.layout-card { padding: 1rem; flex-shrink: 0; }
+.layout-title { margin: 0 0 1rem; font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); text-align: center;}
 .svg-container { border: 1px solid var(--border-color); border-radius: 0.5rem; overflow: hidden; background-color: var(--bg-primary); }
 .svg-container svg { width: 100%; height: auto; display: block; }
-
 
 /* --- SVG Styles --- */
 .sheet-bg { fill: var(--sheet-fill); stroke: var(--sheet-border); stroke-width:0.2px; }
 .job-part { fill: var(--job-part-fill); stroke: var(--sheet-border); stroke-width:0.2px; }
 .stock-part { fill: var(--stock-part-fill); stroke: var(--sheet-border); stroke-width:0.2px; }
 .offcut { fill: var(--offcut-fill); stroke: var(--sheet-border); stroke-width:0.2px; opacity: 0.8; }
-
-.part-label { 
-    font-size: 3px;
-    fill: white; 
-    font-weight: 600; 
-    paint-order: stroke; 
-    stroke: rgba(0,0,0,0.3); 
-    stroke-width:0.5px; 
-    stroke-linecap:butt; 
-    stroke-linejoin:miter; 
-}
-.offcut-label { 
-    font-size: 3px;
-    fill: var(--text-primary); 
-    font-weight: 500;
-}
-
-.inner-dim-text {
-    font-size: 2px;
-    fill: var(--text-primary);
-    opacity: 0.7;
-}
-
-.cut-line {
-    stroke: magenta;
-    stroke-width: 0.4;
-    stroke-linecap: round;
-    opacity: 0.7;
-}
+.part-label { font-size: 3px; fill: white; font-weight: 600; paint-order: stroke; stroke: rgba(0,0,0,0.3); stroke-width:0.5px; }
+.offcut-label { font-size: 3px; fill: var(--text-primary); font-weight: 500; }
+.inner-dim-text { font-size: 2px; fill: var(--text-primary); opacity: 0.7; }
+.cut-line { stroke: magenta; stroke-width: 0.4; stroke-linecap: round; opacity: 0.7; }
 
 /* --- Alerts & Messages --- */
 .flash-messages { display: flex; flex-direction: column; gap: 1rem; }

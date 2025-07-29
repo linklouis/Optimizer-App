@@ -18,13 +18,12 @@ def extract_hhos_data(hhos_df: pd.DataFrame) -> pd.DataFrame:
     if processed_df.shape[1] < 6:
         raise ValueError("HHOS data requires at least 6 semicolon-separated values.")
 
-    # Standardize to snake_case for consistency
     processed_df.columns = ['material', 'number', 'part_name', 'quantity', 'length', 'width'] + processed_df.columns[6:].tolist()
     
     for col in ['length', 'width', 'quantity']:
         processed_df[col] = pd.to_numeric(processed_df[col], errors='coerce')
     
-    processed_df['label'] = processed_df['part_name'].str.split('-').str[-1]
+    processed_df['label'] = processed_df['part_name'].str.split('-').str[-1].str.strip()
     processed_df.dropna(subset=['length', 'width', 'quantity'], inplace=True)
     
     return processed_df
@@ -62,7 +61,6 @@ def process_stock_part_inventory(df: pd.DataFrame) -> pd.DataFrame:
         raise ValueError("Stock inventory needs at least 4 columns: Ref, Name, On Hand, Target.")
     
     df = df.iloc[:, :4].copy()
-    # Standardize to snake_case
     df.columns = ['internal_ref', 'part_name', 'current_stock', 'target_stock']
 
     dimension_regex = re.compile(r'(\d+\.?\d*)\s*x\s*(\d+\.?\d*)\s*$')
@@ -71,7 +69,6 @@ def process_stock_part_inventory(df: pd.DataFrame) -> pd.DataFrame:
     df['length'] = extracted_dims[0]
     df['width'] = extracted_dims[1]
 
-    # Clean the part name for display
     df['part_name_clean'] = df['part_name'].str.replace(dimension_regex, '', regex=True).str.strip().str.rstrip(' -')
     
     for col in ['length', 'width', 'current_stock', 'target_stock']:
@@ -82,21 +79,28 @@ def process_stock_part_inventory(df: pd.DataFrame) -> pd.DataFrame:
     
     return df
 
-def process_uploaded_files(hhos_path: str, offcut_path: str, stock_inv_path: str, default_length: float, default_width: float) -> tuple:
+def process_uploaded_files(hhos_files: list, offcut_path: str, stock_inv_path: str, default_length: float, default_width: float) -> tuple:
     """
     Reads and processes all input files into Pandas DataFrames.
     """
-    hhos_df, offcut_df, stock_inv_df = pd.DataFrame(), None, None
+    all_hhos_parts = []
+    offcut_df, stock_inv_df = None, None
     
     try:
-        if hhos_path and os.path.exists(hhos_path):
-            hhos_df = extract_hhos_data(pd.read_csv(hhos_path, header=None))
+        # --- NEW: Process list of HHOS files with multipliers ---
+        for hhos_file in hhos_files:
+            path = hhos_file.get('path')
+            multiplier = hhos_file.get('multiplier', 1)
+            if path and os.path.exists(path):
+                hhos_subset_df = extract_hhos_data(pd.read_csv(path, header=None))
+                hhos_subset_df['quantity'] = hhos_subset_df['quantity'] * multiplier
+                all_hhos_parts.append(hhos_subset_df)
+        
+        hhos_df = pd.concat(all_hhos_parts, ignore_index=True) if all_hhos_parts else pd.DataFrame()
 
-        # Use a managed offcut path if the user-provided one is empty/non-existent
-        effective_offcut_path = offcut_path if offcut_path and os.path.exists(offcut_path) else None
-        if effective_offcut_path:
-            reader = pd.read_csv if effective_offcut_path.lower().endswith('.csv') else pd.read_excel
-            temp_offcut_df = reader(effective_offcut_path)
+        if offcut_path and os.path.exists(offcut_path):
+            reader = pd.read_csv if offcut_path.lower().endswith('.csv') else pd.read_excel
+            temp_offcut_df = reader(offcut_path)
             if not temp_offcut_df.empty:
                 offcut_df = standardize_sheet_data(temp_offcut_df, "Offcut", default_length, default_width)
         
@@ -107,5 +111,4 @@ def process_uploaded_files(hhos_path: str, offcut_path: str, stock_inv_path: str
         return hhos_df, offcut_df, stock_inv_df
 
     except Exception as e:
-        # Re-raise to be caught by the Flask error handler
         raise e
