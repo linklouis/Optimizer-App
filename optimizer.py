@@ -20,12 +20,14 @@ def find_best_fit(part_l, part_w, empty_rects):
     
     return best_fit_index
 
-def calculate_layout_score(layout, sheet_info, weights, min_offcut_dim, is_stock_only_job=False):
+# MODIFIED: Added 'reference_area' parameter
+def calculate_layout_score(layout, sheet_info, weights, min_offcut_dim, reference_area, is_stock_only_job=False):
     """
     Calculates a score by penalizing waste and offcut area, and adding bonuses.
+    Waste and offcut penalties are normalized against the reference_area for consistency.
     """
     sheet_area = sheet_info['length'] * sheet_info['width']
-    if sheet_area == 0:
+    if sheet_area == 0 or reference_area == 0: # NEW: Check reference_area
         return -float('inf')
 
     # --- Area & Penalty Calculation ---
@@ -34,8 +36,9 @@ def calculate_layout_score(layout, sheet_info, weights, min_offcut_dim, is_stock
     offcut_area = sum((o['length'] * o['width']) for o in usable_offcuts)
     waste_area = sheet_area - used_area - offcut_area
     
-    offcut_penalty = (offcut_area / sheet_area) * weights.get('w_offcut', 0.5)
-    waste_penalty = (waste_area / sheet_area) * weights.get('w_waste', 1.0)
+    # MODIFIED: Penalties are now divided by the 'reference_area' instead of the 'sheet_area'.
+    offcut_penalty = (offcut_area / reference_area) * weights.get('w_offcut', 0.5)
+    waste_penalty = (waste_area / reference_area) * weights.get('w_waste', 1.0)
     area_based_score = -(offcut_penalty + waste_penalty)
 
     # --- Bonus & Constraint Calculation ---
@@ -49,6 +52,8 @@ def calculate_layout_score(layout, sheet_info, weights, min_offcut_dim, is_stock
             deficit = part.get('target_stock', 1) - part.get('current_stock', 0)
             if part.get('target_stock', 0) > 0 and deficit > 0:
                 part_area = part['length'] * part['width']
+                # NOTE: Stock fill bonus is still based on the current sheet's area. This keeps it
+                # as a measure of how efficiently this specific sheet was filled with needed parts.
                 stock_fill_bonus += (deficit / part['target_stock']) * (part_area / sheet_area) * weights.get('w_stock_fill', 1.0)
         else:
             has_required_parts = True
@@ -136,8 +141,8 @@ def _place_randomized_stock(stock_parts_to_place, initial_rects, kerf, allow_rot
 
     return _place_parts_in_rects(parts_to_attempt, initial_rects, kerf, allow_rotation)
 
-
-def run_single_sheet_optimization(sheet_info, required_parts, config, optional_stock_parts=None):
+# MODIFIED: Added 'reference_area' parameter
+def run_single_sheet_optimization(sheet_info, required_parts, config, reference_area, optional_stock_parts=None):
     """
     Finds the best layout for a single sheet by comparing a version with no stock parts
     against multiple, randomized configurations of stock parts over a time limit.
@@ -160,7 +165,8 @@ def run_single_sheet_optimization(sheet_info, required_parts, config, optional_s
     }
     
     best_layout_so_far = baseline_layout
-    best_score_so_far = calculate_layout_score(best_layout_so_far, sheet_info, config, config['min_offcut_dim'], is_stock_only_job)
+    # MODIFIED: Pass 'reference_area' to the scoring function
+    best_score_so_far = calculate_layout_score(best_layout_so_far, sheet_info, config, config['min_offcut_dim'], reference_area, is_stock_only_job)
 
     # --- Step 2: Time-boxed Search for Stock Part Configurations ---
     if optional_stock_parts and remaining_rects_after_job:
@@ -188,7 +194,8 @@ def run_single_sheet_optimization(sheet_info, required_parts, config, optional_s
                 "total_placed_area": sum(p['length'] * p['width'] for p in candidate_placed_parts)
             }
             
-            candidate_score = calculate_layout_score(candidate_layout, sheet_info, config, config['min_offcut_dim'], is_stock_only_job)
+            # MODIFIED: Pass 'reference_area' to the scoring function
+            candidate_score = calculate_layout_score(candidate_layout, sheet_info, config, config['min_offcut_dim'], reference_area, is_stock_only_job)
 
             if candidate_score > best_score_so_far:
                 best_score_so_far = candidate_score
@@ -204,6 +211,9 @@ def optimize_multiple_sheets(parts_to_cut, stock_sheets, config, optional_stock_
     Main orchestrator that finds the best combination of sheets by minimizing
     the "cost-per-part" in each pass, using the time-boxed search for each sheet.
     """
+    # NEW: Define the reference area from the default sheet dimensions in the config.
+    reference_area = config.get('default_length', 96) * config.get('default_width', 48)
+
     required_parts_list = []
     for part in parts_to_cut:
         for _ in range(int(part.get('quantity', 1))):
@@ -237,16 +247,18 @@ def optimize_multiple_sheets(parts_to_cut, stock_sheets, config, optional_stock_
             if sheet.get('quantity', 0) <= 0:
                 continue
 
+            # MODIFIED: Pass 'reference_area' to the optimization function
             layout_attempt = run_single_sheet_optimization(
-                sheet, parts_for_this_pass, config, live_optional_stock_parts if not is_stock_only_job else []
+                sheet, parts_for_this_pass, config, reference_area, live_optional_stock_parts if not is_stock_only_job else []
             )
             
             num_placed_primary = sum(1 for p in layout_attempt['placed_parts'] if p['part_id'] in {part['part_id'] for part in parts_for_this_pass})
             if num_placed_primary == 0:
                 continue
             
+            # MODIFIED: Pass 'reference_area' to the scoring function
             layout_score = calculate_layout_score(
-                layout_attempt, sheet, config, config['min_offcut_dim'], is_stock_only_job
+                layout_attempt, sheet, config, config['min_offcut_dim'], reference_area, is_stock_only_job
             )
             
             total_pass_cost = -layout_score + config.get('w_sheets', 1.0)
@@ -270,7 +282,8 @@ def optimize_multiple_sheets(parts_to_cut, stock_sheets, config, optional_stock_
         
         loop_condition = required_parts_list or (is_stock_only_job and live_optional_stock_parts)
 
-    total_score = sum(calculate_layout_score(layout, layout['sheet_info'], config, config['min_offcut_dim'], is_stock_only_job) for layout in final_layouts)
+    # MODIFIED: Pass 'reference_area' to the final scoring calculation
+    total_score = sum(calculate_layout_score(layout, layout['sheet_info'], config, config['min_offcut_dim'], reference_area, is_stock_only_job) for layout in final_layouts)
     final_score = total_score - (config.get('w_sheets', 1.0) * len(final_layouts))
 
     return final_layouts, required_parts_list, final_score

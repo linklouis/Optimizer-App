@@ -1,9 +1,9 @@
 {
     "default_length": 96.0,
     "default_width": 48.0,
-    "hhos_path": "S:\\Temporary\\Louis Link - Temp\\Optimizer\\Demo\\Input\\HHOS_SC-220492.csv",
-    "offcut_path": "S:\\Temporary\\Louis Link - Temp\\Optimizer\\Demo\\Input\\Offcut list.xlsx",
-    "stock_inv_path": "S:\\Temporary\\Louis Link - Temp\\Optimizer\\Demo\\Input\\Stock Part Inventory.xlsx",
+    "hhos_path": "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv",
+    "offcut_path": "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\Offcut list.xlsx",
+    "stock_inv_path": "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\Stock Part Inventory.xlsx",
     "kerf": 0.125,
     "allow_rotation": true,
     "min_offcut_dim": 12.0,
