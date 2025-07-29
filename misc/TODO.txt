@@ -5,7 +5,7 @@ FEATURES
         - ✓ Allow picking only certain stock parts to use
         - ✓ Add "select all" and "select none" options to stock part list
 
-        - [ASK] Maybe allow uploading a temp Offcut List that doesn't override the current one?
+        - Allow uploading a temp Offcut List that doesn't override the current one?
         - Save offcuts
         - Clear Offcut List File after optimization
         - Notes section for offcuts
@@ -15,7 +15,11 @@ FEATURES
         - Add description of scoring weight/all settings on hover
         - Multiple parts list files
         - Tell user when the files they're pointing to don't exist
-        - [ASK] Unit switcher?
+        - X [ASK] Unit switcher?
+        - Multiple HHOS files at once (Keep them separate) Each file needs to have a multiplier.
+        - Each sheet layout should only be displayed once, and also have a multiplier.
+        - Allow specific parts to be removed from a job
+        - Be able to click on stock parts and remove them from the sheet layout
     
     Optimizer
         - 
@@ -57,3 +61,4 @@ QUESTIONS
     - X Should it be called default "board" size?
     
     - Always rotate labels to be on the widest axis, or just when they don't fit?
+    - Should the smaller sheets be zoomed in more (like now) or displayed at their relative size?

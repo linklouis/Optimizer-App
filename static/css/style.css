@@ -69,7 +69,6 @@ header {
 }
 header h1 { margin: 0; font-size: 1.75rem; font-weight: 700; display: flex; align-items: center; gap: 0.75rem; color: var(--text-primary); }
 
-/* MODIFIED: Added padding to the card */
 .card {
     background-color: var(--bg-secondary);
     border: 1px solid var(--border-color);
@@ -167,31 +166,51 @@ input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 2px
 .summary-metric .value { font-size: 2.25rem; font-weight: 700; color: var(--primary); line-height: 1; }
 .summary-metric .label { font-size: 0.9rem; color: var(--text-secondary); margin-top: 0.25rem; }
 .summary-metric.is-alert .value { color: var(--danger); }
-.results-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 1.5rem; }
-.layout-card { padding: 1.5rem; }
-.layout-title { margin: 0 0 1rem; font-size: 1rem; font-weight: 600; color: var(--text-secondary); }
+.results-grid { 
+    display: flex; 
+    flex-wrap: wrap;
+    gap: 1.5rem; 
+    align-items: flex-start;
+}
+.layout-card { padding: 1rem; flex-shrink: 0; } /* Allow cards to shrink but not grow */
+.layout-title { margin: 0 0 1rem; font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); text-align: center;}
 .svg-container { border: 1px solid var(--border-color); border-radius: 0.5rem; overflow: hidden; background-color: var(--bg-primary); }
+.svg-container svg { width: 100%; height: auto; display: block; }
+
 
 /* --- SVG Styles --- */
 .sheet-bg { fill: var(--sheet-fill); stroke: var(--sheet-border); stroke-width:0.2px; }
 .job-part { fill: var(--job-part-fill); stroke: var(--sheet-border); stroke-width:0.2px; }
 .stock-part { fill: var(--stock-part-fill); stroke: var(--sheet-border); stroke-width:0.2px; }
 .offcut { fill: var(--offcut-fill); stroke: var(--sheet-border); stroke-width:0.2px; opacity: 0.8; }
-.part-label { font-size: 4px; fill: white; font-weight: 600; paint-order: stroke; stroke: rgba(0,0,0,0.3); stroke-width:0.5px; stroke-linecap:butt; stroke-linejoin:miter; }
-.offcut-label { font-size: 3.5px; fill: var(--text-primary); font-weight: 500; }
-.dim-line { stroke: var(--dim-line-color); stroke-width: 0.4; }
-.dim-text { font-size: 3.5px; fill: var(--dim-line-color); }
-.dim-arrow-head { fill: var(--dim-line-color); }
 
-/* --- Inner Dimension Styles --- */
-.dim-line-inner {
-    stroke: var(--text-secondary);
-    stroke-width: 0.2;
-    stroke-dasharray: 1,1;
+.part-label { 
+    font-size: 3px;
+    fill: white; 
+    font-weight: 600; 
+    paint-order: stroke; 
+    stroke: rgba(0,0,0,0.3); 
+    stroke-width:0.5px; 
+    stroke-linecap:butt; 
+    stroke-linejoin:miter; 
 }
-.dim-text-inner {
-    font-size: 2.5px;
-    fill: var(--text-secondary);
+.offcut-label { 
+    font-size: 3px;
+    fill: var(--text-primary); 
+    font-weight: 500;
+}
+
+.inner-dim-text {
+    font-size: 2px;
+    fill: var(--text-primary);
+    opacity: 0.7;
+}
+
+.cut-line {
+    stroke: magenta;
+    stroke-width: 0.4;
+    stroke-linecap: round;
+    opacity: 0.7;
 }
 
 /* --- Alerts & Messages --- */

@@ -104,23 +104,23 @@
                                     <input type="number" step="any" id="w_waste" name="w_waste" value="{{ config.w_waste }}">
                                 </div>
                                 <div>
-                                    <label for="w_offcut">Offcut Penalty <span class="tooltip" data-tooltip="Penalizes usable leftover pieces (offcuts). Use a lower value if you want to save offcuts.">[?]</span></label>
+                                    <label for="w_offcut">Offcut Penalty <span class="tooltip" data-tooltip="Penalizes usable leftover pieces (offcuts). Use a lower value (even negative) if you want more offcuts.">[?]</span></label>
                                     <input type="number" step="any" id="w_offcut" name="w_offcut" value="{{ config.w_offcut }}">
                                 </div>
                                 <div>
-                                    <label for="w_cuts">Cuts Penalty <span class="tooltip" data-tooltip="Slightly penalizes each part cut to favor layouts with fewer cuts.">[?]</span></label>
+                                    <label for="w_cuts"># of Cuts Penalty <span class="tooltip" data-tooltip="Slightly penalizes each cut made to favor layouts with fewer cuts.">[?]</span></label>
                                     <input type="number" step="any" id="w_cuts" name="w_cuts" value="{{ config.w_cuts }}">
                                 </div>
                                 <div>
-                                    <label for="w_quantity">Inv. Bonus <span class="tooltip" data-tooltip="Adds a small bonus for using sheets from inventory (offcuts) that have a high quantity.">[?]</span></label>
+                                    <label for="w_quantity">Offcut Inv. Bonus <span class="tooltip" data-tooltip="Adds a small bonus for using offcuts that have a high quantity.">[?]</span></label>
                                     <input type="number" step="any" id="w_quantity" name="w_quantity" value="{{ config.w_quantity }}">
                                 </div>
                                 <div>
-                                    <label for="w_sheets">Sheet Penalty <span class="tooltip" data-tooltip="Penalizes using a new sheet. Higher values prioritize filling existing sheets.">[?]</span></label>
+                                    <label for="w_sheets"># of Sheets Penalty <span class="tooltip" data-tooltip="Penalizes using more sheets. Higher values prioritize filling existing sheets.">[?]</span></label>
                                     <input type="number" step="any" id="w_sheets" name="w_sheets" value="{{ config.w_sheets }}">
                                 </div>
                                 <div>
-                                    <label for="w_stock_fill">Stock Fill Bonus <span class="tooltip" data-tooltip="Prioritizes creating stock parts that are low in inventory.">[?]</span></label>
+                                    <label for="w_stock_fill">Stock Part Inv. Bonus <span class="tooltip" data-tooltip="Prioritizes creating stock parts that are low in inventory.">[?]</span></label>
                                     <input type="number" step="any" id="w_stock_fill" name="w_stock_fill" value="{{ config.w_stock_fill }}">
                                 </div>
                             </div>
@@ -142,88 +142,69 @@
                             <span class="label">Parts Not Placed</span>
                         </div>
                     </section>
-                    <section class="results-grid">
+                    
+                    <div class="results-grid">
+                        {# Set a max width for the largest possible sheet (e.g., the default) #}
+                        {% set max_card_width = 450 %}
+                        
                         {% for layout in result.layouts %}
-                            <div class="layout-card card">
-                                <h3 class="layout-title">Sheet: {{ layout.sheet_info.id }} ({{ layout.sheet_info.length }}x{{ layout.sheet_info.width }}) | Yield: {{ layout.yield_percentage|round(2) }}%</h3>
+                            {# Calculate the display width of the card relative to the default sheet size #}
+                            {% set display_width = (layout.sheet_info.width / config.default_width) * max_card_width %}
+                            
+                            <div class="layout-card card" style="width: {{ display_width }}px;">
+                                <h3 class="layout-title">{{ layout.sheet_info.type }} {{ layout.sheet_info.length|round(1) }}x{{ layout.sheet_info.width|round(1) }} | x1 | Yield: {{ layout.yield_percentage|round(2) }}%</h3>
                                 <div class="svg-container">
-                                    <svg class="layout-svg" viewBox="-15 -15 {{ layout.sheet_info.width + 30 }} {{ layout.sheet_info.length + 30 }}">
-                                        <defs>
-                                            <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="3" markerHeight="3" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" class="dim-arrow-head" /></marker>
-                                        </defs>
-
+                                    <svg viewBox="-2 -2 {{ layout.sheet_info.width + 4 }} {{ layout.sheet_info.length + 4 }}">
+                                        
                                         <rect class="sheet-bg" x="0" y="0" width="{{ layout.sheet_info.width }}" height="{{ layout.sheet_info.length }}"/>
                                         
-                                        {# --- Placed Parts --- #}
                                         {% for part in layout.placed_parts %}
                                             {% set p_length = part.width if part.rotated else part.length %}
                                             {% set p_width = part.length if part.rotated else part.width %}
                                             {% set svg_y = layout.sheet_info.length - part.y - p_length %}
+                                            
                                             <g class="part-group" transform="translate({{ part.x }}, {{ svg_y }})">
                                                 <rect class="{{ 'stock-part' if part.is_stock_part else 'job-part' }}" width="{{ p_width }}" height="{{ p_length }}"/>
                                                 <text class="part-label" x="{{ p_width / 2 }}" y="{{ p_length / 2 }}" dominant-baseline="middle" text-anchor="middle">
-                                                    {% if part.is_stock_part %}STOCK{% else %}{{ part.label or part.part_name }}{% endif %}
+                                                    {% if part.is_stock_part %}STOCK{% else %}{{ part.label }}{% endif %}
                                                 </text>
+
+                                                {# --- In-Part Dimensions (Formatted to 3 decimal places) --- #}
+                                                {% set text_padding = 1.5 %}
+                                                <text class="inner-dim-text" text-anchor="middle" dominant-baseline="hanging" x="{{ p_width / 2 }}" y="{{ text_padding }}">{{ '%.3f' % p_width }}</text>
+                                                <text class="inner-dim-text" text-anchor="middle" transform="translate({{ text_padding }}, {{ p_length / 2 }}) rotate(-90)">{{ '%.3f' % p_length }}</text>
                                             </g>
                                         {% endfor %}
                                         
-                                        {# --- Usable Offcuts --- #}
                                         {% for offcut in layout.usable_offcuts %}
                                             {% set svg_y = layout.sheet_info.length - offcut.y - offcut.length %}
                                             <g class="offcut-group" transform="translate({{ offcut.x }}, {{ svg_y }})">
                                                 <rect class="offcut" width="{{ offcut.width }}" height="{{ offcut.length }}"/>
                                                 <text class="offcut-label" x="{{ offcut.width / 2 }}" y="{{ offcut.length / 2 }}" dominant-baseline="middle" text-anchor="middle">
-                                                    {{ offcut.width|round(1) }}x{{ offcut.length|round(1) }}
+                                                    Offcut
                                                 </text>
+                                                {# --- In-Part Dimensions for Offcuts (Formatted to 3 decimal places) --- #}
+                                                {% set text_padding = 1.5 %}
+                                                <text class="inner-dim-text" text-anchor="middle" dominant-baseline="hanging" x="{{ offcut.width / 2 }}" y="{{ text_padding }}">{{ '%.3f' % offcut.width }}</text>
+                                                <text class="inner-dim-text" text-anchor="middle" transform="translate({{ text_padding }}, {{ offcut.length / 2 }}) rotate(-90)">{{ '%.3f' % offcut.length }}</text>
                                             </g>
                                         {% endfor %}
 
-                                        {# --- NEW: Part Dimensions --- #}
-                                        <g class="part-dimension-group">
+                                        <g class="cut-line-group">
                                             {% for part in layout.placed_parts %}
                                                 {% set p_length = part.width if part.rotated else part.length %}
                                                 {% set p_width = part.length if part.rotated else part.width %}
                                                 {% set svg_y = layout.sheet_info.length - part.y - p_length %}
-                                                
-                                                {# Width dimension (above part) #}
-                                                <line class="dim-line-inner" x1="{{ part.x }}" y1="{{ svg_y - 2 }}" x2="{{ part.x + p_width }}" y2="{{ svg_y - 2 }}" />
-                                                <text class="dim-text-inner" x="{{ part.x + p_width / 2 }}" y="{{ svg_y - 3 }}" text-anchor="middle">{{ p_width|round(2) }}</text>
-
-                                                {# Height dimension (left of part) #}
-                                                <line class="dim-line-inner" x1="{{ part.x - 2 }}" y1="{{ svg_y }}" x2="{{ part.x - 2 }}" y2="{{ svg_y + p_length }}" />
-                                                <text class="dim-text-inner" text-anchor="middle" transform="translate({{ part.x - 3 }}, {{ svg_y + p_length / 2 }}) rotate(-90)">{{ p_length|round(2) }}</text>
+                                                <line class="cut-line" x1="{{ part.x }}" y1="{{ svg_y + p_length }}" x2="{{ part.x + p_width }}" y2="{{ svg_y + p_length }}" />
+                                                <line class="cut-line" x1="{{ part.x + p_width }}" y1="{{ svg_y }}" x2="{{ part.x + p_width }}" y2="{{ svg_y + p_length }}" />
                                             {% endfor %}
                                         </g>
-
-                                        {# --- NEW: Offcut Dimensions --- #}
-                                        <g class="offcut-dimension-group">
-                                            {% for offcut in layout.usable_offcuts %}
-                                                {% set svg_y = layout.sheet_info.length - offcut.y - offcut.length %}
-                                                {# Width dimension #}
-                                                <line class="dim-line-inner" x1="{{ offcut.x }}" y1="{{ svg_y - 2 }}" x2="{{ offcut.x + offcut.width }}" y2="{{ svg_y - 2 }}" />
-                                                <text class="dim-text-inner" x="{{ offcut.x + offcut.width / 2 }}" y="{{ svg_y - 3 }}" text-anchor="middle">{{ offcut.width|round(2) }}</text>
-                                                {# Height dimension #}
-                                                <line class="dim-line-inner" x1="{{ offcut.x - 2 }}" y1="{{ svg_y }}" x2="{{ offcut.x - 2 }}" y2="{{ svg_y + offcut.length }}" />
-                                                <text class="dim-text-inner" text-anchor="middle" transform="translate({{ offcut.x - 3 }}, {{ svg_y + offcut.length / 2 }}) rotate(-90)">{{ offcut.length|round(2) }}</text>
-                                            {% endfor %}
-                                        </g>
-
-                                        {# --- Bounding Box Dimensions --- #}
-                                        {% if layout.bounding_box %}
-                                            {% set bb_w = layout.bounding_box.width %}
-                                            {% set bb_l = layout.bounding_box.length %}
-                                            <g class="dimension-group">
-                                                <line class="dim-line" x1="0" y1="{{ layout.sheet_info.length + 5 }}" x2="{{ bb_w }}" y2="{{ layout.sheet_info.length + 5 }}" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
-                                                <text class="dim-text" x="{{ bb_w / 2 }}" y="{{ layout.sheet_info.length + 9 }}" text-anchor="middle">{{ bb_w|round(2) }}</text>
-                                                <line class="dim-line" y1="{{ layout.sheet_info.length - bb_l }}" x1="-5" y2="{{ layout.sheet_info.length }}" x2="-5" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
-                                                <text class="dim-text" text-anchor="middle" transform="translate(-9, {{ layout.sheet_info.length - (bb_l/2) }}) rotate(-90)">{{ bb_l|round(2) }}</text>
-                                            </g>
-                                        {% endif %}
+                                        
                                     </svg>
                                 </div>
                             </div>
                         {% endfor %}
-                    </section>
+                    </div>
                 {% else %}
                     <div class="card placeholder">
                         <h3><i class="fa-solid fa-lightbulb"></i> No Results to Display</h3>
