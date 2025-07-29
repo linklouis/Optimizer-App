@@ -18,7 +18,7 @@
     "min_offcut_dim": 12.0,
     "use_offcuts": true,
     "add_stock_parts": true,
-    "search_time_limit": 1.0,
+    "search_time_limit": 5.0,
     "selected_stock_parts": [
         "OSB-15-126126",
         "OSB-15-140126",
@@ -60,7 +60,7 @@
     "w_offcut": 0.5,
     "w_cuts": 0.2,
     "w_quantity": 0.1,
-    "w_sheets": 1.0,
+    "w_sheets": 3.0,
     "w_stock_fill": 5.0,
     "standardize_stock_layouts": false,
     "hhos_path": "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv",

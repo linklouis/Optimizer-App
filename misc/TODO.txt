@@ -24,9 +24,11 @@ FEATURES
         - Way to automatically stop when the score is sufficient? Maybe calculate the 
     
     Optimizer
-        - Rerun the optimizor on the remaining parts after a set of sheet layouts have been standardized?
-        - ---> Only keep reusing a layout of stock parts until another layout is better because the number of the original stock parts needed has been filled.
+        - ✓ ---> Only keep reusing a layout of stock parts until another layout is better because the number of the original stock parts needed has been filled.
+        - X Rerun the optimizor on the remaining parts after a set of sheet layouts have been standardized?
+
         - Needs to be smarter about handling jobs with high quantities
+        - ---> Add number of layouts penalty
 
     Visual
         - Add measurements to layout display

@@ -94,93 +94,95 @@ def run_optimization(config, hhos_df, offcut_df, stock_inv_df):
 
     return optimize_multiple_sheets(parts_to_cut, stock_sheets, config, optional_stock_parts, is_stock_only_job)
 
-def calculate_dynamic_score(layout, live_deficit_tracker, config):
+def _calculate_live_stock_bonus(layout: dict, live_deficit_tracker: Counter, config: dict) -> float:
     """
-    A wrapper around the original scoring function that uses a live deficit tracker
-    to calculate a more accurate, state-aware stock_fill_bonus.
+    Calculates only the stock_fill_bonus based on a live deficit tracker.
+    This is a lightweight alternative to the full dynamic score calculation.
     """
-    reference_area = config.get('default_length', 96) * config.get('default_width', 48)
-    
-    # Create a deep copy of the layout to avoid modifying the original
-    temp_layout = json.loads(json.dumps(layout))
-    
-    # Temporarily adjust part info to reflect the live deficit
-    for part in temp_layout['placed_parts']:
-        if part.get('is_stock_part'):
-            ref = part.get('internal_ref')
-            live_deficit = live_deficit_tracker.get(ref, 0)
-            # Trick the scoring function by setting target_stock to the live deficit
-            part['target_stock'] = live_deficit
-            part['current_stock'] = 0
+    stock_fill_bonus = 0.0
+    # The sheet area is needed for the bonus calculation.
+    sheet_area = layout['sheet_info']['length'] * layout['sheet_info']['width']
+    if sheet_area == 0:
+        return 0.0
 
-    is_stock_only_job = not any(not p.get('is_stock_part', False) for p in temp_layout['placed_parts'])
+    w_stock_fill = config.get('w_stock_fill', 1.0)
+
+    for part in layout.get('placed_parts', []):
+        if part.get('is_stock_part') and live_deficit_tracker.get(part.get('internal_ref'), 0) > 0:
+            part_area = part.get('length', 0) * part.get('width', 0)
+            
+            # The original deficit for this part type (how many we initially needed).
+            # This is used as the denominator in the original formula.
+            initial_deficit = part.get('target_stock', 1) - part.get('current_stock', 0)
+            
+            if initial_deficit > 0:
+                # The bonus is for filling one part out of the initial total needed.
+                stock_fill_bonus += (1 / initial_deficit) * (part_area / sheet_area) * w_stock_fill
+                
+    return stock_fill_bonus
+
+
+def standardize_layouts(layouts: list, initial_optional_parts: list, config: dict) -> list:
+    """
+    Standardizes layouts using a fast, greedy selection algorithm.
+    This replaces the slow, iterative version.
+    """
+    # 1. Track initial stock part needs.
+    live_deficit_tracker = Counter({p['internal_ref']: int(p['target_stock'] - p['current_stock']) for p in initial_optional_parts})
     
-    return calculate_layout_score(temp_layout, temp_layout['sheet_info'], config, config['min_offcut_dim'], reference_area, is_stock_only_job)
-
-def standardize_iteratively(layouts, initial_optional_parts, config):
-    """
-    Performs an iterative, state-aware standardization of layouts.
-    """
-    # 1. Create a live tracker for stock part deficits
-    live_deficit_tracker = Counter()
-    for part in initial_optional_parts:
-        deficit = int(part['target_stock'] - part['current_stock'])
-        live_deficit_tracker[part['internal_ref']] += deficit
-
-    # 2. Group raw layouts by their required parts signature
-    grouped_raw_layouts = {}
+    # 2. Group layouts by their required (non-stock) parts signature.
+    grouped_layouts = {}
     for i, layout in enumerate(layouts):
-        layout['original_index'] = i # Keep track of original position
+        layout['original_index'] = i
         signature = get_layout_signature(layout, required_only=True)
-        if signature not in grouped_raw_layouts:
-            grouped_raw_layouts[signature] = []
-        grouped_raw_layouts[signature].append(layout)
-    
-    final_standardized_layouts = [None] * len(layouts)
+        grouped_layouts.setdefault(signature, []).append(layout)
 
-    # 3. For each group, perform iterative replacement
-    for signature, group_layouts in grouped_raw_layouts.items():
-        if len(group_layouts) <= 1:
-            for layout in group_layouts:
-                final_standardized_layouts[layout['original_index']] = layout
+    final_layouts = [None] * len(layouts)
+
+    # 3. Process each group to standardize its stock parts.
+    for signature, group in grouped_layouts.items():
+        if len(group) <= 1:
+            for layout in group:
+                final_layouts[layout['original_index']] = layout
             continue
 
-        # Get unique variations within the group
-        unique_variations = {get_layout_signature(l): l for l in group_layouts}.values()
+        # 4. Find unique variations and pre-calculate their static base score ONCE.
+        unique_variations = {get_layout_signature(l): l for l in group}.values()
+        scored_variations = []
+        for v in unique_variations:
+            is_stock_only_job = not any(not p.get('is_stock_part', False) for p in v['placed_parts'])
+            base_score = calculate_layout_score(v, v['sheet_info'], config, config['min_offcut_dim'], config['default_length'] * config['default_width'], is_stock_only_job)
+            # We subtract the stock bonus because we will recalculate it live.
+            stock_bonus_to_remove = _calculate_live_stock_bonus(v, live_deficit_tracker, config)
+            scored_variations.append({
+                'base_score': base_score - stock_bonus_to_remove,
+                'layout': v
+            })
 
-        # Create a mutable list of the layouts in this group to modify
-        mutable_group = list(group_layouts)
-
-        while len({get_layout_signature(l) for l in mutable_group}) > 1:
-            # Re-rank variations based on the current deficit tracker
-            ranked_variations = sorted(
-                unique_variations, 
-                key=lambda v: calculate_dynamic_score(v, live_deficit_tracker, config),
-                reverse=True
+        # 5. Greedily select the best layout for each slot in the group.
+        standardized_group = []
+        for _ in range(len(group)):
+            # Find the best variation based on the CURRENT deficit
+            best_choice = max(
+                scored_variations,
+                key=lambda item: item['base_score'] + _calculate_live_stock_bonus(item['layout'], live_deficit_tracker, config)
             )
             
-            best_variation = ranked_variations[0]
-            worst_variation = ranked_variations[-1]
-            
-            # Find an instance of the worst variation in the mutable group and replace it
-            worst_sig = get_layout_signature(worst_variation)
-            for i, layout in enumerate(mutable_group):
-                if get_layout_signature(layout) == worst_sig:
-                    mutable_group[i] = best_variation
-                    break
-            
-            # Update the deficit tracker by "consuming" the parts from the best layout
-            for part in best_variation['placed_parts']:
+            chosen_layout = best_choice['layout']
+            standardized_group.append(chosen_layout)
+
+            # "Consume" the stock parts from the chosen layout
+            for part in chosen_layout.get('placed_parts', []):
                 if part.get('is_stock_part'):
                     ref = part.get('internal_ref')
                     if live_deficit_tracker[ref] > 0:
                         live_deficit_tracker[ref] -= 1
         
-        # Place the now-standardized layouts back into their original positions
-        for original_layout, standardized_layout in zip(group_layouts, mutable_group):
-            final_standardized_layouts[original_layout['original_index']] = standardized_layout
+        # 6. Place the standardized layouts back into their original positions.
+        for original_layout, standardized_layout in zip(group, standardized_group):
+            final_layouts[original_layout['original_index']] = standardized_layout
 
-    return final_standardized_layouts
+    return final_layouts
 
 
 def prepare_results_for_render(layouts, remaining_parts, final_score, config):
@@ -269,7 +271,7 @@ def home():
             final_layouts = layouts
             if config.get('standardize_stock_layouts', False):
                 initial_optional_parts = get_initial_optional_parts(stock_inv_df, config)
-                final_layouts = standardize_iteratively(layouts, initial_optional_parts, config)
+                final_layouts = standardize_layouts(layouts, initial_optional_parts, config)
 
             reference_area = config.get('default_length', 96) * config.get('default_width', 48)
             total_score = 0
