@@ -15,6 +15,7 @@ FEATURES
         - Add description of scoring weight/all settings on hover
         - Multiple parts list files
         - Tell user when the files they're pointing to don't exist
+        - [ASK] Unit switcher?
     
     Optimizer
         - 
@@ -31,6 +32,7 @@ BUGS
 
     - Downcasting issue with replace in extract_hhos_data
     - Stock text doesn't go sidways
+    - Doesn't remember theme selection
 
 IDEAS
     - X Try every combination of cut order for every sheet? 

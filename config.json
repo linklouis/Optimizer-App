@@ -6,7 +6,7 @@
     "stock_inv_path": "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\Stock Part Inventory.xlsx",
     "kerf": 0.125,
     "allow_rotation": true,
-    "min_offcut_dim": 12.0,
+    "min_offcut_dim": 12.01,
     "use_offcuts": true,
     "add_stock_parts": true,
     "search_time_limit": 1.0,
@@ -52,7 +52,34 @@
     "w_cuts": 0.2,
     "w_quantity": 0.5,
     "w_sheets": 1.0,
-    "w_stock_fill": 1.5,
+    "w_stock_fill": 5.0,
+    "paths": {
+        "parts_list": "\"S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv\"",
+        "stock_inventory": "\"S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\Stock Part Inventory.xlsx\"",
+        "offcut_list": "\"S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\Offcut list.xlsx\""
+    },
+    "settings": {
+        "default_sheet_length": 96.0,
+        "default_sheet_width": 48.0,
+        "kerf": 0.125,
+        "min_offcut_dim": 4.0,
+        "search_time_limit": 1.0,
+        "allow_rotation": true,
+        "use_offcuts": true,
+        "add_stock_parts": true
+    },
+    "weights": {
+        "waste_penalty": 1.0,
+        "offcut_penalty": 0.5,
+        "cuts_penalty": 0.2,
+        "quantity_bonus": 0.1,
+        "sheet_penalty": 1.0,
+        "stock_fill_bonus": 1.0
+    },
+    "ui": {
+        "dark_mode": false,
+        "selected_stock_refs": []
+    },
     "search_time_seconds": 10,
     "stock_path": "S:\\Temporary\\Louis Link - Temp\\Optimizer\\Demo\\Input\\Stock Part Inventory.xlsx",
     "w_yield": 1.0,

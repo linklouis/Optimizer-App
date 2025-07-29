@@ -16,14 +16,15 @@ def extract_hhos_data(hhos_df: pd.DataFrame) -> pd.DataFrame:
                     .dropna(axis=1, how='all'))
     
     if processed_df.shape[1] < 6:
-        raise ValueError("HHOS data is missing expected columns. It should have at least 6 semicolon-separated values.")
+        raise ValueError("HHOS data requires at least 6 semicolon-separated values.")
 
-    processed_df.columns = ['material', 'number', 'part name', 'quantity', 'length', 'width'] + processed_df.columns[6:].tolist()
+    # Standardize to snake_case for consistency
+    processed_df.columns = ['material', 'number', 'part_name', 'quantity', 'length', 'width'] + processed_df.columns[6:].tolist()
     
     for col in ['length', 'width', 'quantity']:
         processed_df[col] = pd.to_numeric(processed_df[col], errors='coerce')
     
-    processed_df['label'] = processed_df['part name'].str.split('-').str[-1]
+    processed_df['label'] = processed_df['part_name'].str.split('-').str[-1]
     processed_df.dropna(subset=['length', 'width', 'quantity'], inplace=True)
     
     return processed_df
@@ -31,7 +32,6 @@ def extract_hhos_data(hhos_df: pd.DataFrame) -> pd.DataFrame:
 def standardize_sheet_data(df: pd.DataFrame, file_type: str, default_length: float = None, default_width: float = None) -> pd.DataFrame:
     """
     Standardizes column names and types for stock and offcut DataFrames.
-    If default dimensions are provided, it filters out rows matching them from the dataframe.
     """
     if df.shape[1] < 3:
         raise ValueError(f"{file_type} file must have at least 3 columns for length, width, and quantity.")
@@ -50,73 +50,62 @@ def standardize_sheet_data(df: pd.DataFrame, file_type: str, default_length: flo
             ((df['length'] == default_length) & (df['width'] == default_width)) |
             ((df['length'] == default_width) & (df['width'] == default_length))
         )
-        rows_before = len(df)
         df = df[~condition]
-        rows_removed = rows_before - len(df)
-        if rows_removed > 0:
-            print(f"INFO: Removed {rows_removed} row(s) from the '{file_type}' list matching default dimensions ({default_length}x{default_width}).")
 
     return df
 
 def process_stock_part_inventory(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Standardizes the stock part inventory, extracting dimensions from the 'Name' column
-    and cleaning the part name for display.
+    Standardizes the stock part inventory, extracting dimensions from the 'Name' column.
     """
     if df.shape[1] < 4:
-        raise ValueError("Stock part inventory file must have at least 4 columns for Internal Reference, Name, Quantity On Hand, and Target Quantity.")
+        raise ValueError("Stock inventory needs at least 4 columns: Ref, Name, On Hand, Target.")
     
     df = df.iloc[:, :4].copy()
+    # Standardize to snake_case
     df.columns = ['internal_ref', 'part_name', 'current_stock', 'target_stock']
 
     dimension_regex = re.compile(r'(\d+\.?\d*)\s*x\s*(\d+\.?\d*)\s*$')
 
-    # Extract dimensions
     extracted_dims = df['part_name'].str.extract(dimension_regex)
     df['length'] = extracted_dims[0]
     df['width'] = extracted_dims[1]
 
-    # New: Clean the part name for display by removing the dimensions
-    df['part_name'] = df['part_name'].str.replace(dimension_regex, '', regex=True).str.strip().str.rstrip(' -')
+    # Clean the part name for display
+    df['part_name_clean'] = df['part_name'].str.replace(dimension_regex, '', regex=True).str.strip().str.rstrip(' -')
     
     for col in ['length', 'width', 'current_stock', 'target_stock']:
         df[col] = pd.to_numeric(df[col], errors='coerce')
     
     df.dropna(subset=['length', 'width', 'current_stock', 'target_stock'], inplace=True)
-    
     df[['current_stock', 'target_stock']] = df[['current_stock', 'target_stock']].astype(int)
     
     return df
 
-
-def process_uploaded_files(hhos_file: str, offcut_file: str, stock_inv_file: str, default_length: float, default_width: float) -> tuple:
+def process_uploaded_files(hhos_path: str, offcut_path: str, stock_inv_path: str, default_length: float, default_width: float) -> tuple:
     """
-    Reads all uploaded files into Pandas DataFrames and performs initial processing.
+    Reads and processes all input files into Pandas DataFrames.
     """
-    hhos_df, offcut_df, stock_inv_df = (pd.DataFrame(), None, None)
+    hhos_df, offcut_df, stock_inv_df = pd.DataFrame(), None, None
     
     try:
-        if hhos_file and os.path.exists(hhos_file):
-            hhos_df = pd.read_csv(hhos_file, header=None)
-            hhos_df = extract_hhos_data(hhos_df)
+        if hhos_path and os.path.exists(hhos_path):
+            hhos_df = extract_hhos_data(pd.read_csv(hhos_path, header=None))
 
-        if offcut_file and os.path.exists(offcut_file):
-            if offcut_file.lower().endswith('.csv'):
-                temp_offcut_df = pd.read_csv(offcut_file)
-            else:
-                temp_offcut_df = pd.read_excel(offcut_file)
-            
+        # Use a managed offcut path if the user-provided one is empty/non-existent
+        effective_offcut_path = offcut_path if offcut_path and os.path.exists(offcut_path) else None
+        if effective_offcut_path:
+            reader = pd.read_csv if effective_offcut_path.lower().endswith('.csv') else pd.read_excel
+            temp_offcut_df = reader(effective_offcut_path)
             if not temp_offcut_df.empty:
                 offcut_df = standardize_sheet_data(temp_offcut_df, "Offcut", default_length, default_width)
         
-        if stock_inv_file and os.path.exists(stock_inv_file):
-            if stock_inv_file.lower().endswith('.csv'):
-                stock_inv_df = pd.read_csv(stock_inv_file)
-            else:
-                stock_inv_df = pd.read_excel(stock_inv_file)
-            stock_inv_df = process_stock_part_inventory(stock_inv_df)
+        if stock_inv_path and os.path.exists(stock_inv_path):
+            reader = pd.read_csv if stock_inv_path.lower().endswith('.csv') else pd.read_excel
+            stock_inv_df = process_stock_part_inventory(reader(stock_inv_path))
 
         return hhos_df, offcut_df, stock_inv_df
 
     except Exception as e:
+        # Re-raise to be caught by the Flask error handler
         raise e

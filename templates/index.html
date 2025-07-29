@@ -11,173 +11,227 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body class="{{ 'dark-mode' if config.dark_mode else '' }}" data-has-results="{{ 'true' if result else 'false' }}">
-    <div class="main-container">
+    <div class="container">
         <header>
-            <h1>Cutting Stock Optimizer</h1>
+            <h1><i class="fa-solid fa-cubes-stacked"></i> Cutting Stock Optimizer</h1>
             <div class="theme-switch-wrapper">
-                <i class="fas fa-moon" style="margin-right: 10px;"></i>
+                <i class="fa-solid fa-moon"></i>
                 <label class="theme-switch" for="darkmode-toggle">
                     <input type="checkbox" id="darkmode-toggle" {% if config.dark_mode %}checked{% endif %}>
                     <span class="slider round"></span>
                 </label>
+                <i class="fa-solid fa-sun"></i>
             </div>
         </header>
 
-        <div class="tabs">
-            <button class="tab-button active" onclick="openTab(event, 'config')"><i class="fa-solid fa-sliders"></i> Configuration</button>
-            <button class="tab-button" onclick="openTab(event, 'results')"><i class="fa-solid fa-chart-pie"></i> Results</button>
-        </div>
-
-        <div id="config" class="tab-content active">
-            <form method="post">
-                <input type="hidden" name="dark_mode_state" id="dark_mode_state" value="{{ 'on' if config.dark_mode else 'off' }}">
-                {% if message %} <div class="alert alert-success">{{ message }}</div> {% endif %}
-                {% if error %} <div class="alert alert-danger">{{ error }}</div> {% endif %}
-
-                <div class="card">
-                    <h3><i class="fa-solid fa-file-alt"></i> File Paths</h3>
-                    <div class="form-grid">
-                        <div><label for="hhos_path">HHOS Part List File:</label><input type="text" id="hhos_path" name="hhos_path" value="{{ config.hhos_path }}"></div>
-                        <div><label for="stock_inv_path">Stock Part Inventory File:</label><input type="text" id="stock_inv_path" name="stock_inv_path" value="{{ config.stock_inv_path }}"></div>
-                        <div><label for="offcut_path">Offcut List File (Optional):</label><input type="text" id="offcut_path" name="offcut_path" value="{{ config.offcut_path }}" placeholder="Uses internal list if blank"></div>
-                    </div>
+        <main>
+            <div class="tabs-container">
+                <div class="tabs">
+                    <button class="tab-button active" data-tab="config"><i class="fa-solid fa-sliders"></i> Configuration</button>
+                    <button class="tab-button" data-tab="results"><i class="fa-solid fa-chart-pie"></i> Results</button>
                 </div>
+            </div>
 
-                {% if all_stock_parts %}
-                <div class="card">
-                    <div class="stock-selector-header">
-                        <h3><i class="fa-solid fa-boxes-stacked"></i> Select Stock Parts to Include</h3>
-                        <div class="selection-buttons">
-                            <button type="button" id="select-all-stock">Select All</button>
-                            <button type="button" id="deselect-all-stock">Deselect All</button>
+            <div id="config" class="tab-content active">
+                <form method="post" class="config-form">
+                    <input type="hidden" name="dark_mode_state" id="dark_mode_state" value="{{ 'on' if config.dark_mode else 'off' }}">
+                    
+                    {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% if messages %}
+                            <div class="flash-messages">
+                            {% for category, message in messages %}
+                                <div class="alert alert-{{ category }}">{{ message }}</div>
+                            {% endfor %}
+                            </div>
+                        {% endif %}
+                    {% endwith %}
+
+                    <section class="card">
+                        <h2 class="card-title"><i class="fa-solid fa-file-alt"></i> File Paths</h2>
+                        <div class="form-grid">
+                            <div><label for="hhos_path">HHOS Part List</label><input type="text" id="hhos_path" name="hhos_path" value="{{ config.hhos_path }}"></div>
+                            <div><label for="stock_inv_path">Stock Part Inventory</label><input type="text" id="stock_inv_path" name="stock_inv_path" value="{{ config.stock_inv_path }}"></div>
+                            <div><label for="offcut_path">Offcut List (Optional)</label><input type="text" id="offcut_path" name="offcut_path" value="{{ config.offcut_path }}"></div>
                         </div>
-                    </div>
-                    <div class="stock-selector">
-                        {% for part in all_stock_parts %}
-                        <div class="stock-item">
-                            <input type="checkbox" name="selected_stock_parts" id="stock_{{ part.internal_ref }}" value="{{ part.internal_ref }}" {% if part.internal_ref in config.selected_stock_parts %}checked{% endif %}>
-                            <label for="stock_{{ part.internal_ref }}" class="stock-item-details">
-                                <strong>{{ part.length|round(2) }} x {{ part.width|round(2) }}</strong> 
-                                <span>(Need: {{ (part.target_stock - part.current_stock) | int }})</span>
+                    </section>
+                    
+                    {% if all_stock_parts %}
+                    <section class="card">
+                        <div class="card-header">
+                            <h2 class="card-title"><i class="fa-solid fa-boxes-stacked"></i> Include Parts to Build for Stock</h2>
+                            <div class="button-group">
+                                <button type="button" class="btn-secondary" id="select-all-stock">Select All</button>
+                                <button type="button" class="btn-secondary" id="deselect-all-stock">Deselect All</button>
+                            </div>
+                        </div>
+                        <div class="stock-selector">
+                            {% for part in all_stock_parts %}
+                            <label class="stock-item" for="stock_{{ part.internal_ref }}">
+                                <input type="checkbox" name="selected_stock_parts" id="stock_{{ part.internal_ref }}" value="{{ part.internal_ref }}" {% if part.internal_ref in config.selected_stock_parts %}checked{% endif %}>
+                                <div class="stock-item-details">
+                                    <strong>{{ part.part_name_clean or 'Unnamed Part' }}</strong>
+                                    <span>{{ part.length|round(2) }} x {{ part.width|round(2) }}</span>
+                                    <span class="stock-status">(Need: {{ (part.target_stock - part.current_stock) | int }})</span>
+                                </div>
                             </label>
+                            {% endfor %}
                         </div>
-                        {% endfor %}
-                    </div>
-                </div>
-                {% endif %}
-                
-                <div class="card">
-                    <h3><i class="fa-solid fa-cogs"></i> General Settings</h3>
-                    <div class="form-grid">
-                        <div><label for="default_length">Default Length:</label><input type="number" step="any" id="default_length" name="default_length" value="{{ config.default_length }}"></div>
-                        <div><label for="default_width">Default Width:</label><input type="number" step="any" id="default_width" name="default_width" value="{{ config.default_width }}"></div>
-                        <div><label for="kerf">Kerf (Saw Blade):</label><input type="number" step="any" id="kerf" name="kerf" value="{{ config.kerf }}"></div>
-                        <div><label for="min_offcut_dim">Min. Usable Offcut:</label><input type="number" step="any" id="min_offcut_dim" name="min_offcut_dim" value="{{ config.min_offcut_dim }}"></div>
-                        <div><label for="search_time_limit">Search Time (s):</label><input type="number" step="any" id="search_time_limit" name="search_time_limit" value="{{ config.search_time_limit }}"></div>
-                    </div>
-                    <div class="form-grid" style="margin-top: 1em;">
-                        <div class="checkbox-group"><input type="checkbox" id="allow_rotation" name="allow_rotation" value="true" {% if config.allow_rotation %}checked{% endif %}><label for="allow_rotation">Allow Rotation</label></div>
-                        <div class="checkbox-group"><input type="checkbox" id="use_offcuts" name="use_offcuts" value="true" {% if config.use_offcuts %}checked{% endif %}><label for="use_offcuts">Use Offcuts</label></div>
-                        <div class="checkbox-group"><input type="checkbox" id="add_stock_parts" name="add_stock_parts" value="true" {% if config.add_stock_parts %}checked{% endif %}><label for="add_stock_parts">Add Stock Parts</label></div>
-                    </div>
-                </div>
+                    </section>
+                    {% endif %}
+                    
+                    <div class="settings-grid">
+                        <section class="card">
+                            <h2 class="card-title"><i class="fa-solid fa-cogs"></i> General Settings</h2>
+                            <div class="form-grid">
+                                <div><label for="default_length">Default Length</label><input type="number" step="any" id="default_length" name="default_length" value="{{ config.default_length }}"></div>
+                                <div><label for="default_width">Default Width</label><input type="number" step="any" id="default_width" name="default_width" value="{{ config.default_width }}"></div>
+                                <div><label for="kerf">Kerf (Saw Blade)</label><input type="number" step="any" id="kerf" name="kerf" value="{{ config.kerf }}"></div>
+                                <div><label for="min_offcut_dim">Min. Usable Offcut</label><input type="number" step="any" id="min_offcut_dim" name="min_offcut_dim" value="{{ config.min_offcut_dim }}"></div>
+                                <div><label for="search_time_limit">Search Time (s)</label><input type="number" step="any" id="search_time_limit" name="search_time_limit" value="{{ config.search_time_limit }}"></div>
+                            </div>
+                            <div class="checkbox-grid">
+                                <label class="checkbox-group" for="allow_rotation"><input type="checkbox" id="allow_rotation" name="allow_rotation" value="true" {% if config.allow_rotation %}checked{% endif %}>Allow Rotation</label>
+                                <label class="checkbox-group" for="use_offcuts"><input type="checkbox" id="use_offcuts" name="use_offcuts" value="true" {% if config.use_offcuts %}checked{% endif %}>Use Available Offcuts</label>
+                                <label class="checkbox-group" for="add_stock_parts"><input type="checkbox" id="add_stock_parts" name="add_stock_parts" value="true" {% if config.add_stock_parts %}checked{% endif %}>Add Stock Parts</label>
+                            </div>
+                        </section>
 
-                <div class="card">
-                    <h3><i class="fa-solid fa-balance-scale"></i> Scoring Weights</h3>
-                    <div class="form-grid">
-                        <div><label for="w_waste">Waste Penalty</label><input type="number" step="any" name="w_waste" value="{{ config.w_waste }}"></div>
-                        <div><label for="w_offcut">Offcut Penalty</label><input type="number" step="any" name="w_offcut" value="{{ config.w_offcut }}"></div>
-                        <div><label for="w_cuts">Cuts Penalty</label><input type="number" step="any" name="w_cuts" value="{{ config.w_cuts }}"></div>
-                        <div><label for="w_quantity">Inv. Bonus</label><input type="number" step="any" name="w_quantity" value="{{ config.w_quantity }}"></div>
-                        <div><label for="w_sheets">Sheet Penalty</label><input type="number" step="any" name="w_sheets" value="{{ config.w_sheets }}"></div>
-                        <div><label for="w_stock_fill">Stock Fill Bonus</label><input type="number" step="any" name="w_stock_fill" value="{{ config.w_stock_fill }}"></div>
+                        <section class="card">
+                            <h2 class="card-title"><i class="fa-solid fa-balance-scale"></i> Scoring Weights</h2>
+                            <div class="form-grid">
+                                <div>
+                                    <label for="w_waste">Waste Penalty <span class="tooltip" data-tooltip="Penalizes unusable scrap material. Higher is stricter.">[?]</span></label>
+                                    <input type="number" step="any" id="w_waste" name="w_waste" value="{{ config.w_waste }}">
+                                </div>
+                                <div>
+                                    <label for="w_offcut">Offcut Penalty <span class="tooltip" data-tooltip="Penalizes usable leftover pieces (offcuts). Use a lower value if you want to save offcuts.">[?]</span></label>
+                                    <input type="number" step="any" id="w_offcut" name="w_offcut" value="{{ config.w_offcut }}">
+                                </div>
+                                <div>
+                                    <label for="w_cuts">Cuts Penalty <span class="tooltip" data-tooltip="Slightly penalizes each part cut to favor layouts with fewer cuts.">[?]</span></label>
+                                    <input type="number" step="any" id="w_cuts" name="w_cuts" value="{{ config.w_cuts }}">
+                                </div>
+                                <div>
+                                    <label for="w_quantity">Inv. Bonus <span class="tooltip" data-tooltip="Adds a small bonus for using sheets from inventory (offcuts) that have a high quantity.">[?]</span></label>
+                                    <input type="number" step="any" id="w_quantity" name="w_quantity" value="{{ config.w_quantity }}">
+                                </div>
+                                <div>
+                                    <label for="w_sheets">Sheet Penalty <span class="tooltip" data-tooltip="Penalizes using a new sheet. Higher values prioritize filling existing sheets.">[?]</span></label>
+                                    <input type="number" step="any" id="w_sheets" name="w_sheets" value="{{ config.w_sheets }}">
+                                </div>
+                                <div>
+                                    <label for="w_stock_fill">Stock Fill Bonus <span class="tooltip" data-tooltip="Prioritizes creating stock parts that are low in inventory.">[?]</span></label>
+                                    <input type="number" step="any" id="w_stock_fill" name="w_stock_fill" value="{{ config.w_stock_fill }}">
+                                </div>
+                            </div>
+                        </section>
                     </div>
-                </div>
 
-                <button type="submit" class="submit-button"><i class="fa-solid fa-cogs"></i> Save & Optimize</button>
-            </form>
-        </div>
+                    <button type="submit" class="submit-button"><i class="fa-solid fa-gears"></i> Save & Optimize</button>
+                </form>
+            </div>
 
-        <div id="results" class="tab-content">
-            {% if result and result.layouts %}
-                <div class="results-summary">
-                    <div class="summary-metric"><div class="value">{{ result.final_score|round(2) }}</div><div class="label">Overall Score</div></div>
-                    <div class="summary-metric"><div class="value">{{ result.layouts|length }}</div><div class="label">Sheets Used</div></div>
-                    <div class="summary-metric"><div class="value">{{ result.overall_yield|round(2) }}%</div><div class="label">Overall Yield</div></div>
-                    <div class="summary-metric {% if result.remaining_parts|length > 0 %}alert-danger{% endif %}">
-                        <div class="value">{{ result.remaining_parts|length }}</div>
-                        <div class="label">Parts Not Placed</div>
-                    </div>
-                </div>
-                <div class="results-grid">
-                    {% for layout in result.layouts %}
-                        <div class="layout-card">
-                            <h3>Sheet: {{ layout.sheet_info.id }} ({{ layout.sheet_info.length }} x {{ layout.sheet_info.width }}) | Yield: {{ layout.yield_percentage|round(2) }}%</h4>
-                            <svg class="layout-svg" viewBox="-10 -10 {{ layout.sheet_info.width + 20 }} {{ layout.sheet_info.length + 20 }}">
-                                <defs>
-                                    <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="3" markerHeight="3" orient="auto-start-reverse">
-                                      <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--danger-color)" />
-                                    </marker>
-                                </defs>
+            <div id="results" class="tab-content">
+                {% if result and result.layouts %}
+                    <section class="results-summary">
+                        <div class="summary-metric"><span class="value">{{ result.final_score|round(2) }}</span><span class="label">Overall Score</span></div>
+                        <div class="summary-metric"><span class="value">{{ result.layouts|length }}</span><span class="label">Sheets Used</span></div>
+                        <div class="summary-metric"><span class="value">{{ result.overall_yield|round(2) }}%</span><span class="label">Overall Yield</span></div>
+                        <div class="summary-metric {% if result.remaining_parts|length > 0 %}is-alert{% endif %}">
+                            <span class="value">{{ result.remaining_parts|length }}</span>
+                            <span class="label">Parts Not Placed</span>
+                        </div>
+                    </section>
+                    <section class="results-grid">
+                        {% for layout in result.layouts %}
+                            <div class="layout-card card">
+                                <h3 class="layout-title">Sheet: {{ layout.sheet_info.id }} ({{ layout.sheet_info.length }}x{{ layout.sheet_info.width }}) | Yield: {{ layout.yield_percentage|round(2) }}%</h3>
+                                <div class="svg-container">
+                                    <svg class="layout-svg" viewBox="-15 -15 {{ layout.sheet_info.width + 30 }} {{ layout.sheet_info.length + 30 }}">
+                                        <defs>
+                                            <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="3" markerHeight="3" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" class="dim-arrow-head" /></marker>
+                                        </defs>
 
-                                <rect class="sheet" x="0" y="0" width="{{ layout.sheet_info.width }}" height="{{ layout.sheet_info.length }}" stroke="#ccc" stroke-width="0.2"/>
-                                {% for part in layout.placed_parts %}
-                                    {% set p_length = part.width if part.rotated else part.length %}
-                                    {% set p_width = part.length if part.rotated else part.width %}
-                                    {% set svg_y = layout.sheet_info.length - part.y - p_length %}
-                                    <g transform="translate({{ part.x }}, {{ svg_y }})">
-                                        <rect class="{{ 'stock-part' if part.is_stock_part else 'part' }}" width="{{ p_width }}" height="{{ p_length }}" stroke-width="0.2"/>
-                                        <text class="part-label" 
-                                            x="{{ p_width / 2 }}" y="{{ p_length / 2 }}" 
-                                            fill="white" dominant-baseline="middle" text-anchor="middle"
-                                            {% if p_length > p_width * 1.2 %}
-                                                transform="rotate(-90, {{ p_width / 2 }}, {{ p_length / 2 }})"
-                                            {% endif %}>
-                                            {% if part.is_stock_part %}
-                                                STOCK {{ p_width|round(1) }}x{{ p_length|round(1) }}
-                                            {% else %}
-                                                {{ part.label or part.part_name }}
-                                            {% endif %}
-                                        </text>
-                                    </g>
-                                {% endfor %}
-                                {% for offcut in layout.usable_offcuts %}
-                                    {% set svg_y = layout.sheet_info.length - offcut.y - offcut.length %}
-                                    <g transform="translate({{ offcut.x }}, {{ svg_y }})">
-                                        <rect class="offcut" width="{{ offcut.width }}" height="{{ offcut.length }}" stroke-width="0.2"/>
-                                        {% if offcut.width > 10 and offcut.length > 10 %}
-                                            <text class="offcut-label" x="{{ offcut.width / 2 }}" y="{{ offcut.length / 2 }}" dominant-baseline="middle" text-anchor="middle">
-                                                {{ offcut.width|round(1) }}x{{ offcut.length|round(1) }}
-                                            </text>
+                                        <rect class="sheet-bg" x="0" y="0" width="{{ layout.sheet_info.width }}" height="{{ layout.sheet_info.length }}"/>
+                                        
+                                        {# --- Placed Parts --- #}
+                                        {% for part in layout.placed_parts %}
+                                            {% set p_length = part.width if part.rotated else part.length %}
+                                            {% set p_width = part.length if part.rotated else part.width %}
+                                            {% set svg_y = layout.sheet_info.length - part.y - p_length %}
+                                            <g class="part-group" transform="translate({{ part.x }}, {{ svg_y }})">
+                                                <rect class="{{ 'stock-part' if part.is_stock_part else 'job-part' }}" width="{{ p_width }}" height="{{ p_length }}"/>
+                                                <text class="part-label" x="{{ p_width / 2 }}" y="{{ p_length / 2 }}" dominant-baseline="middle" text-anchor="middle">
+                                                    {% if part.is_stock_part %}STOCK{% else %}{{ part.label or part.part_name }}{% endif %}
+                                                </text>
+                                            </g>
+                                        {% endfor %}
+                                        
+                                        {# --- Usable Offcuts --- #}
+                                        {% for offcut in layout.usable_offcuts %}
+                                            {% set svg_y = layout.sheet_info.length - offcut.y - offcut.length %}
+                                            <g class="offcut-group" transform="translate({{ offcut.x }}, {{ svg_y }})">
+                                                <rect class="offcut" width="{{ offcut.width }}" height="{{ offcut.length }}"/>
+                                                <text class="offcut-label" x="{{ offcut.width / 2 }}" y="{{ offcut.length / 2 }}" dominant-baseline="middle" text-anchor="middle">
+                                                    {{ offcut.width|round(1) }}x{{ offcut.length|round(1) }}
+                                                </text>
+                                            </g>
+                                        {% endfor %}
+
+                                        {# --- NEW: Part Dimensions --- #}
+                                        <g class="part-dimension-group">
+                                            {% for part in layout.placed_parts %}
+                                                {% set p_length = part.width if part.rotated else part.length %}
+                                                {% set p_width = part.length if part.rotated else part.width %}
+                                                {% set svg_y = layout.sheet_info.length - part.y - p_length %}
+                                                
+                                                {# Width dimension (above part) #}
+                                                <line class="dim-line-inner" x1="{{ part.x }}" y1="{{ svg_y - 2 }}" x2="{{ part.x + p_width }}" y2="{{ svg_y - 2 }}" />
+                                                <text class="dim-text-inner" x="{{ part.x + p_width / 2 }}" y="{{ svg_y - 3 }}" text-anchor="middle">{{ p_width|round(2) }}</text>
+
+                                                {# Height dimension (left of part) #}
+                                                <line class="dim-line-inner" x1="{{ part.x - 2 }}" y1="{{ svg_y }}" x2="{{ part.x - 2 }}" y2="{{ svg_y + p_length }}" />
+                                                <text class="dim-text-inner" text-anchor="middle" transform="translate({{ part.x - 3 }}, {{ svg_y + p_length / 2 }}) rotate(-90)">{{ p_length|round(2) }}</text>
+                                            {% endfor %}
+                                        </g>
+
+                                        {# --- NEW: Offcut Dimensions --- #}
+                                        <g class="offcut-dimension-group">
+                                            {% for offcut in layout.usable_offcuts %}
+                                                {% set svg_y = layout.sheet_info.length - offcut.y - offcut.length %}
+                                                {# Width dimension #}
+                                                <line class="dim-line-inner" x1="{{ offcut.x }}" y1="{{ svg_y - 2 }}" x2="{{ offcut.x + offcut.width }}" y2="{{ svg_y - 2 }}" />
+                                                <text class="dim-text-inner" x="{{ offcut.x + offcut.width / 2 }}" y="{{ svg_y - 3 }}" text-anchor="middle">{{ offcut.width|round(2) }}</text>
+                                                {# Height dimension #}
+                                                <line class="dim-line-inner" x1="{{ offcut.x - 2 }}" y1="{{ svg_y }}" x2="{{ offcut.x - 2 }}" y2="{{ svg_y + offcut.length }}" />
+                                                <text class="dim-text-inner" text-anchor="middle" transform="translate({{ offcut.x - 3 }}, {{ svg_y + offcut.length / 2 }}) rotate(-90)">{{ offcut.length|round(2) }}</text>
+                                            {% endfor %}
+                                        </g>
+
+                                        {# --- Bounding Box Dimensions --- #}
+                                        {% if layout.bounding_box %}
+                                            {% set bb_w = layout.bounding_box.width %}
+                                            {% set bb_l = layout.bounding_box.length %}
+                                            <g class="dimension-group">
+                                                <line class="dim-line" x1="0" y1="{{ layout.sheet_info.length + 5 }}" x2="{{ bb_w }}" y2="{{ layout.sheet_info.length + 5 }}" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+                                                <text class="dim-text" x="{{ bb_w / 2 }}" y="{{ layout.sheet_info.length + 9 }}" text-anchor="middle">{{ bb_w|round(2) }}</text>
+                                                <line class="dim-line" y1="{{ layout.sheet_info.length - bb_l }}" x1="-5" y2="{{ layout.sheet_info.length }}" x2="-5" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+                                                <text class="dim-text" text-anchor="middle" transform="translate(-9, {{ layout.sheet_info.length - (bb_l/2) }}) rotate(-90)">{{ bb_l|round(2) }}</text>
+                                            </g>
                                         {% endif %}
-                                    </g>
-                                {% endfor %}
-                                
-                                {% if layout.bounding_box %}
-                                    {% set bb_w = layout.bounding_box.width %}
-                                    {% set bb_l = layout.sheet_info.length - layout.bounding_box.length %}
-                                    {% set bb_y_start = layout.sheet_info.length %}
-
-                                    <g>
-                                        <line class="dim-line" x1="0" y1="{{ bb_y_start + 5 }}" x2="{{ bb_w }}" y2="{{ bb_y_start + 5 }}" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
-                                        <text class="dim-text" x="{{ bb_w / 2 }}" y="{{ bb_y_start + 8 }}" text-anchor="middle">{{ bb_w|round(2) }}</text>
-                                    </g>
-                                    <g>
-                                        <line class="dim-line" y1="{{ bb_l }}" x1="{{ bb_w + 5 }}" y2="{{ bb_y_start }}" x2="{{ bb_w + 5 }}" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
-                                        <text class="dim-text" y="{{ bb_l + (bb_y_start - bb_l) / 2 }}" x="{{ bb_w + 8 }}" dominant-baseline="middle" transform="rotate(-90, {{ bb_w + 8 }}, {{ bb_l + (bb_y_start - bb_l) / 2 }})">{{ layout.bounding_box.length|round(2) }}</text>
-                                    </g>
-                                {% endif %}
-                            </svg>
-                        </div>
-                    {% endfor %}
-                </div>
-            {% else %}
-                <div class="card">
-                    <h3>No Results</h3>
-                    <p>No layout to display. Please set your configuration and run the optimizer.</p>
-                </div>
-            {% endif %}
-        </div>
+                                    </svg>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </section>
+                {% else %}
+                    <div class="card placeholder">
+                        <h3><i class="fa-solid fa-lightbulb"></i> No Results to Display</h3>
+                        <p>Configure your settings and run the optimizer to generate cutting layouts.</p>
+                    </div>
+                {% endif %}
+            </div>
+        </main>
     </div>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>
