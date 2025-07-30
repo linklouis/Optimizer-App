@@ -7,14 +7,14 @@ FEATURES
         - X [ASK] Unit switcher?
         - ✓ Multiple HHOS files at once (Keep them separate) Each file needs to have a multiplier.
         - ✓ Each sheet layout should only be displayed once, and also have a multiplier.
+        - ✓ -> Using % of sheets, doesn't consider the actual ammount of material each layout wastes.
+          Probably means it doesn't try as many other sheets, since a smaller one might have a higher % of waste, but actually waste less material.
 
         - Allow uploading a temp Offcut List that doesn't override the current one?
         - Save offcuts
         - Clear Offcut List File after optimization
         - Notes section for offcuts
         - Allow user to select what offcuts to consider like the stock parts
-        - -> Using % of sheets, doesn't consider the actual ammount of material each layout wastes.
-          Probably means it doesn't try as many other sheets, since a smaller one might have a higher % of waste, but actually waste less material.
         - Add description of scoring weight/all settings on hover
         - Multiple parts list files
         - Tell user when the files they're pointing to don't exist
@@ -22,6 +22,7 @@ FEATURES
         - Be able to click on stock parts and remove them from the sheet layout
         - Allow the quantity of a given layout to be adjusted manually after optimization?
         - Way to automatically stop when the score is sufficient? Maybe calculate the 
+        - Page to display all offcuts
     
     Optimizer
         - ✓ ---> Only keep reusing a layout of stock parts until another layout is better because the number of the original stock parts needed has been filled.

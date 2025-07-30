@@ -20,7 +20,7 @@ DEFAULT_CONFIG = {
     'min_offcut_dim': 4.0, 'use_offcuts': True, 'add_stock_parts': False,
     'search_time_limit': 1.0, 'selected_stock_parts': [], 'dark_mode': False,
     'w_waste': 1.0, 'w_offcut': 0.5, 'w_cuts': 0.2, 'w_quantity': 0.1,
-    'w_sheets': 1.0, 'w_stock_fill': 1.0,
+    'w_sheets': 1.0, 'w_stock_fill': 1.0, 'w_unique_layouts': 0.5, # NEW: Added unique layout penalty weight
     'standardize_stock_layouts': True
 }
 
@@ -63,7 +63,8 @@ def update_config_from_form(config, form_data):
     config['selected_stock_parts'] = form_data.getlist('selected_stock_parts')
     config['standardize_stock_layouts'] = form_data.get('standardize_stock_layouts') == 'true'
 
-    for key in ['w_waste', 'w_offcut', 'w_cuts', 'w_quantity', 'w_sheets', 'w_stock_fill']:
+    # NEW: Updated to include the new weight
+    for key in ['w_waste', 'w_offcut', 'w_cuts', 'w_quantity', 'w_sheets', 'w_stock_fill', 'w_unique_layouts']:
         config[key] = form_data.get(key, type=float)
     
     return config
@@ -213,7 +214,8 @@ def prepare_results_for_render(layouts, remaining_parts, final_score, config):
 
     return {
         'layouts': list(grouped_layouts.values()), 'remaining_parts': remaining_parts,
-        'final_score': final_score, 'overall_yield': overall_yield
+        'final_score': final_score, 'overall_yield': overall_yield,
+        'num_unique_layouts': len(grouped_layouts) # NEW: Added unique layout count
     }
 
 def get_initial_optional_parts(stock_inv_df, config):
@@ -266,19 +268,13 @@ def home():
 
     if request.method == 'POST' and (config.get('hhos_files') or config['stock_inv_path']):
         try:
-            layouts, remaining_parts, _ = run_optimization(config, hhos_df, offcut_df, stock_inv_df)
+            # MODIFIED: The optimizer now returns the final calculated score directly
+            layouts, remaining_parts, final_score = run_optimization(config, hhos_df, offcut_df, stock_inv_df)
             
             final_layouts = layouts
-            if config.get('standardize_stock_layouts', False):
+            if config.get('standardize_stock_layouts', False) and layouts:
                 initial_optional_parts = get_initial_optional_parts(stock_inv_df, config)
                 final_layouts = standardize_layouts(layouts, initial_optional_parts, config)
-
-            reference_area = config.get('default_length', 96) * config.get('default_width', 48)
-            total_score = 0
-            for l in final_layouts:
-                 is_stock_only_job = not any(not p.get('is_stock_part', False) for p in l['placed_parts'])
-                 total_score += calculate_layout_score(l, l['sheet_info'], config, config['min_offcut_dim'], reference_area, is_stock_only_job)
-            final_score = total_score - (config.get('w_sheets', 1.0) * len(final_layouts))
             
             optimization_result = prepare_results_for_render(final_layouts, remaining_parts, final_score, config)
             if optimization_result:

@@ -239,6 +239,7 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
 
     available_sheets = [s.copy() for s in stock_sheets]
     final_layouts = []
+    final_layout_signatures = set() # NEW: Keep track of unique layout signatures
     
     primary_parts_dict = required_parts_dict if not is_stock_only_job else optional_stock_parts_dict
     
@@ -261,7 +262,13 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
             if num_placed_primary == 0: continue
             
             layout_score = calculate_layout_score(layout_attempt, sheet, config, config['min_offcut_dim'], reference_area, is_stock_only_job)
-            cost_per_part = (-layout_score + config.get('w_sheets', 1.0)) / num_placed_primary
+            
+            # NEW: Add a penalty if this layout is a new, unique pattern
+            layout_attempt_sig = get_layout_signature(layout_attempt, required_only=False)
+            is_new_layout = layout_attempt_sig not in final_layout_signatures
+            uniqueness_penalty = config.get('w_unique_layouts', 0.5) if is_new_layout else 0.0
+
+            cost_per_part = (-layout_score + config.get('w_sheets', 1.0) + uniqueness_penalty) / num_placed_primary
 
             if cost_per_part < min_cost_per_part:
                 min_cost_per_part = cost_per_part
@@ -272,6 +279,10 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
             print(f"Warning: Could not place any more primary parts. {len(primary_parts_dict)} parts remaining.")
             break
 
+        # NEW: Add the chosen layout's signature to the set of seen signatures
+        best_layout_sig = get_layout_signature(best_layout_for_pass, required_only=False)
+        final_layout_signatures.add(best_layout_sig)
+        
         final_layouts.append(best_layout_for_pass)
         available_sheets[best_sheet_idx]['quantity'] -= 1
         
@@ -283,8 +294,11 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
             if not is_stock_only_job:
                 optional_stock_parts_dict.pop(pid, None)
 
+    # NEW: Calculate the final score including all penalties
     total_score = sum(calculate_layout_score(l, l['sheet_info'], config, config['min_offcut_dim'], reference_area, is_stock_only_job) for l in final_layouts)
-    final_score = total_score - (config.get('w_sheets', 1.0) * len(final_layouts))
+    sheets_penalty = config.get('w_sheets', 1.0) * len(final_layouts)
+    unique_layouts_penalty = config.get('w_unique_layouts', 0.5) * len(final_layout_signatures)
+    final_score = total_score - sheets_penalty - unique_layouts_penalty
 
     remaining_parts = list(primary_parts_dict.values())
     return final_layouts, remaining_parts, final_score

@@ -196,6 +196,10 @@
                                     <label for="w_stock_fill">Stock Part Inv. Bonus <span class="tooltip" data-tooltip="Prioritizes creating stock parts that are low in inventory.">[?]</span></label>
                                     <input type="number" step="any" id="w_stock_fill" name="w_stock_fill" value="{{ config.w_stock_fill }}">
                                 </div>
+                                <div>
+                                    <label for="w_unique_layouts">Unique Layouts Penalty <span class="tooltip" data-tooltip="Penalizes creating many different cutting patterns. Higher values encourage reusing layouts.">[?]</span></label>
+                                    <input type="number" step="any" id="w_unique_layouts" name="w_unique_layouts" value="{{ config.w_unique_layouts }}">
+                                </div>
                             </div>
                         </section>
                     </div>
@@ -209,6 +213,7 @@
                     <section class="results-summary">
                         <div class="summary-metric"><span class="value">{{ result.final_score|round(2) }}</span><span class="label">Overall Score</span></div>
                         <div class="summary-metric"><span class="value">{{ result.layouts|map(attribute='quantity')|sum }}</span><span class="label">Total Sheets Used</span></div>
+                        <div class="summary-metric"><span class="value">{{ result.num_unique_layouts }}</span><span class="label">Unique Layouts</span></div>
                         <div class="summary-metric"><span class="value">{{ result.overall_yield|round(2) }}%</span><span class="label">Overall Yield</span></div>
                         <div class="summary-metric {% if result.remaining_parts|length > 0 %}is-alert{% endif %}">
                             <span class="value">{{ result.remaining_parts|length }}</span>
