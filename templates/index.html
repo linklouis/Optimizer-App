@@ -87,7 +87,7 @@
                             <div class="collapsible-content">
                                 <div class="accordion" id="loaded-parts-accordion">
                                     {% for file_content in hhos_file_contents %}
-                                    <details class="accordion-item" open>   <!-- Open by default for better UX -->
+                                    <details class="accordion-item">
                                         <summary class="accordion-header">
                                             <span class="accordion-title">{{ file_content.path.split('/')[-1].split('\\')[-1] }}</span>
                                             {% if file_content.error %}
@@ -328,22 +328,55 @@
                                             {% set svg_y = layout.sheet_info.length - part.y - p_length %}
                                             <g class="part-group" transform="translate({{ part.x }}, {{ svg_y }})">
                                                 <rect class="{{ 'stock-part' if part.is_stock_part else 'job-part' }}" width="{{ p_width }}" height="{{ p_length }}"/>
-                                                <text class="part-label" x="{{ p_width / 2 }}" y="{{ p_length / 2 }}" dominant-baseline="middle" text-anchor="middle">
-                                                    {% if part.is_stock_part %}STOCK{% else %}{{ part.label }}{% endif %}
-                                                </text>
+                                                
+                                                {# --- NEW CONDITIONAL TEXT LOGIC --- #}
+                                                
+                                                {# 1. Main Label: Check aspect ratio to decide on rotation #}
+                                                {# Condition: If part is 50% taller than wide, and wide enough for font height #}
+                                                {% if p_length > p_width * 1.5 and p_width > 4 %}
+                                                    {# Render VERTICAL label #}
+                                                    <text class="part-label" text-anchor="middle" dominant-baseline="middle" transform="translate({{ p_width / 2 }}, {{ p_length / 2 }}) rotate(-90)">
+                                                        {% if part.is_stock_part %}STOCK{% else %}{{ part.label }}{% endif %}
+                                                    </text>
+                                                {% elif p_width > 8 and p_length > 4 %} 
+                                                    {# Render HORIZONTAL label (only if reasonably wide) #}
+                                                     <text class="part-label" x="{{ p_width / 2 }}" y="{{ p_length / 2 }}" dominant-baseline="middle" text-anchor="middle">
+                                                        {% if part.is_stock_part %}STOCK{% else %}{{ part.label }}{% endif %}
+                                                    </text>
+                                                {% endif %}
+                                
+                                                {# 2. Dimension Labels: Check individual dimensions for visibility #}
                                                 {% set text_padding = 1 %}
-                                                <text class="inner-dim-text" text-anchor="middle" dominant-baseline="hanging" x="{{ p_width / 2 }}" y="{{ text_padding }}">{{ '%.2f' % p_width }}</text>
-                                                <text class="inner-dim-text" text-anchor="middle" dominant-baseline="hanging" transform="translate({{ text_padding }}, {{ p_length / 2 }}) rotate(-90)">{{ '%.2f' % p_length }}</text>
+                                                {% if p_width > 6 %}
+                                                    <text class="inner-dim-text" text-anchor="middle" dominant-baseline="hanging" x="{{ p_width / 2 }}" y="{{ text_padding }}">{{ '%.2f' % p_width }}</text>
+                                                {% endif %}
+                                                {% if p_length > 6 %}
+                                                     <text class="inner-dim-text" text-anchor="middle" dominant-baseline="hanging" transform="translate({{ text_padding }}, {{ p_length / 2 }}) rotate(-90)">{{ '%.2f' % p_length }}</text>
+                                                {% endif %}
                                             </g>
                                         {% endfor %}
                                         {% for offcut in layout.usable_offcuts %}
                                             {% set svg_y = layout.sheet_info.length - offcut.y - offcut.length %}
                                             <g class="offcut-group" transform="translate({{ offcut.x }}, {{ svg_y }})">
                                                 <rect class="offcut" width="{{ offcut.width }}" height="{{ offcut.length }}"/>
-                                                <text class="offcut-label" x="{{ offcut.width / 2 }}" y="{{ offcut.length / 2 }}" dominant-baseline="middle" text-anchor="middle">Offcut</text>
+
+                                                {# --- NEW CONDITIONAL TEXT LOGIC FOR OFFCUTS --- #}
+
+                                                {# 1. Main Label #}
+                                                {% if offcut.length > offcut.width * 1.5 and offcut.width > 4 %}
+                                                    <text class="offcut-label" text-anchor="middle" dominant-baseline="middle" transform="translate({{ offcut.width / 2 }}, {{ offcut.length / 2 }}) rotate(-90)">Offcut</text>
+                                                {% elif offcut.width > 8 and offcut.length > 4 %}
+                                                    <text class="offcut-label" x="{{ offcut.width / 2 }}" y="{{ offcut.length / 2 }}" dominant-baseline="middle" text-anchor="middle">Offcut</text>
+                                                {% endif %}
+
+                                                {# 2. Dimension Labels #}
                                                 {% set text_padding = 1 %}
-                                                <text class="inner-dim-text" text-anchor="middle" dominant-baseline="hanging" x="{{ offcut.width / 2 }}" y="{{ text_padding }}">{{ '%.2f' % offcut.width }}</text>
-                                                <text class="inner-dim-text" text-anchor="middle" dominant-baseline="hanging" transform="translate({{ text_padding }}, {{ offcut.length / 2 }}) rotate(-90)">{{ '%.2f' % offcut.length }}</text>
+                                                {% if offcut.width > 6 %}
+                                                    <text class="inner-dim-text" text-anchor="middle" dominant-baseline="hanging" x="{{ offcut.width / 2 }}" y="{{ text_padding }}">{{ '%.2f' % offcut.width }}</text>
+                                                {% endif %}
+                                                {% if offcut.length > 6 %}
+                                                    <text class="inner-dim-text" text-anchor="middle" dominant-baseline="hanging" transform="translate({{ text_padding }}, {{ offcut.length / 2 }}) rotate(-90)">{{ '%.2f' % offcut.length }}</text>
+                                                {% endif %}
                                             </g>
                                         {% endfor %}
                                         <g class="cut-line-group">
