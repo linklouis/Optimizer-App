@@ -155,7 +155,7 @@ details:not([open]) .collapsible-content {
     margin-bottom: 1rem;
 }
 
-/* --- NEW: Styles for Animated Accordion --- */
+/* --- Styles for Animated Accordion --- */
 .animated-accordion > .collapsible-content {
     overflow: hidden;
     transition: max-height 0.4s ease-out;
@@ -208,49 +208,15 @@ input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 2px
 }
 .tooltip:hover::before { opacity: 1; }
 
-/* --- NEW: Resizable Card Styles --- */
-.resizable-card .collapsible-content {
-    position: relative;
-    padding-bottom: 20px; /* Make space for the handle */
-}
-
-.resizable-card .stock-selector {
-    max-height: none; /* Remove max-height for resizable cards */
-    height: 250px; /* Set an explicit height that JS can control */
-}
-
-.resize-handle {
-    position: absolute;
-    bottom: 0;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 60px;
-    height: 15px;
-    cursor: ns-resize;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    color: var(--border-color);
-    transition: color 0.2s;
-}
-
-.resize-handle i {
-    font-size: 1rem;
-}
-
-.resize-handle:hover {
-    color: var(--primary);
-}
-
 /* --- Resizable Card Styles --- */
 .resizable-card .collapsible-content {
     position: relative;
-    padding-bottom: 20px; /* Make space for the handle */
+    padding-bottom: 20px;
 }
 
 .resizable-card .stock-selector {
-    max-height: none; /* Remove max-height for resizable cards */
-    height: 250px; /* Set an explicit height that JS can control */
+    max-height: none;
+    height: 250px;
 }
 
 .resize-handle {
@@ -283,7 +249,6 @@ input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 2px
     text-align: center;
 }
 
-/* This rule centers the input box within its table cell */
 td:has(.part-qty-input) {
     text-align: center;
 }
@@ -324,16 +289,6 @@ tbody tr:last-child td { border-bottom: none; }
 th:first-child, td:first-child { text-align: center; }
 th .select-all-parts-in-file { cursor: pointer; }
 
-.part-qty-input {
-    width: 70px;
-    padding: 0.3rem 0.5rem;
-    text-align: center;
-}
-
-td:has(.part-qty-input) {
-    text-align: center;
-}
-
 /* --- Results --- */
 .results-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
 .summary-metric { background-color: var(--bg-secondary); padding: 1.5rem; border-radius: 0.75rem; border: 1px solid var(--border-color); text-align: center; display: flex; flex-direction: column; }
@@ -349,8 +304,17 @@ td:has(.part-qty-input) {
 /* --- SVG Styles --- */
 .sheet-bg { fill: var(--sheet-fill); stroke: var(--sheet-border); stroke-width:0.2px; }
 .job-part { fill: var(--job-part-fill); stroke: var(--sheet-border); stroke-width:0.2px; }
-.stock-part { fill: var(--stock-part-fill); stroke: var(--sheet-border); stroke-width:0.2px; }
-.offcut { fill: var(--offcut-fill); stroke: var(--sheet-border); stroke-width:0.2px; opacity: 0.8; }
+.stock-part { 
+    fill: url(#stockPattern) var(--stock-part-fill);
+    stroke: var(--sheet-border); 
+    stroke-width:0.2px; 
+}
+.offcut { 
+    fill: url(#offcutPattern) var(--offcut-fill);
+    stroke: var(--sheet-border); 
+    stroke-width:0.2px; 
+    opacity: 0.9;
+}
 .part-label { font-size: 3px; fill: white; font-weight: 600; paint-order: stroke; stroke: rgba(0,0,0,0.3); stroke-width:0.5px; }
 .offcut-label { font-size: 3px; fill: var(--text-primary); font-weight: 500; }
 .inner-dim-text { font-size: 2px; fill: var(--text-primary); opacity: 0.7; }
