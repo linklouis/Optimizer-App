@@ -96,9 +96,7 @@
         "26",
         "27"
     ],
-    "prioritized_offcuts": [
-        "2"
-    ],
+    "prioritized_offcuts": [],
     "w_priority_offcut": 20.0,
     "required_stock_parts": [],
     "beam_width": null,

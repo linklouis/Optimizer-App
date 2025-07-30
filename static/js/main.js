@@ -158,7 +158,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     /**
-     * --- NEW: Loading Indicator on Form Submit ---
+     * --- Loading Indicator on Form Submit ---
      */
     const configForm = document.querySelector('.config-form');
     const resultsTabButton = document.querySelector('.tab-button[data-tab="results"]');
@@ -181,4 +181,78 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+
+    /**
+     * --- NEW: Animated Accordion for Collapsible Sections ---
+     */
+    document.querySelectorAll('details.animated-accordion').forEach((accordion) => {
+        const content = accordion.querySelector('.collapsible-content');
+        
+        // Set initial max-height for accordions that start open
+        if (accordion.open) {
+            content.style.maxHeight = content.scrollHeight + 'px';
+        }
+
+        accordion.addEventListener('toggle', () => {
+            if (accordion.open) {
+                // When opening
+                content.style.maxHeight = content.scrollHeight + 'px';
+            } else {
+                // When closing
+                content.style.maxHeight = content.scrollHeight + 'px';
+                requestAnimationFrame(() => content.style.maxHeight = '0px');
+            }
+        });
+
+        content.addEventListener('transitionend', () => {
+            // After the transition ends, if the accordion is open, remove the explicit
+            // max-height so the content can resize if the window does.
+            if (accordion.open) {
+                content.style.maxHeight = 'revert';
+            }
+        });
+    });
+
+    /**
+     * --- NEW: Resizable Card Sections ---
+     */
+    document.querySelectorAll('.resizable-card').forEach(card => {
+        const handle = card.querySelector('.resize-handle');
+        const selectorList = card.querySelector('.stock-selector');
+
+        if (!handle || !selectorList) {
+            return;
+        }
+
+        let startY;
+        let startHeight;
+
+        handle.addEventListener('mousedown', function(e) {
+            e.preventDefault();
+            startY = e.clientY;
+            startHeight = parseInt(document.defaultView.getComputedStyle(selectorList).height, 10);
+            
+            document.documentElement.addEventListener('mousemove', doDrag, false);
+            document.documentElement.addEventListener('mouseup', stopDrag, false);
+
+            document.body.style.userSelect = 'none';
+            document.body.style.cursor = 'ns-resize';
+        });
+
+        function doDrag(e) {
+            const newHeight = startHeight + e.clientY - startY;
+            // Add constraints for min/max height
+            if (newHeight > 100 && newHeight < 800) { 
+                selectorList.style.height = newHeight + 'px';
+            }
+        }
+
+        function stopDrag() {
+            document.documentElement.removeEventListener('mousemove', doDrag, false);
+            document.documentElement.removeEventListener('mouseup', stopDrag, false);
+            
+            document.body.style.userSelect = '';
+            document.body.style.cursor = '';
+        }
+    });
 });

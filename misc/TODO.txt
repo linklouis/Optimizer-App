@@ -39,11 +39,11 @@ FEATURES
 
     Visual
         - ✓ Add measurements to layout display
+        - ✓ Add loading screen/bar to results page when optimization is in progress?
+        - ✓ Keep Configuration and Results tabs visible when you scroll down
 
         - Needs to look good in greyscale
         - Scaleable Manage Stock Parts section?
-        - Add loading screen/bar to results page when optimization is in progress?
-        - Keep Configuration and Results tabs visible when you scroll down
 
     Code
         - 
@@ -60,6 +60,7 @@ BUGS
     - Stock part standardizing doesn't affect final score.
     - Does the priority offcut bonus affect the ideal score?
     - Only clicking on the center of a closed dropdown opens it, not the bottom
+    - Remove the parenthesies in the names of some of the columns in the Loaded Parts Lists.
 
 IDEAS
     - X Try every combination of cut order for every sheet? 

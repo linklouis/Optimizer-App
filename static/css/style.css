@@ -109,7 +109,6 @@ header h1 { margin: 0; font-size: 1.75rem; font-weight: 700; display: flex; alig
 .tab-button.active { background-color: var(--bg-secondary); color: var(--primary); border-color: var(--border-color); font-weight: 600; }
 .tab-content { 
     display: none;
-    /* --- MODIFIED: Required for overlay positioning --- */
     position: relative; 
 }
 .tab-content.active { display: block; animation: fadeIn 0.5s; }
@@ -155,6 +154,17 @@ details:not([open]) .collapsible-content {
     margin-bottom: 1rem;
 }
 
+/* --- NEW: Styles for Animated Accordion --- */
+.animated-accordion > .collapsible-content {
+    overflow: hidden;
+    transition: max-height 0.4s ease-out;
+    max-height: 0; /* Closed by default */
+}
+.animated-accordion[open] > .collapsible-content {
+    padding-top: 1rem; /* Re-apply padding since it's inside the animated container */
+}
+
+
 /* --- Forms & Inputs --- */
 .form-label { display: block; margin-bottom: 0.5rem; font-weight: 600; font-size: 0.9rem; color: var(--text-primary); }
 .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }
@@ -196,6 +206,41 @@ input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 2px
     margin-left: -110px; opacity: 0; transition: opacity 0.3s; font-size: 0.8rem; font-weight: 400; pointer-events: none;
 }
 .tooltip:hover::before { opacity: 1; }
+
+/* --- NEW: Resizable Card Styles --- */
+.resizable-card .collapsible-content {
+    position: relative;
+    padding-bottom: 20px; /* Make space for the handle */
+}
+
+.resizable-card .stock-selector {
+    max-height: none; /* Remove max-height for resizable cards */
+    height: 250px; /* Set an explicit height that JS can control */
+}
+
+.resize-handle {
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 60px;
+    height: 15px;
+    cursor: ns-resize;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: var(--border-color);
+    transition: color 0.2s;
+}
+
+.resize-handle i {
+    font-size: 1rem;
+}
+
+.resize-handle:hover {
+    color: var(--primary);
+}
+
 
 /* --- Stock Selector --- */
 .card-header .card-title { margin: 0; border: 0; padding: 0; }
