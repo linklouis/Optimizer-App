@@ -229,6 +229,7 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
     """
     start_time = time.time()
     time_limit = config.get('search_time_limit', 1.0)
+    branching_factor = config.get('branching_factor', 1)
     reference_area = config.get('default_length', 96) * config.get('default_width', 48)
 
     # --- Initial State Setup ---
@@ -244,7 +245,6 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
             initial_parts_dict[part_id_counter] = p_copy
             part_id_counter += 1
 
-    # FIXED: Correctly process optional stock parts, giving each a unique part_id
     optional_parts_list = []
     if not is_stock_only_job and optional_stock_parts:
         for part in optional_stock_parts:
@@ -255,60 +255,57 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
                 optional_parts_list.append(p_copy)
                 part_id_counter += 1
 
-    # The priority queue will store tuples: (-bound, -score, remaining_parts, used_layouts, used_signatures)
-    # We use negative scores/bounds because heapq is a min-heap, and we want to maximize score.
     initial_bound = -_calculate_bound(list(initial_parts_dict.values()), 0, config, reference_area)
-    # Node: (priority, score, parts_dict, layouts, signatures_set)
-    pq = [ (initial_bound, 0.0, initial_parts_dict, [], frozenset()) ]
+    
+    # FIXED: Add a unique counter to act as a tie-breaker for the priority queue
+    node_counter = 0
+    # Node: (priority, score, counter, parts_dict, layouts, signatures_set)
+    pq = [ (initial_bound, 0.0, node_counter, initial_parts_dict, [], frozenset()) ]
+    node_counter += 1
     
     best_solution = ([], list(initial_parts_dict.values()))
     best_score = -float('inf')
 
     # --- Branch and Bound Loop ---
     while pq and (time.time() - start_time) < time_limit:
-        _, current_score, current_parts, used_layouts, used_signatures = heapq.heappop(pq)
+        _, current_score, _, current_parts, used_layouts, used_signatures = heapq.heappop(pq)
 
-        # If the optimistic bound of this node is worse than our best solution, prune it.
         if -_calculate_bound(list(current_parts.values()), current_score, config, reference_area) < best_score:
             continue
 
-        # Generate child nodes by trying to place parts on one more sheet
         remaining_primary_parts = list(current_parts.values())
-        
-        # Group sheets by dimensions to avoid redundant calculations
         unique_sheets = {f"{s['length']}x{s['width']}": s for s in stock_sheets}.values()
 
         for sheet_tpl in unique_sheets:
-            layout_attempt = run_single_sheet_optimization(
-                sheet_tpl, remaining_primary_parts, config, reference_area, optional_parts_list
-            )
-            
-            placed_part_ids = {p['part_id'] for p in layout_attempt['placed_parts'] if p.get('part_id') in current_parts}
-            if not placed_part_ids:
-                continue
+            for _ in range(branching_factor):
+                layout_attempt = run_single_sheet_optimization(
+                    sheet_tpl, remaining_primary_parts, config, reference_area, optional_parts_list
+                )
+                
+                placed_part_ids = {p['part_id'] for p in layout_attempt['placed_parts'] if p.get('part_id') in current_parts}
+                if not placed_part_ids:
+                    continue
 
-            # Create the state for the child node
-            child_parts = {pid: p for pid, p in current_parts.items() if pid not in placed_part_ids}
-            child_layouts = used_layouts + [layout_attempt]
-            
-            layout_sig = get_layout_signature(layout_attempt, required_only=False)
-            child_signatures = used_signatures.union({layout_sig})
+                child_parts = {pid: p for pid, p in current_parts.items() if pid not in placed_part_ids}
+                child_layouts = used_layouts + [layout_attempt]
+                
+                layout_sig = get_layout_signature(layout_attempt, required_only=False)
+                child_signatures = used_signatures.union({layout_sig})
 
-            # Calculate score for this new state
-            layout_score = calculate_layout_score(layout_attempt, sheet_tpl, config, config['min_offcut_dim'], reference_area, is_stock_only_job)
-            child_score = current_score + layout_score
-            
-            # If we've placed all parts, this is a potential best solution
-            if not child_parts:
-                final_score = child_score - (config.get('w_sheets', 1.0) * len(child_layouts)) - (config.get('w_unique_layouts', 0.5) * len(child_signatures))
-                if final_score > best_score:
-                    best_score = final_score
-                    best_solution = (child_layouts, [])
-            else:
-                # Otherwise, calculate its bound and push to the queue to explore later
-                child_bound = _calculate_bound(list(child_parts.values()), child_score, config, reference_area)
-                if -child_bound > best_score:
-                    heapq.heappush(pq, (-child_bound, child_score, child_parts, child_layouts, child_signatures))
+                layout_score = calculate_layout_score(layout_attempt, sheet_tpl, config, config['min_offcut_dim'], reference_area, is_stock_only_job)
+                child_score = current_score + layout_score
+                
+                if not child_parts:
+                    final_score = child_score - (config.get('w_sheets', 1.0) * len(child_layouts)) - (config.get('w_unique_layouts', 0.5) * len(child_signatures))
+                    if final_score > best_score:
+                        best_score = final_score
+                        best_solution = (child_layouts, [])
+                else:
+                    child_bound = _calculate_bound(list(child_parts.values()), child_score, config, reference_area)
+                    if -child_bound > best_score:
+                        # FIXED: Add counter to the pushed tuple
+                        heapq.heappush(pq, (-child_bound, child_score, node_counter, child_parts, child_layouts, child_signatures))
+                        node_counter += 1
 
     final_layouts, remaining_parts = best_solution
     return final_layouts, remaining_parts, best_score

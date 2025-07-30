@@ -3,7 +3,7 @@ import os
 import json
 import pandas as pd
 import traceback
-import time # Imported time
+import time
 from collections import Counter
 
 from data_processing import process_uploaded_files, extract_hhos_data
@@ -19,7 +19,8 @@ DEFAULT_CONFIG = {
     'default_length': 96, 'default_width': 48, 'hhos_files': [], 'offcut_path': '',
     'stock_inv_path': '', 'kerf': 0.125, 'allow_rotation': True,
     'min_offcut_dim': 4.0, 'use_offcuts': True, 'add_stock_parts': False,
-    'search_time_limit': 5.0, # Increased default time for B&B
+    'search_time_limit': 5.0,
+    'branching_factor': 1, # NEW: Added branching factor
     'selected_stock_parts': [], 'dark_mode': False,
     'w_waste': 1.0, 'w_offcut': 0.5, 'w_cuts': 0.2, 'w_quantity': 0.1,
     'w_sheets': 1.0, 'w_stock_fill': 1.0, 'w_unique_layouts': 0.5,
@@ -58,6 +59,7 @@ def update_config_from_form(config, form_data):
     config['kerf'] = form_data.get('kerf', type=float)
     config['min_offcut_dim'] = form_data.get('min_offcut_dim', type=float)
     config['search_time_limit'] = form_data.get('search_time_limit', type=float)
+    config['branching_factor'] = form_data.get('branching_factor', type=int) # NEW
     config['allow_rotation'] = form_data.get('allow_rotation') == 'true'
     config['use_offcuts'] = form_data.get('use_offcuts') == 'true'
     config['add_stock_parts'] = form_data.get('add_stock_parts') == 'true'

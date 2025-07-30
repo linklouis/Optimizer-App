@@ -130,7 +130,7 @@
                     {% if all_stock_parts %}
                     <section class="card">
                         <div class="card-header">
-                            <h2 class="card-title"><i class="fa-solid fa-boxes-stacked"></i> Include Parts to Build for Stock</h2>
+                            <h2 class="card-title"><i class="fa-solid fa-boxes-stacked"></i>Include Stock Parts</h2>
                             <div class="button-group">
                                 <button type="button" class="btn-secondary" id="select-all-stock">Select All</button>
                                 <button type="button" class="btn-secondary" id="deselect-all-stock">Deselect All</button>
@@ -162,6 +162,10 @@
                                 <div>
                                     <label for="search_time_limit">Search Time (s) <span class="tooltip" data-tooltip="Total time for the optimizer to run. Longer times allow for a more thorough search and better results.">[?]</span></label>
                                     <input type="number" step="any" id="search_time_limit" name="search_time_limit" value="{{ config.search_time_limit }}">
+                                </div>
+                                <div>
+                                    <label for="branching_factor">Branching Factor <span class="tooltip" data-tooltip="Number of random layouts to generate at each search step. Higher values explore more options but are slower. Default is 1.">[?]</span></label>
+                                    <input type="number" step="1" min="1" id="branching_factor" name="branching_factor" value="{{ config.branching_factor }}">
                                 </div>
                             </div>
                             <div class="checkbox-grid">

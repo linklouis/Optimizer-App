@@ -22,14 +22,16 @@ FEATURES
         - Be able to click on stock parts and remove them from the sheet layout
         - Allow the quantity of a given layout to be adjusted manually after optimization?
         - Way to automatically stop when the score is sufficient? Maybe calculate the 
-        - Page to display all offcuts
+        - Page to display all available offcuts
+        - Add time limiting as a toggleable option
     
     Optimizer
         - ✓ ---> Only keep reusing a layout of stock parts until another layout is better because the number of the original stock parts needed has been filled.
         - X Rerun the optimizor on the remaining parts after a set of sheet layouts have been standardized?
+        - ✓ ---> Add number of layouts penalty
 
         - Needs to be smarter about handling jobs with high quantities
-        - ---> Add number of layouts penalty
+        - Penalize higher numbers of unique default sheet layouts more than offcut sheets?
 
     Visual
         - Add measurements to layout display
