@@ -87,7 +87,7 @@
                             <div class="collapsible-content">
                                 <div class="accordion" id="loaded-parts-accordion">
                                     {% for file_content in hhos_file_contents %}
-                                    <details class="accordion-item" open>
+                                    <details class="accordion-item" open>   <!-- Open by default for better UX -->
                                         <summary class="accordion-header">
                                             <span class="accordion-title">{{ file_content.path.split('/')[-1].split('\\')[-1] }}</span>
                                             {% if file_content.error %}
@@ -331,9 +331,9 @@
                                                 <text class="part-label" x="{{ p_width / 2 }}" y="{{ p_length / 2 }}" dominant-baseline="middle" text-anchor="middle">
                                                     {% if part.is_stock_part %}STOCK{% else %}{{ part.label }}{% endif %}
                                                 </text>
-                                                {% set text_padding = 1.5 %}
-                                                <text class="inner-dim-text" text-anchor="middle" dominant-baseline="hanging" x="{{ p_width / 2 }}" y="{{ text_padding }}">{{ '%.3f' % p_width }}</text>
-                                                <text class="inner-dim-text" text-anchor="middle" transform="translate({{ text_padding }}, {{ p_length / 2 }}) rotate(-90)">{{ '%.3f' % p_length }}</text>
+                                                {% set text_padding = 1 %}
+                                                <text class="inner-dim-text" text-anchor="middle" dominant-baseline="hanging" x="{{ p_width / 2 }}" y="{{ text_padding }}">{{ '%.2f' % p_width }}</text>
+                                                <text class="inner-dim-text" text-anchor="middle" dominant-baseline="hanging" transform="translate({{ text_padding }}, {{ p_length / 2 }}) rotate(-90)">{{ '%.2f' % p_length }}</text>
                                             </g>
                                         {% endfor %}
                                         {% for offcut in layout.usable_offcuts %}
@@ -341,9 +341,9 @@
                                             <g class="offcut-group" transform="translate({{ offcut.x }}, {{ svg_y }})">
                                                 <rect class="offcut" width="{{ offcut.width }}" height="{{ offcut.length }}"/>
                                                 <text class="offcut-label" x="{{ offcut.width / 2 }}" y="{{ offcut.length / 2 }}" dominant-baseline="middle" text-anchor="middle">Offcut</text>
-                                                {% set text_padding = 1.5 %}
-                                                <text class="inner-dim-text" text-anchor="middle" dominant-baseline="hanging" x="{{ offcut.width / 2 }}" y="{{ text_padding }}">{{ '%.3f' % offcut.width }}</text>
-                                                <text class="inner-dim-text" text-anchor="middle" transform="translate({{ text_padding }}, {{ offcut.length / 2 }}) rotate(-90)">{{ '%.3f' % offcut.length }}</text>
+                                                {% set text_padding = 1 %}
+                                                <text class="inner-dim-text" text-anchor="middle" dominant-baseline="hanging" x="{{ offcut.width / 2 }}" y="{{ text_padding }}">{{ '%.2f' % offcut.width }}</text>
+                                                <text class="inner-dim-text" text-anchor="middle" dominant-baseline="hanging" transform="translate({{ text_padding }}, {{ offcut.length / 2 }}) rotate(-90)">{{ '%.2f' % offcut.length }}</text>
                                             </g>
                                         {% endfor %}
                                         <g class="cut-line-group">
