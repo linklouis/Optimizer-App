@@ -126,7 +126,6 @@ def _place_parts_in_rects(parts_to_place: List[Part], initial_rects: List[Rect],
         if best_fit['rect_index'] != -1:
             part_l, part_w, rotated = best_fit['orientation']
             
-            # OPTIMIZATION: O(1) removal of the rectangle by swapping with the last element first.
             rect_idx = best_fit['rect_index']
             rect = empty_rects[rect_idx]
             empty_rects[rect_idx] = empty_rects[-1]
@@ -136,7 +135,6 @@ def _place_parts_in_rects(parts_to_place: List[Part], initial_rects: List[Rect],
             placed_part.update({'rotated': rotated, 'x': rect['x'], 'y': rect['y']})
             placed_parts.append(placed_part)
 
-            # Split the remaining space into two new rectangles
             rect_above = {'x': rect['x'], 'y': rect['y'] + part_l + kerf, 'length': rect['length'] - part_l - kerf, 'width': rect['width']}
             rect_right_of_part = {'x': rect['x'] + part_w + kerf, 'y': rect['y'], 'length': part_l, 'width': rect['width'] - part_w - kerf}
             
@@ -176,14 +174,11 @@ def run_single_sheet_optimization(sheet_info: Dict, required_parts: List[Part], 
     best_score = calculate_layout_score(best_layout, sheet_info, config, config['min_offcut_dim'], reference_area, is_stock_only_job)
 
     if optional_stock_parts and remaining_rects_after_job:
-        # Sort stock parts by need once
         sorted_stock_parts = sorted(optional_stock_parts, key=lambda p: p.get('target_stock', 1) - p.get('current_stock', 0), reverse=True)
         
         start_time = time.time()
         iterations = 0
-        # OPTIMIZATION: Inlined _place_randomized_stock and simplified the loop
         while time.time() - start_time < time_limit:
-            # Randomly sample a small number of parts to attempt placing
             k = min(len(sorted_stock_parts), 10)
             parts_to_attempt = random.sample(sorted_stock_parts, k=k)
             
@@ -208,97 +203,126 @@ def run_single_sheet_optimization(sheet_info: Dict, required_parts: List[Part], 
     
     return best_layout
 
+# --- BEAM SEARCH IMPLEMENTATION ---
 
 def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict], config: Dict, 
                              optional_stock_parts: Optional[List[Part]] = None, 
                              is_stock_only_job: bool = False) -> Tuple[List[Dict], List[Part], float]:
-    """Main orchestrator that selects the best sheets and layouts to fulfill the part requirements."""
+    """
+    Main orchestrator that uses a beam search to find the best overall sequence of layouts.
+    This is a pruned tree search approach.
+    """
     reference_area = config.get('default_length', 96) * config.get('default_width', 48)
+    beam_width = config.get('beam_width', 1)
 
-    # OPTIMIZATION: Use a simple integer counter instead of uuid for speed.
+    # --- Initial State Setup ---
     part_id_counter = 0
-    # OPTIMIZATION: Use dictionaries for parts for fast O(1) lookup and deletion.
-    required_parts_dict: Dict[int, Part] = {}
+    primary_parts_dict: Dict[int, Part] = {}
     for part in parts_to_cut:
         for _ in range(int(part.get('quantity', 1))):
             p_copy = part.copy()
             p_copy['part_id'] = part_id_counter
             p_copy['is_stock_part'] = False
-            required_parts_dict[part_id_counter] = p_copy
+            primary_parts_dict[part_id_counter] = p_copy
             part_id_counter += 1
-    
-    optional_stock_parts_dict: Dict[int, Part] = {}
-    if optional_stock_parts:
-        for part in optional_stock_parts:
+            
+    if is_stock_only_job and optional_stock_parts:
+         for part in optional_stock_parts:
             deficit = int(part['target_stock'] - part['current_stock'])
             for _ in range(deficit):
                 p_copy = part.copy()
                 p_copy['part_id'] = part_id_counter
-                optional_stock_parts_dict[part_id_counter] = p_copy
+                p_copy['is_stock_part'] = True # Ensure this is set correctly
+                primary_parts_dict[part_id_counter] = p_copy
                 part_id_counter += 1
 
-    available_sheets = [s.copy() for s in stock_sheets]
-    final_layouts = []
-    final_layout_signatures = set() # NEW: Keep track of unique layout signatures
+    # --- Initialize Beams ---
+    # Each "beam" is a candidate solution path (a state)
+    initial_state = {
+        "primary_parts_dict": primary_parts_dict,
+        "optional_stock_parts": optional_stock_parts if not is_stock_only_job else [],
+        "available_sheets": [s.copy() for s in stock_sheets],
+        "layouts": [],
+        "layout_signatures": set(),
+        "cost": 0.0, # Accumulated cost (lower is better)
+    }
+    beams = [initial_state]
     
-    primary_parts_dict = required_parts_dict if not is_stock_only_job else optional_stock_parts_dict
-    
-    while primary_parts_dict:
-        best_layout_for_pass = None
-        min_cost_per_part = float('inf')
-        best_sheet_idx = -1
-
-        primary_parts_for_pass = list(primary_parts_dict.values())
-        optional_parts_for_pass = list(optional_stock_parts_dict.values()) if not is_stock_only_job else []
-
-        for i, sheet in enumerate(available_sheets):
-            if sheet.get('quantity', 0) <= 0: continue
-
-            layout_attempt = run_single_sheet_optimization(
-                sheet, primary_parts_for_pass, config, reference_area, optional_parts_for_pass
-            )
-            
-            num_placed_primary = sum(1 for p in layout_attempt['placed_parts'] if p['part_id'] in primary_parts_dict)
-            if num_placed_primary == 0: continue
-            
-            layout_score = calculate_layout_score(layout_attempt, sheet, config, config['min_offcut_dim'], reference_area, is_stock_only_job)
-            
-            # NEW: Add a penalty if this layout is a new, unique pattern
-            layout_attempt_sig = get_layout_signature(layout_attempt, required_only=False)
-            is_new_layout = layout_attempt_sig not in final_layout_signatures
-            uniqueness_penalty = config.get('w_unique_layouts', 0.5) if is_new_layout else 0.0
-
-            cost_per_part = (-layout_score + config.get('w_sheets', 1.0) + uniqueness_penalty) / num_placed_primary
-
-            if cost_per_part < min_cost_per_part:
-                min_cost_per_part = cost_per_part
-                best_layout_for_pass = layout_attempt
-                best_sheet_idx = i
+    # --- Main Search Loop ---
+    while True:
+        next_beams = []
         
-        if best_sheet_idx == -1:
-            print(f"Warning: Could not place any more primary parts. {len(primary_parts_dict)} parts remaining.")
+        # Expand each beam to generate next possible states
+        for beam in beams:
+            if not beam["primary_parts_dict"]:
+                # This path is complete, add it to the next generation to be considered for the final result
+                next_beams.append(beam)
+                continue
+            
+            primary_parts_for_pass = list(beam["primary_parts_dict"].values())
+            optional_parts_for_pass = beam["optional_stock_parts"]
+
+            for i, sheet in enumerate(beam["available_sheets"]):
+                if sheet.get('quantity', 0) <= 0: continue
+
+                layout_attempt = run_single_sheet_optimization(
+                    sheet, primary_parts_for_pass, config, reference_area, optional_parts_for_pass
+                )
+                
+                num_placed_primary = sum(1 for p in layout_attempt['placed_parts'] if p['part_id'] in beam["primary_parts_dict"])
+                if num_placed_primary == 0: continue
+                
+                # --- Create a new state from this layout attempt ---
+                new_beam = {
+                    "layouts": beam["layouts"] + [layout_attempt],
+                    "layout_signatures": beam["layout_signatures"].copy(),
+                    "available_sheets": [s.copy() for s in beam["available_sheets"]],
+                }
+
+                # Update parts for the new state
+                placed_ids = {p['part_id'] for p in layout_attempt['placed_parts']}
+                new_beam["primary_parts_dict"] = {k: v for k, v in beam["primary_parts_dict"].items() if k not in placed_ids}
+                if new_beam["optional_stock_parts"]:
+                    new_beam["optional_stock_parts"] = [p for p in optional_parts_for_pass if p['part_id'] not in placed_ids]
+                
+                # Update sheet quantity
+                new_beam["available_sheets"][i]['quantity'] -= 1
+
+                # Calculate the cost of this *single step*
+                layout_score = calculate_layout_score(layout_attempt, sheet, config, config['min_offcut_dim'], reference_area, is_stock_only_job)
+                layout_sig = get_layout_signature(layout_attempt, required_only=False)
+                is_new_layout = layout_sig not in new_beam["layout_signatures"]
+                uniqueness_penalty = config.get('w_unique_layouts', 0.5) if is_new_layout else 0.0
+                step_cost = -layout_score + config.get('w_sheets', 1.0) + uniqueness_penalty
+                
+                # Update signatures and total cost for the new state
+                new_beam["layout_signatures"].add(layout_sig)
+                new_beam["cost"] = beam["cost"] + step_cost
+                
+                next_beams.append(new_beam)
+
+        if not next_beams or all(b.get("primary_parts_dict") == beams[i].get("primary_parts_dict") for i,b in enumerate(next_beams)):
+            # If no new states were generated, or no progress was made, stop.
             break
 
-        # NEW: Add the chosen layout's signature to the set of seen signatures
-        best_layout_sig = get_layout_signature(best_layout_for_pass, required_only=False)
-        final_layout_signatures.add(best_layout_sig)
-        
-        final_layouts.append(best_layout_for_pass)
-        available_sheets[best_sheet_idx]['quantity'] -= 1
-        
-        placed_ids = {p['part_id'] for p in best_layout_for_pass['placed_parts']}
-        
-        # OPTIMIZATION: Fast removal of placed parts from dictionaries.
-        for pid in placed_ids:
-            primary_parts_dict.pop(pid, None)
-            if not is_stock_only_job:
-                optional_stock_parts_dict.pop(pid, None)
+        # Pruning step: Keep only the top `beam_width` states
+        next_beams.sort(key=lambda b: b['cost'] / (len(initial_state["primary_parts_dict"]) - len(b["primary_parts_dict"]) + 1))
+        beams = next_beams[:beam_width]
 
-    # NEW: Calculate the final score including all penalties
-    total_score = sum(calculate_layout_score(l, l['sheet_info'], config, config['min_offcut_dim'], reference_area, is_stock_only_job) for l in final_layouts)
+    # --- Select Best Final Solution ---
+    if not beams:
+        return [], list(primary_parts_dict.values()), 0.0
+
+    # Find the beam that completed the most parts with the lowest cost
+    best_beam = min(beams, key=lambda b: (len(b["primary_parts_dict"]), b["cost"]))
+    
+    final_layouts = best_beam["layouts"]
+    remaining_parts = list(best_beam["primary_parts_dict"].values())
+
+    # Calculate final score for reporting
+    total_layout_score = sum(calculate_layout_score(l, l['sheet_info'], config, config['min_offcut_dim'], reference_area, is_stock_only_job) for l in final_layouts)
     sheets_penalty = config.get('w_sheets', 1.0) * len(final_layouts)
-    unique_layouts_penalty = config.get('w_unique_layouts', 0.5) * len(final_layout_signatures)
-    final_score = total_score - sheets_penalty - unique_layouts_penalty
+    unique_layouts_penalty = config.get('w_unique_layouts', 0.5) * len(best_beam["layout_signatures"])
+    final_score = total_layout_score - sheets_penalty - unique_layouts_penalty
 
-    remaining_parts = list(primary_parts_dict.values())
     return final_layouts, remaining_parts, final_score

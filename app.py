@@ -9,7 +9,7 @@ from data_processing import process_uploaded_files, extract_hhos_data
 from optimizer import (
     optimize_multiple_sheets,
     calculate_layout_score,
-    get_layout_signature # Replaced the two old functions with the new one
+    get_layout_signature
 )
 
 # --- Constants ---
@@ -20,8 +20,9 @@ DEFAULT_CONFIG = {
     'min_offcut_dim': 4.0, 'use_offcuts': True, 'add_stock_parts': False,
     'search_time_limit': 1.0, 'selected_stock_parts': [], 'dark_mode': False,
     'w_waste': 1.0, 'w_offcut': 0.5, 'w_cuts': 0.2, 'w_quantity': 0.1,
-    'w_sheets': 1.0, 'w_stock_fill': 1.0, 'w_unique_layouts': 0.5, # NEW: Added unique layout penalty weight
-    'standardize_stock_layouts': True
+    'w_sheets': 1.0, 'w_stock_fill': 1.0, 'w_unique_layouts': 0.5,
+    'standardize_stock_layouts': True,
+    'beam_width': 1 # MODIFIED: Replaced selection_randomness with beam_width
 }
 
 app = Flask(__name__)
@@ -56,6 +57,7 @@ def update_config_from_form(config, form_data):
     config['kerf'] = form_data.get('kerf', type=float)
     config['min_offcut_dim'] = form_data.get('min_offcut_dim', type=float)
     config['search_time_limit'] = form_data.get('search_time_limit', type=float)
+    config['beam_width'] = form_data.get('beam_width', type=int) # MODIFIED
     config['allow_rotation'] = form_data.get('allow_rotation') == 'true'
     config['use_offcuts'] = form_data.get('use_offcuts') == 'true'
     config['add_stock_parts'] = form_data.get('add_stock_parts') == 'true'
@@ -63,7 +65,6 @@ def update_config_from_form(config, form_data):
     config['selected_stock_parts'] = form_data.getlist('selected_stock_parts')
     config['standardize_stock_layouts'] = form_data.get('standardize_stock_layouts') == 'true'
 
-    # NEW: Updated to include the new weight
     for key in ['w_waste', 'w_offcut', 'w_cuts', 'w_quantity', 'w_sheets', 'w_stock_fill', 'w_unique_layouts']:
         config[key] = form_data.get(key, type=float)
     
@@ -73,8 +74,6 @@ def update_config_from_form(config, form_data):
 def run_optimization(config, hhos_df, offcut_df, stock_inv_df):
     parts_to_cut = hhos_df.to_dict('records') if hhos_df is not None and not hhos_df.empty else []
     
-    # This logic is now duplicated to get the initial list for standardization
-    # A refactor could create a single function for this if desired
     optional_stock_parts = []
     if config['add_stock_parts'] and stock_inv_df is not None:
         mask = (stock_inv_df['internal_ref'].isin(config['selected_stock_parts'])) & \
@@ -96,12 +95,7 @@ def run_optimization(config, hhos_df, offcut_df, stock_inv_df):
     return optimize_multiple_sheets(parts_to_cut, stock_sheets, config, optional_stock_parts, is_stock_only_job)
 
 def _calculate_live_stock_bonus(layout: dict, live_deficit_tracker: Counter, config: dict) -> float:
-    """
-    Calculates only the stock_fill_bonus based on a live deficit tracker.
-    This is a lightweight alternative to the full dynamic score calculation.
-    """
     stock_fill_bonus = 0.0
-    # The sheet area is needed for the bonus calculation.
     sheet_area = layout['sheet_info']['length'] * layout['sheet_info']['width']
     if sheet_area == 0:
         return 0.0
@@ -111,27 +105,17 @@ def _calculate_live_stock_bonus(layout: dict, live_deficit_tracker: Counter, con
     for part in layout.get('placed_parts', []):
         if part.get('is_stock_part') and live_deficit_tracker.get(part.get('internal_ref'), 0) > 0:
             part_area = part.get('length', 0) * part.get('width', 0)
-            
-            # The original deficit for this part type (how many we initially needed).
-            # This is used as the denominator in the original formula.
             initial_deficit = part.get('target_stock', 1) - part.get('current_stock', 0)
             
             if initial_deficit > 0:
-                # The bonus is for filling one part out of the initial total needed.
                 stock_fill_bonus += (1 / initial_deficit) * (part_area / sheet_area) * w_stock_fill
                 
     return stock_fill_bonus
 
 
 def standardize_layouts(layouts: list, initial_optional_parts: list, config: dict) -> list:
-    """
-    Standardizes layouts using a fast, greedy selection algorithm.
-    This replaces the slow, iterative version.
-    """
-    # 1. Track initial stock part needs.
     live_deficit_tracker = Counter({p['internal_ref']: int(p['target_stock'] - p['current_stock']) for p in initial_optional_parts})
     
-    # 2. Group layouts by their required (non-stock) parts signature.
     grouped_layouts = {}
     for i, layout in enumerate(layouts):
         layout['original_index'] = i
@@ -140,30 +124,25 @@ def standardize_layouts(layouts: list, initial_optional_parts: list, config: dic
 
     final_layouts = [None] * len(layouts)
 
-    # 3. Process each group to standardize its stock parts.
     for signature, group in grouped_layouts.items():
         if len(group) <= 1:
             for layout in group:
                 final_layouts[layout['original_index']] = layout
             continue
 
-        # 4. Find unique variations and pre-calculate their static base score ONCE.
         unique_variations = {get_layout_signature(l): l for l in group}.values()
         scored_variations = []
         for v in unique_variations:
             is_stock_only_job = not any(not p.get('is_stock_part', False) for p in v['placed_parts'])
             base_score = calculate_layout_score(v, v['sheet_info'], config, config['min_offcut_dim'], config['default_length'] * config['default_width'], is_stock_only_job)
-            # We subtract the stock bonus because we will recalculate it live.
             stock_bonus_to_remove = _calculate_live_stock_bonus(v, live_deficit_tracker, config)
             scored_variations.append({
                 'base_score': base_score - stock_bonus_to_remove,
                 'layout': v
             })
 
-        # 5. Greedily select the best layout for each slot in the group.
         standardized_group = []
         for _ in range(len(group)):
-            # Find the best variation based on the CURRENT deficit
             best_choice = max(
                 scored_variations,
                 key=lambda item: item['base_score'] + _calculate_live_stock_bonus(item['layout'], live_deficit_tracker, config)
@@ -172,14 +151,12 @@ def standardize_layouts(layouts: list, initial_optional_parts: list, config: dic
             chosen_layout = best_choice['layout']
             standardized_group.append(chosen_layout)
 
-            # "Consume" the stock parts from the chosen layout
             for part in chosen_layout.get('placed_parts', []):
                 if part.get('is_stock_part'):
                     ref = part.get('internal_ref')
                     if live_deficit_tracker[ref] > 0:
                         live_deficit_tracker[ref] -= 1
         
-        # 6. Place the standardized layouts back into their original positions.
         for original_layout, standardized_layout in zip(group, standardized_group):
             final_layouts[original_layout['original_index']] = standardized_layout
 
@@ -187,7 +164,6 @@ def standardize_layouts(layouts: list, initial_optional_parts: list, config: dic
 
 
 def prepare_results_for_render(layouts, remaining_parts, final_score, config):
-    """Processes and groups layout data for Jinja rendering."""
     if not layouts: return None
 
     total_placed_area = sum(l['total_placed_area'] for l in layouts)
@@ -215,11 +191,10 @@ def prepare_results_for_render(layouts, remaining_parts, final_score, config):
     return {
         'layouts': list(grouped_layouts.values()), 'remaining_parts': remaining_parts,
         'final_score': final_score, 'overall_yield': overall_yield,
-        'num_unique_layouts': len(grouped_layouts) # NEW: Added unique layout count
+        'num_unique_layouts': len(grouped_layouts)
     }
 
 def get_initial_optional_parts(stock_inv_df, config):
-    """Helper to get the initial list of needed stock parts."""
     if not config['add_stock_parts'] or stock_inv_df is None:
         return []
     mask = (stock_inv_df['internal_ref'].isin(config['selected_stock_parts'])) & \
@@ -268,7 +243,6 @@ def home():
 
     if request.method == 'POST' and (config.get('hhos_files') or config['stock_inv_path']):
         try:
-            # MODIFIED: The optimizer now returns the final calculated score directly
             layouts, remaining_parts, final_score = run_optimization(config, hhos_df, offcut_df, stock_inv_df)
             
             final_layouts = layouts
