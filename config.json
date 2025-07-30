@@ -98,6 +98,20 @@
     ],
     "prioritized_offcuts": [],
     "w_priority_offcut": 20.0,
+    "selected_hhos_parts": [
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv_0",
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv_1",
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv_2",
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv_3",
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv_4",
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv_5",
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv_0",
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv_1",
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv_2",
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv_3",
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv_4",
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv_5"
+    ],
     "required_stock_parts": [],
     "beam_width": null,
     "w_layout_variety": null,
@@ -135,5 +149,20 @@
     "w_yield": 1.0,
     "multi_pass": false,
     "use_offcuts_as_stock": true,
-    "default_height": 48
+    "default_height": 48,
+    "part_quantities": {
+        "": 10,
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv_0": 10,
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv_1": 10,
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv_2": 10,
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv_3": 10,
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv_4": 10,
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv_5": 10,
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv_0": 5,
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv_1": 5,
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv_2": 5,
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv_3": 5,
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv_4": 5,
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv_5": 5
+    }
 }

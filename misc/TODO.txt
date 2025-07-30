@@ -12,12 +12,12 @@ FEATURES
         - ✓ Allow user to select what offcuts to consider like the stock parts
         - ✓ Allow specific parts to be removed from a job
         - ✓ Page to display all available offcuts
+        - ✓ Add description of scoring weight/all settings on hover
 
         - Allow uploading a temp Offcut List that doesn't override the current one?
         - Save offcuts
         - Clear Offcut List File input space after optimization
         - Notes section for offcuts
-        - Add description of scoring weight/all settings on hover
         - Multiple parts list files
         - Tell user when the files they're pointing to don't exist
         - Be able to click on stock parts and remove them from the sheet layout
@@ -41,9 +41,10 @@ FEATURES
         - ✓ Add measurements to layout display
         - ✓ Add loading screen/bar to results page when optimization is in progress?
         - ✓ Keep Configuration and Results tabs visible when you scroll down
+        - ✓ Scaleable Manage Stock Parts section?
 
         - Needs to look good in greyscale
-        - Scaleable Manage Stock Parts section?
+        - Make the Loaded Parts List section look better
 
     Code
         - 

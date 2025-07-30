@@ -115,7 +115,6 @@ document.addEventListener('DOMContentLoaded', function() {
         offcutSelector.querySelectorAll('input[name="prioritized_offcuts"]').forEach(cb => cb.checked = false);
     });
 
-
     /**
      * --- Activate Results Tab if Data Exists ---
      */
@@ -183,30 +182,25 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     /**
-     * --- NEW: Animated Accordion for Collapsible Sections ---
+     * --- Animated Accordion for Collapsible Sections ---
      */
     document.querySelectorAll('details.animated-accordion').forEach((accordion) => {
         const content = accordion.querySelector('.collapsible-content');
         
-        // Set initial max-height for accordions that start open
         if (accordion.open) {
             content.style.maxHeight = content.scrollHeight + 'px';
         }
 
         accordion.addEventListener('toggle', () => {
             if (accordion.open) {
-                // When opening
                 content.style.maxHeight = content.scrollHeight + 'px';
             } else {
-                // When closing
                 content.style.maxHeight = content.scrollHeight + 'px';
                 requestAnimationFrame(() => content.style.maxHeight = '0px');
             }
         });
 
         content.addEventListener('transitionend', () => {
-            // After the transition ends, if the accordion is open, remove the explicit
-            // max-height so the content can resize if the window does.
             if (accordion.open) {
                 content.style.maxHeight = 'revert';
             }
@@ -214,7 +208,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     /**
-     * --- NEW: Resizable Card Sections ---
+     * --- Resizable Card Sections ---
      */
     document.querySelectorAll('.resizable-card').forEach(card => {
         const handle = card.querySelector('.resize-handle');
@@ -241,7 +235,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
         function doDrag(e) {
             const newHeight = startHeight + e.clientY - startY;
-            // Add constraints for min/max height
             if (newHeight > 100 && newHeight < 800) { 
                 selectorList.style.height = newHeight + 'px';
             }

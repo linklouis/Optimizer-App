@@ -47,7 +47,7 @@
                     {% endwith %}
 
                     <section class="card">
-                        <details class="collapsible-section" open>
+                        <details class="collapsible-section">
                             <summary class="card-title"><i class="fa-solid fa-file-alt"></i> File Paths</summary>
                             <div class="collapsible-content">
                                 <div id="hhos-file-list" class="dynamic-file-list">
@@ -82,7 +82,7 @@
                     
                     {% if hhos_file_contents %}
                     <section class="card">
-                         <details class="collapsible-section" open>
+                         <details class="collapsible-section">
                             <summary class="card-title"><i class="fa-solid fa-list-check"></i> Loaded Part Lists</summary>
                             <div class="collapsible-content">
                                 <div class="accordion" id="loaded-parts-accordion">
@@ -118,7 +118,9 @@
                                                             <td>{{ part.material }}</td>
                                                             <td>{{ part.length }}</td>
                                                             <td>{{ part.width }}</td>
-                                                            <td>{{ part.quantity|int }}</td>
+                                                            <td>
+                                                                <input type="number" name="part_qty_{{ part.unique_id }}" class="part-qty-input" value="{{ part.quantity|int }}" min="1">
+                                                            </td>
                                                             <td>{{ part.part_name }}</td>
                                                             <td>{{ part.label }}</td>
                                                         </tr>
@@ -138,7 +140,7 @@
                     
                     {% if all_offcuts %}
                     <section class="card resizable-card">
-                        <details class="collapsible-section animated-accordion" open>
+                        <details class="collapsible-section animated-accordion">
                             <summary class="card-title"><i class="fa-solid fa-ruler-combined"></i> Manage Offcuts</summary>
                              <div class="collapsible-content">
                                 <div class="card-header">
@@ -172,7 +174,7 @@
 
                     {% if all_stock_parts %}
                     <section class="card resizable-card">
-                        <details class="collapsible-section animated-accordion" open>
+                        <details class="collapsible-section animated-accordion">
                             <summary class="card-title"><i class="fa-solid fa-boxes-stacked"></i>Manage Stock Parts</summary>
                             <div class="collapsible-content">
                                 <div class="card-header">

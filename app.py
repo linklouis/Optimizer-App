@@ -31,7 +31,6 @@ DEFAULT_CONFIG = {
     'selected_offcuts': [],
     'prioritized_offcuts': [],
     'w_priority_offcut': 10.0,
-    # --- NEW: Add default for selected HHOS parts ---
     'selected_hhos_parts': []
 }
 
@@ -84,37 +83,36 @@ def update_config_from_form(config, form_data):
 
     config['selected_offcuts'] = form_data.getlist('selected_offcuts')
     config['prioritized_offcuts'] = form_data.getlist('prioritized_offcuts')
-    # --- NEW: Get selected HHOS parts from form ---
     config['selected_hhos_parts'] = form_data.getlist('selected_hhos_parts')
 
     for key in ['w_waste', 'w_offcut', 'w_cuts', 'w_quantity', 'w_sheets', 'w_stock_fill', 'w_unique_layouts', 'w_priority_offcut']:
         if form_data.get(key) is not None:
              config[key] = form_data.get(key, type=float)
     
+    config.setdefault('part_quantities', {})
+    for key, value in form_data.items():
+        if key.startswith('part_qty_') and value.isdigit():
+            part_id = key.replace('part_qty_', '')
+            config['part_quantities'][part_id] = int(value)
+
     return config
 
 # --- Scoring Logic (omitted for brevity, no changes from previous step) ---
 def calculate_ideal_score(parts_to_cut, optional_stock_parts, offcut_df, config):
-    # ... no changes ...
-    # 1. Create the full "ideal" list of all parts to be made.
     ideal_part_list = parts_to_cut + optional_stock_parts
     if not ideal_part_list:
         return 0.0
 
-    # 2. Calculate total area and count for ALL ideal parts.
     total_ideal_part_area = sum(p['length'] * p['width'] * p.get('quantity', 1) for p in ideal_part_list)
     total_ideal_part_count = sum(p.get('quantity', 1) for p in ideal_part_list)
 
-    # 3. Calculate ideal sheet usage and associated bonuses/penalties.
     ideal_sheets_penalty = 0.0
     ideal_quantity_bonus = 0.0
     remaining_area_to_place = total_ideal_part_area
     num_unique_layouts = 0
     unavoidable_waste_area = 0.0
     
-    # --- Use offcuts first ---
     if config.get('use_offcuts') and offcut_df is not None and not offcut_df.empty:
-        # --- MODIFIED: Use only selected offcuts for ideal calculation ---
         selected_ids = [int(i) for i in config.get('selected_offcuts', [])]
         available_offcuts = offcut_df.loc[offcut_df.index.isin(selected_ids)]
         
@@ -136,7 +134,6 @@ def calculate_ideal_score(parts_to_cut, optional_stock_parts, offcut_df, config)
                 ideal_sheets_penalty += num_used_offcuts * config.get('w_sheets', 1.0)
                 num_unique_layouts += 1 
 
-    # --- Use default sheets for the rest ---
     reference_area = config.get('default_length', 96) * config.get('default_width', 48)
     if reference_area > 0 and remaining_area_to_place > 0:
         min_default_sheets = math.ceil(remaining_area_to_place / reference_area)
@@ -145,14 +142,12 @@ def calculate_ideal_score(parts_to_cut, optional_stock_parts, offcut_df, config)
         if min_default_sheets > 0:
             num_unique_layouts += 1
             
-    # 4. Calculate penalties
     ideal_waste_penalty = (unavoidable_waste_area / reference_area) * config.get('w_waste', 1.0) if reference_area > 0 else 0
     ideal_offcut_penalty = 0.0
     ideal_cuts_penalty = total_ideal_part_count * config.get('w_cuts', 0.2)
     ideal_unique_layouts_penalty = num_unique_layouts * config.get('w_unique_layouts', 0.5)
     total_ideal_penalty = ideal_waste_penalty + ideal_offcut_penalty + ideal_cuts_penalty + ideal_sheets_penalty + ideal_unique_layouts_penalty
 
-    # 5. Calculate bonuses
     ideal_stock_fill_bonus = 0.0
     if reference_area > 0:
         for part in ideal_part_list:
@@ -166,18 +161,22 @@ def calculate_ideal_score(parts_to_cut, optional_stock_parts, offcut_df, config)
 
     total_ideal_bonus = ideal_stock_fill_bonus + ideal_quantity_bonus
     
-    # 6. Final Score
     return total_ideal_bonus - total_ideal_penalty
 
 
 # --- Main Application Logic ---
 def run_optimization(config, hhos_df, offcut_df, stock_inv_df):
     
-    # --- MODIFIED: Filter HHOS parts based on user selection ---
     if hhos_df is not None and not hhos_df.empty:
+        part_quantities = config.get('part_quantities', {})
+        if part_quantities:
+            hhos_df['quantity'] = hhos_df.apply(
+                lambda row: part_quantities.get(row['unique_id'], row['quantity']),
+                axis=1
+            )
+        
         selected_hhos_ids = config.get('selected_hhos_parts', [])
-        if selected_hhos_ids: # If list is not empty, user has made a selection
-            hhos_df = hhos_df[hhos_df['unique_id'].isin(selected_hhos_ids)]
+        hhos_df = hhos_df[hhos_df['unique_id'].isin(selected_hhos_ids)]
 
     hhos_parts = hhos_df.to_dict('records') if hhos_df is not None and not hhos_df.empty else []
     for part in hhos_parts:
@@ -213,7 +212,6 @@ def run_optimization(config, hhos_df, offcut_df, stock_inv_df):
     
     if config.get('use_offcuts') and offcut_df is not None and not offcut_df.empty:
         selected_ids = [int(i) for i in config.get('selected_offcuts', [])]
-        # If a user provides an offcut file but has not yet saved selections, default to using all offcuts.
         if not selected_ids and config.get('offcut_path'):
             filtered_offcuts = offcut_df
         else:
@@ -225,13 +223,10 @@ def run_optimization(config, hhos_df, offcut_df, stock_inv_df):
             offcuts_with_id['type'] = 'Offcut'
             stock_sheets.extend(offcuts_with_id.to_dict('records'))
 
-
     layouts, remaining, score = optimize_multiple_sheets(parts_to_cut, stock_sheets, config, optional_stock_parts, is_stock_only_job)
     return layouts, remaining, score, parts_to_cut
 
-# ... other functions (standardize_layouts, prepare_results_for_render, etc.) are unchanged ...
 def _calculate_live_stock_bonus(layout: dict, live_deficit_tracker: Counter, config: dict) -> float:
-    # ... no changes ...
     stock_fill_bonus = 0.0
     sheet_area = layout['sheet_info']['length'] * layout['sheet_info']['width']
     if sheet_area == 0: return 0.0
@@ -245,7 +240,6 @@ def _calculate_live_stock_bonus(layout: dict, live_deficit_tracker: Counter, con
     return stock_fill_bonus
 
 def standardize_layouts(layouts: list, initial_optional_parts: list, config: dict) -> list:
-    # ... no changes ...
     live_deficit_tracker = Counter({p['internal_ref']: int(p['target_stock'] - p['current_stock']) for p in initial_optional_parts})
     grouped_layouts = {}
     for i, layout in enumerate(layouts):
@@ -281,7 +275,6 @@ def standardize_layouts(layouts: list, initial_optional_parts: list, config: dic
     return final_layouts
 
 def prepare_results_for_render(layouts, remaining_parts, final_score, config, elapsed_time, ideal_score, score_percentage):
-    # ... no changes ...
     if not layouts: return None
     total_placed_area = sum(l['total_placed_area'] for l in layouts)
     total_sheet_area = sum(l['sheet_info']['length'] * l['sheet_info']['width'] for l in layouts)
@@ -310,7 +303,6 @@ def prepare_results_for_render(layouts, remaining_parts, final_score, config, el
     }
 
 def get_initial_optional_parts(stock_inv_df, config):
-    # ... no changes ...
     if not config['add_stock_parts'] or stock_inv_df is None: return []
     required_refs = config.get('required_stock_quantities', {}).keys()
     mask = (
@@ -328,24 +320,29 @@ def get_initial_optional_parts(stock_inv_df, config):
 def home():
     config = load_config()
     optimization_result, hhos_file_contents, all_stock_parts_list, all_offcuts_list = None, [], [], []
-    all_hhos_part_ids = []
     
     if request.method == 'POST':
         config = update_config_from_form(config, request.form)
         save_config(config)
         flash("Configuration saved successfully!", "success")
 
-    # This block populates the file preview accordions and gathers all possible part IDs
+    all_hhos_part_ids = []
     for hhos_file in config.get('hhos_files', []):
         path = hhos_file.get('path')
         content_item = {'path': path, 'parts': [], 'error': None}
         if path and os.path.exists(path):
             try:
-                # Use a temporary df to generate IDs for the template
                 temp_df = extract_hhos_data(pd.read_csv(path, header=None))
                 temp_df['quantity'] *= hhos_file.get('multiplier', 1)
                 temp_df['unique_id'] = [f"{path}_{i}" for i in range(len(temp_df))]
                 all_hhos_part_ids.extend(temp_df['unique_id'].tolist())
+                
+                part_quantities = config.get('part_quantities', {})
+                if part_quantities:
+                    temp_df['quantity'] = temp_df.apply(
+                        lambda row: part_quantities.get(row['unique_id'], row['quantity']),
+                        axis=1
+                    )
                 content_item['parts'] = temp_df.to_dict('records')
             except Exception as e:
                 content_item['error'] = str(e)
@@ -353,9 +350,12 @@ def home():
             content_item['error'] = "File not found."
         hhos_file_contents.append(content_item)
 
-    # --- NEW: Default to selecting all HHOS parts if none are specified ---
-    if all_hhos_part_ids and not config.get('selected_hhos_parts'):
-        config['selected_hhos_parts'] = all_hhos_part_ids
+    # --- CORRECTED LOGIC FOR DEFAULT SELECTION ---
+    if request.method == 'GET' and all_hhos_part_ids:
+        # On a GET request, if the loaded config has no selections, default to all.
+        # This preserves saved selections and handles the true default case.
+        if not config.get('selected_hhos_parts'):
+            config['selected_hhos_parts'] = all_hhos_part_ids
 
     try:
         hhos_df, offcut_df, stock_inv_df = process_uploaded_files(
