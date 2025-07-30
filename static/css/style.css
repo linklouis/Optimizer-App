@@ -4,6 +4,7 @@
     /* Light Theme */
     --bg-primary: #f4f7fc;
     --bg-secondary: #ffffff;
+    --bg-secondary-rgb: 255, 255, 255;
     --text-primary: #1a202c;
     --text-secondary: #4a5568;
     --border-color: #e2e8f0;
@@ -28,6 +29,7 @@
 body.dark-mode {
     --bg-primary: #111827;
     --bg-secondary: #1f2937;
+    --bg-secondary-rgb: 31, 41, 55;
     --text-primary: #f9fafb;
     --text-secondary: #9ca3af;
     --border-color: #374151;
@@ -78,12 +80,25 @@ header h1 { margin: 0; font-size: 1.75rem; font-weight: 700; display: flex; alig
     transition: background-color 0.2s, border-color 0.2s;
 }
 .card-title { margin: 0 0 1rem; font-size: 1.125rem; font-weight: 600; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem;}
-.card-title i { color: var(--primary); }
+.card-title i { 
+    color: var(--primary); 
+    width: 20px;
+    text-align: center;
+}
 .config-form { display: flex; flex-direction: column; gap: 1.5rem; }
 .settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 1.5rem; }
 
 /* --- Tabs --- */
-.tabs-container { border-bottom: 1px solid var(--border-color); margin-bottom: 1.5rem; }
+.tabs-container { 
+    border-bottom: 1px solid var(--border-color); 
+    margin-bottom: 1.5rem; 
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background-color: var(--bg-primary);
+    transition: background-color 0.2s;
+    box-shadow: 0 4px 6px -1px var(--shadow-color);
+}
 .tabs { display: flex; gap: 0.25rem; }
 .tab-button {
     padding: 0.75rem 1.5rem; border: 1px solid transparent; border-bottom: 0; background-color: transparent; color: var(--text-secondary);
@@ -92,11 +107,15 @@ header h1 { margin: 0; font-size: 1.75rem; font-weight: 700; display: flex; alig
 }
 .tab-button:hover { color: var(--primary); }
 .tab-button.active { background-color: var(--bg-secondary); color: var(--primary); border-color: var(--border-color); font-weight: 600; }
-.tab-content { display: none; }
+.tab-content { 
+    display: none;
+    /* --- MODIFIED: Required for overlay positioning --- */
+    position: relative; 
+}
 .tab-content.active { display: block; animation: fadeIn 0.5s; }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-/* --- NEW: Styles for Collapsible Card Sections --- */
+/* --- Styles for Collapsible Card Sections --- */
 .collapsible-section summary {
     list-style: none;
     cursor: pointer;
@@ -235,6 +254,48 @@ th .select-all-parts-in-file { cursor: pointer; }
 .offcut-label { font-size: 3px; fill: var(--text-primary); font-weight: 500; }
 .inner-dim-text { font-size: 2px; fill: var(--text-primary); opacity: 0.7; }
 .cut-line { stroke: magenta; stroke-width: 0.4; stroke-linecap: round; opacity: 0.7; }
+
+/* --- Loading Indicator --- */
+.loading-overlay {
+    position: absolute;
+    inset: 0;
+    background-color: rgba(var(--bg-secondary-rgb), 0.8);
+    backdrop-filter: blur(4px);
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    border-radius: 0 0 0.75rem 0.75rem;
+    padding: 2rem;
+}
+.loading-overlay .loading-content {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 0.5rem;
+}
+.loading-overlay h3 {
+    margin: 0;
+}
+.loading-overlay p {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+.spinner {
+    border: 5px solid var(--border-color);
+    border-top: 5px solid var(--primary);
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    animation: spin 1s linear infinite;
+}
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
 
 /* --- Alerts & Messages --- */
 .flash-messages { display: flex; flex-direction: column; gap: 1rem; }

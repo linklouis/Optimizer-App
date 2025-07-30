@@ -2,7 +2,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
     /**
      * --- Tabbed Interface ---
-     * Uses event delegation for efficiency.
      */
     const tabsContainer = document.querySelector('.tabs');
     if (tabsContainer) {
@@ -22,15 +21,32 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     /**
-     * --- Dark Mode Toggle ---
+     * --- Dark Mode Toggle with Persistence ---
      */
     const themeToggle = document.getElementById('darkmode-toggle');
+    const darkModeInput = document.getElementById('dark_mode_state');
+
+    function setTheme(isDark) {
+        document.body.classList.toggle('dark-mode', isDark);
+        if(themeToggle) themeToggle.checked = isDark;
+        if(darkModeInput) darkModeInput.value = isDark ? 'on' : 'off';
+    }
+
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme !== null) {
+        setTheme(savedTheme === 'dark');
+    } else {
+        if(themeToggle) themeToggle.checked = document.body.classList.contains('dark-mode');
+    }
+
     if (themeToggle) {
         themeToggle.addEventListener('change', function() {
-            document.body.classList.toggle('dark-mode', this.checked);
-            document.getElementById('dark_mode_state').value = this.checked ? 'on' : 'off';
+            const isDark = this.checked;
+            setTheme(isDark);
+            localStorage.setItem('theme', isDark ? 'dark' : 'light');
         });
     }
+
 
     /**
      * --- Stock Part Selection ---
@@ -67,7 +83,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     /**
-     * --- NEW: Loaded Part Selection ---
+     * --- Loaded Part Selection ---
      */
     const loadedPartsAccordion = document.getElementById('loaded-parts-accordion');
     if (loadedPartsAccordion) {
@@ -136,6 +152,31 @@ document.addEventListener('DOMContentLoaded', function() {
             if (removeBtn) {
                 if (hhosList.querySelectorAll('.file-input-group').length > 1) {
                     removeBtn.parentElement.remove();
+                }
+            }
+        });
+    }
+
+    /**
+     * --- NEW: Loading Indicator on Form Submit ---
+     */
+    const configForm = document.querySelector('.config-form');
+    const resultsTabButton = document.querySelector('.tab-button[data-tab="results"]');
+    const loadingOverlay = document.getElementById('loading-overlay');
+
+    if (configForm) {
+        configForm.addEventListener('submit', () => {
+            const hhosInputs = document.querySelectorAll('input[name="hhos_paths"]');
+            const hasHhosFile = Array.from(hhosInputs).some(input => input.value.trim() !== '');
+            const requiredQtyInputs = document.querySelectorAll('.required-qty-input');
+            const hasRequiredStock = Array.from(requiredQtyInputs).some(input => input.value.trim() !== '' && parseInt(input.value) > 0);
+
+            if (hasHhosFile || hasRequiredStock) {
+                if (loadingOverlay) {
+                    loadingOverlay.style.display = 'flex';
+                }
+                if (resultsTabButton && !resultsTabButton.classList.contains('active')) {
+                    resultsTabButton.click();
                 }
             }
         });

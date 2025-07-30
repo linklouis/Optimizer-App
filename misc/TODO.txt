@@ -9,24 +9,24 @@ FEATURES
         - ✓ Each sheet layout should only be displayed once, and also have a multiplier.
         - ✓ -> Using % of sheets, doesn't consider the actual ammount of material each layout wastes.
           Probably means it doesn't try as many other sheets, since a smaller one might have a higher % of waste, but actually waste less material.
+        - ✓ Allow user to select what offcuts to consider like the stock parts
+        - ✓ Allow specific parts to be removed from a job
+        - ✓ Page to display all available offcuts
 
         - Allow uploading a temp Offcut List that doesn't override the current one?
         - Save offcuts
         - Clear Offcut List File input space after optimization
         - Notes section for offcuts
-        - Allow user to select what offcuts to consider like the stock parts
         - Add description of scoring weight/all settings on hover
         - Multiple parts list files
         - Tell user when the files they're pointing to don't exist
-        - Allow specific parts to be removed from a job
         - Be able to click on stock parts and remove them from the sheet layout
         - Allow the quantity of a given layout to be adjusted manually after optimization?
         - Way to automatically stop when the score is sufficient? Maybe calculate the 
-        - Page to display all available offcuts
-        - Add time limiting as a toggleable option
+        - Make time limiting a toggleable option
         - Be aware of whether the parts in an HHOS file are labeled as stock for checking if a sheet is only stock parts
         - [ASK] Make a way to automatically pick all of the most needed stock parts for a stock-only job?
-        - Reset required stock part quantity button?
+        - Add button to reset required stock part quantity?
         - Add reset weights button
     
     Optimizer
@@ -59,6 +59,7 @@ BUGS
     - Adding a new HHOS file doesn't make it pop up in the Loaded Parts List until after optimization
     - Stock part standardizing doesn't affect final score.
     - Does the priority offcut bonus affect the ideal score?
+    - Only clicking on the center of a closed dropdown opens it, not the bottom
 
 IDEAS
     - X Try every combination of cut order for every sheet? 
@@ -87,3 +88,4 @@ QUESTIONS
     - X We can always standardize the stock part layout, but for a big job, that might have us make way more of a stock part than we need.
     
     - Always rotate labels to be on the widest axis, or just when they don't fit?
+    - Should the top configurator sections be open or closed by default?

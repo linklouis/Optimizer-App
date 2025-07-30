@@ -278,6 +278,14 @@
             </div>
 
             <div id="results" class="tab-content">
+                <div id="loading-overlay" style="display: none;">
+                    <div class="loading-content">
+                        <div class="spinner"></div>
+                        <h3>Optimizing Layouts...</h3>
+                    </div>
+                    <p>This may take a few moments, especially for complex jobs.</p>
+                </div>
+
                  {% if result and result.layouts %}
                     <section class="results-summary">
                         <div class="summary-metric">
