@@ -159,10 +159,9 @@
                                 <div><label for="default_width">Default Width</label><input type="number" step="any" id="default_width" name="default_width" value="{{ config.default_width }}"></div>
                                 <div><label for="kerf">Kerf (Saw Blade)</label><input type="number" step="any" id="kerf" name="kerf" value="{{ config.kerf }}"></div>
                                 <div><label for="min_offcut_dim">Min. Usable Offcut</label><input type="number" step="any" id="min_offcut_dim" name="min_offcut_dim" value="{{ config.min_offcut_dim }}"></div>
-                                <div><label for="search_time_limit">Search Time (s)</label><input type="number" step="any" id="search_time_limit" name="search_time_limit" value="{{ config.search_time_limit }}"></div>
                                 <div>
-                                    <label for="beam_width">Beam Width <span class="tooltip" data-tooltip="Width of the search beam. 1 = greedy search. >1 explores more paths but is slower.">[?]</span></label>
-                                    <input type="number" step="1" min="1" id="beam_width" name="beam_width" value="{{ config.beam_width }}">
+                                    <label for="search_time_limit">Search Time (s) <span class="tooltip" data-tooltip="Total time for the optimizer to run. Longer times allow for a more thorough search and better results.">[?]</span></label>
+                                    <input type="number" step="any" id="search_time_limit" name="search_time_limit" value="{{ config.search_time_limit }}">
                                 </div>
                             </div>
                             <div class="checkbox-grid">

@@ -64,6 +64,7 @@
     "w_stock_fill": 5.0,
     "w_unique_layouts": 3.0,
     "standardize_stock_layouts": false,
+    "beam_width": null,
     "w_layout_variety": null,
     "w_layouts": 3.0,
     "hhos_path": "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv",
