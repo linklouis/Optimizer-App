@@ -18,8 +18,8 @@
     "min_offcut_dim": 12.0,
     "use_offcuts": true,
     "add_stock_parts": true,
-    "search_time_limit": 100.0,
-    "branching_factor": 10,
+    "search_time_limit": 300.0,
+    "branching_factor": 5,
     "selected_stock_parts": [
         "OSB-15-126126",
         "OSB-15-140126",
@@ -56,9 +56,7 @@
         "OSB-15-898478",
         "OSB-15-958238"
     ],
-    "required_stock_quantities": {
-        "OSB-15-140126": 3
-    },
+    "required_stock_quantities": {},
     "dark_mode": false,
     "w_waste": 1.0,
     "w_offcut": 0.5,

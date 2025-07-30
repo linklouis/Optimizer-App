@@ -5,6 +5,7 @@ import pandas as pd
 import traceback
 import time
 from collections import Counter
+import math
 
 from data_processing import process_uploaded_files, extract_hhos_data
 from optimizer import (
@@ -81,10 +82,80 @@ def update_config_from_form(config, form_data):
     
     return config
 
+# --- Scoring Logic ---
+def calculate_ideal_score(parts_to_cut, optional_stock_parts, offcut_df, config):
+    """Calculates a more sophisticated theoretical ideal score."""
+    # 1. Create the full "ideal" list of all parts to be made.
+    ideal_part_list = parts_to_cut + optional_stock_parts
+    if not ideal_part_list:
+        return 0.0
+
+    # 2. Calculate total area and count for ALL ideal parts.
+    total_ideal_part_area = sum(p['length'] * p['width'] * p.get('quantity', 1) for p in ideal_part_list)
+    total_ideal_part_count = sum(p.get('quantity', 1) for p in ideal_part_list)
+
+    # 3. Calculate ideal sheet usage and associated bonuses/penalties.
+    ideal_sheets_penalty = 0.0
+    ideal_quantity_bonus = 0.0
+    remaining_area_to_place = total_ideal_part_area
+    num_unique_layouts = 0
+    unavoidable_waste_area = 0.0
+    
+    # --- Use offcuts first ---
+    if config.get('use_offcuts') and offcut_df is not None and not offcut_df.empty:
+        offcuts = offcut_df.copy()
+        offcuts['area'] = offcuts['length'] * offcuts['width']
+        offcuts = offcuts.sort_values(by='area', ascending=False).to_dict('records')
+        
+        num_used_offcuts = 0
+        for offcut in offcuts:
+            if remaining_area_to_place <= 0: break
+            for _ in range(int(offcut.get('quantity', 1))):
+                if remaining_area_to_place <= 0: break
+                remaining_area_to_place -= offcut['area']
+                num_used_offcuts += 1
+                ideal_quantity_bonus += offcut.get('quantity', 1) * config.get('w_quantity', 0.1)
+        
+        if num_used_offcuts > 0:
+            ideal_sheets_penalty += num_used_offcuts * config.get('w_sheets', 1.0)
+            num_unique_layouts += 1 # Assume one unique layout type for all offcuts
+
+    # --- Use default sheets for the rest ---
+    reference_area = config.get('default_length', 96) * config.get('default_width', 48)
+    if reference_area > 0 and remaining_area_to_place > 0:
+        min_default_sheets = math.ceil(remaining_area_to_place / reference_area)
+        ideal_sheets_penalty += min_default_sheets * config.get('w_sheets', 1.0)
+        unavoidable_waste_area = (min_default_sheets * reference_area) - remaining_area_to_place
+        if min_default_sheets > 0:
+            num_unique_layouts += 1
+            
+    # 4. Calculate penalties
+    ideal_waste_penalty = (unavoidable_waste_area / reference_area) * config.get('w_waste', 1.0) if reference_area > 0 else 0
+    ideal_offcut_penalty = 0.0
+    ideal_cuts_penalty = total_ideal_part_count * config.get('w_cuts', 0.2)
+    ideal_unique_layouts_penalty = num_unique_layouts * config.get('w_unique_layouts', 0.5)
+    total_ideal_penalty = ideal_waste_penalty + ideal_offcut_penalty + ideal_cuts_penalty + ideal_sheets_penalty + ideal_unique_layouts_penalty
+
+    # 5. Calculate bonuses
+    ideal_stock_fill_bonus = 0.0
+    if reference_area > 0:
+        for part in ideal_part_list:
+            if part.get('is_stock_part'):
+                deficit = part.get('target_stock', 1) - part.get('current_stock', 0)
+                target = part.get('target_stock', 0)
+                if target > 0 and deficit > 0:
+                    part_area = part['length'] * part['width']
+                    bonus_per_item = (deficit / target) * (part_area / reference_area) * config.get('w_stock_fill', 1.0)
+                    ideal_stock_fill_bonus += bonus_per_item * part.get('quantity', 1)
+
+    total_ideal_bonus = ideal_stock_fill_bonus + ideal_quantity_bonus
+    
+    # 6. Final Score
+    return total_ideal_bonus - total_ideal_penalty
+
 # --- Main Application Logic ---
 def run_optimization(config, hhos_df, offcut_df, stock_inv_df):
     hhos_parts = hhos_df.to_dict('records') if hhos_df is not None and not hhos_df.empty else []
-    # Mark HHOS parts as not optional
     for part in hhos_parts:
         part['is_optional_filler'] = False
 
@@ -93,33 +164,25 @@ def run_optimization(config, hhos_df, offcut_df, stock_inv_df):
     
     if stock_inv_df is not None:
         required_qtys = config.get('required_stock_quantities', {})
-        
-        # Process required stock parts
         for ref_id, qty in required_qtys.items():
             part_series = stock_inv_df[stock_inv_df['internal_ref'] == ref_id]
             if not part_series.empty:
                 part_dict = part_series.iloc[0].to_dict()
                 part_dict['quantity'] = qty
                 part_dict['is_stock_part'] = True
-                part_dict['is_optional_filler'] = False # FIXED: Mark as NOT optional
+                part_dict['is_optional_filler'] = False
                 part_dict['label'] = part_dict.get('part_name_clean', 'STOCK')
                 required_stock_parts.append(part_dict)
                 
-        # Process optional stock parts (for filling gaps)
         if config['add_stock_parts']:
-            mask = (
-                stock_inv_df['internal_ref'].isin(config['selected_stock_parts'])) & \
-                (stock_inv_df['current_stock'] < stock_inv_df['target_stock']) & \
-                (~stock_inv_df['internal_ref'].isin(required_qtys.keys())
-            )
+            mask = (stock_inv_df['internal_ref'].isin(config['selected_stock_parts'])) & (stock_inv_df['current_stock'] < stock_inv_df['target_stock']) & (~stock_inv_df['internal_ref'].isin(required_qtys.keys()))
             needy_stock = stock_inv_df[mask].copy()
             if not needy_stock.empty:
                 needy_stock['is_stock_part'] = True
-                needy_stock['is_optional_filler'] = True # FIXED: Mark as optional
+                needy_stock['is_optional_filler'] = True
                 optional_stock_parts = needy_stock.to_dict('records')
 
     parts_to_cut = hhos_parts + required_stock_parts
-            
     is_stock_only_job = not parts_to_cut and optional_stock_parts
 
     stock_sheets = [{'id': 'default_sheet', 'length': config['default_length'], 'width': config['default_width'], 'quantity': float('inf'), 'type': 'Default'}]
@@ -129,7 +192,8 @@ def run_optimization(config, hhos_df, offcut_df, stock_inv_df):
         offcuts_with_id['type'] = 'Offcut'
         stock_sheets.extend(offcuts_with_id.to_dict('records'))
 
-    return optimize_multiple_sheets(parts_to_cut, stock_sheets, config, optional_stock_parts, is_stock_only_job)
+    layouts, remaining, score = optimize_multiple_sheets(parts_to_cut, stock_sheets, config, optional_stock_parts, is_stock_only_job)
+    return layouts, remaining, score, parts_to_cut
 
 
 def _calculate_live_stock_bonus(layout: dict, live_deficit_tracker: Counter, config: dict) -> float:
@@ -182,7 +246,7 @@ def standardize_layouts(layouts: list, initial_optional_parts: list, config: dic
     return final_layouts
 
 
-def prepare_results_for_render(layouts, remaining_parts, final_score, config, elapsed_time):
+def prepare_results_for_render(layouts, remaining_parts, final_score, config, elapsed_time, ideal_score, score_percentage):
     """Processes and groups layout data for Jinja rendering."""
     if not layouts: return None
     total_placed_area = sum(l['total_placed_area'] for l in layouts)
@@ -206,8 +270,8 @@ def prepare_results_for_render(layouts, remaining_parts, final_score, config, el
             grouped_layouts[signature]['quantity'] += 1
     return {
         'layouts': list(grouped_layouts.values()), 'remaining_parts': remaining_parts,
-        'final_score': final_score, 'overall_yield': overall_yield,
-        'num_unique_layouts': len(grouped_layouts),
+        'final_score': final_score, 'ideal_score': ideal_score, 'score_percentage': score_percentage,
+        'overall_yield': overall_yield, 'num_unique_layouts': len(grouped_layouts),
         'elapsed_time': elapsed_time
     }
 
@@ -259,15 +323,28 @@ def home():
     if request.method == 'POST' and (config.get('hhos_files') or config['stock_inv_path'] or config.get('required_stock_quantities')):
         try:
             opt_start_time = time.time()
-            layouts, remaining_parts, final_score = run_optimization(config, hhos_df, offcut_df, stock_inv_df)
+            layouts, remaining_parts, final_score, parts_to_cut = run_optimization(config, hhos_df, offcut_df, stock_inv_df)
             opt_elapsed_time = time.time() - opt_start_time
             
+            initial_optional_parts = get_initial_optional_parts(stock_inv_df, config)
             final_layouts = layouts
             if config.get('standardize_stock_layouts', False) and layouts:
-                initial_optional_parts = get_initial_optional_parts(stock_inv_df, config)
                 final_layouts = standardize_layouts(layouts, initial_optional_parts, config)
-            
-            optimization_result = prepare_results_for_render(final_layouts, remaining_parts, final_score, config, opt_elapsed_time)
+
+            # --- New Score Calculation ---
+            ideal_score = calculate_ideal_score(parts_to_cut, initial_optional_parts, offcut_df, config)
+            score_percentage = 0.0
+            if final_score >= ideal_score:
+                score_percentage = 100.0
+            elif ideal_score > 0:
+                score_percentage = max(0.0, (final_score / ideal_score) * 100.0)
+            elif ideal_score < 0:
+                score_percentage = (ideal_score / final_score) * 100.0 if final_score != 0 else 0.0
+            else: # ideal_score == 0 and final_score < 0
+                score_percentage = 0.0
+            score_percentage = max(0.0, min(score_percentage, 100.0))
+
+            optimization_result = prepare_results_for_render(final_layouts, remaining_parts, final_score, config, opt_elapsed_time, ideal_score, score_percentage)
             
             if optimization_result:
                 flash("Optimization complete.", "success")

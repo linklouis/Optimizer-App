@@ -26,6 +26,8 @@ FEATURES
         - Add time limiting as a toggleable option
         - Be aware of whether the parts in an HHOS file are labeled as stock for checking if a sheet is only stock parts
         - [ASK] Make a way to automatically pick all of the most needed stock parts for a stock-only job?
+        - Reset required stock part quantity button?
+        - Add reset weights button
     
     Optimizer
         - ✓ ---> Only keep reusing a layout of stock parts until another layout is better because the number of the original stock parts needed has been filled.
@@ -37,9 +39,10 @@ FEATURES
 
     Visual
         - ✓ Add measurements to layout display
-        
+
         - Needs to look good in greyscale
         - Scaleable Manage Stock Parts section?
+        - Add loading screen/bar to results page when optimization is in progress?
 
     Code
         - 
@@ -53,6 +56,7 @@ BUGS
     - Stock text doesn't go sidways
     - Doesn't remember theme selection
     - Adding a new HHOS file doesn't make it pop up in the Loaded Parts List until after optimization
+    - Stock part standardizing doesn't affect final score.
 
 IDEAS
     - X Try every combination of cut order for every sheet? 

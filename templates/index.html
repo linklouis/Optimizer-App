@@ -230,7 +230,13 @@
             <div id="results" class="tab-content">
                  {% if result and result.layouts %}
                     <section class="results-summary">
-                        <div class="summary-metric"><span class="value">{{ result.final_score|round(2) }}</span><span class="label">Overall Score</span></div>
+                        <div class="summary-metric">
+                            <span class="value">{{ result.score_percentage|round(1) }}%</span>
+                            <span class="label">
+                                Overall Score
+                                <span class="tooltip" data-tooltip="Actual: {{ '%.2f'|format(result.final_score) }} | Ideal: {{ '%.2f'|format(result.ideal_score) }}">[?]</span>
+                            </span>
+                        </div>
                         <div class="summary-metric"><span class="value">{{ result.layouts|map(attribute='quantity')|sum }}</span><span class="label">Total Sheets Used</span></div>
                         <div class="summary-metric"><span class="value">{{ result.num_unique_layouts }}</span><span class="label">Unique Layouts</span></div>
                         <div class="summary-metric"><span class="value">{{ result.overall_yield|round(2) }}%</span><span class="label">Overall Yield</span></div>
