@@ -18,7 +18,7 @@
     "min_offcut_dim": 12.0,
     "use_offcuts": true,
     "add_stock_parts": true,
-    "search_time_limit": 20.0,
+    "search_time_limit": 30.0,
     "selected_stock_parts": [
         "OSB-15-126126",
         "OSB-15-140126",
@@ -62,7 +62,7 @@
     "w_quantity": 0.1,
     "w_sheets": 1.0,
     "w_stock_fill": 5.0,
-    "w_unique_layouts": 10.0,
+    "w_unique_layouts": 0.0,
     "standardize_stock_layouts": false,
     "beam_width": null,
     "w_layout_variety": null,

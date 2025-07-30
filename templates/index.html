@@ -218,6 +218,10 @@
                         <div class="summary-metric"><span class="value">{{ result.layouts|map(attribute='quantity')|sum }}</span><span class="label">Total Sheets Used</span></div>
                         <div class="summary-metric"><span class="value">{{ result.num_unique_layouts }}</span><span class="label">Unique Layouts</span></div>
                         <div class="summary-metric"><span class="value">{{ result.overall_yield|round(2) }}%</span><span class="label">Overall Yield</span></div>
+                        <div class="summary-metric">
+                            <span class="value">{{ '%.2f'|format(result.elapsed_time) }}s</span>
+                            <span class="label">Time Spent</span>
+                        </div>
                         <div class="summary-metric {% if result.remaining_parts|length > 0 %}is-alert{% endif %}">
                             <span class="value">{{ result.remaining_parts|length }}</span>
                             <span class="label">Parts Not Placed</span>

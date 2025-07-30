@@ -3,6 +3,7 @@ import os
 import json
 import pandas as pd
 import traceback
+import time # Imported time
 from collections import Counter
 
 from data_processing import process_uploaded_files, extract_hhos_data
@@ -144,7 +145,8 @@ def standardize_layouts(layouts: list, initial_optional_parts: list, config: dic
     return final_layouts
 
 
-def prepare_results_for_render(layouts, remaining_parts, final_score, config):
+def prepare_results_for_render(layouts, remaining_parts, final_score, config, elapsed_time):
+    """Processes and groups layout data for Jinja rendering."""
     if not layouts: return None
     total_placed_area = sum(l['total_placed_area'] for l in layouts)
     total_sheet_area = sum(l['sheet_info']['length'] * l['sheet_info']['width'] for l in layouts)
@@ -168,7 +170,8 @@ def prepare_results_for_render(layouts, remaining_parts, final_score, config):
     return {
         'layouts': list(grouped_layouts.values()), 'remaining_parts': remaining_parts,
         'final_score': final_score, 'overall_yield': overall_yield,
-        'num_unique_layouts': len(grouped_layouts)
+        'num_unique_layouts': len(grouped_layouts),
+        'elapsed_time': elapsed_time
     }
 
 def get_initial_optional_parts(stock_inv_df, config):
@@ -213,12 +216,17 @@ def home():
         hhos_df, offcut_df, stock_inv_df = pd.DataFrame(), None, None
     if request.method == 'POST' and (config.get('hhos_files') or config['stock_inv_path']):
         try:
+            opt_start_time = time.time()
             layouts, remaining_parts, final_score = run_optimization(config, hhos_df, offcut_df, stock_inv_df)
+            opt_elapsed_time = time.time() - opt_start_time
+            
             final_layouts = layouts
             if config.get('standardize_stock_layouts', False) and layouts:
                 initial_optional_parts = get_initial_optional_parts(stock_inv_df, config)
                 final_layouts = standardize_layouts(layouts, initial_optional_parts, config)
-            optimization_result = prepare_results_for_render(final_layouts, remaining_parts, final_score, config)
+            
+            optimization_result = prepare_results_for_render(final_layouts, remaining_parts, final_score, config, opt_elapsed_time)
+            
             if optimization_result:
                 flash("Optimization complete.", "success")
             elif not layouts:
