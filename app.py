@@ -27,7 +27,11 @@ DEFAULT_CONFIG = {
     'dark_mode': False,
     'w_waste': 1.0, 'w_offcut': 0.5, 'w_cuts': 0.2, 'w_quantity': 0.1,
     'w_sheets': 1.0, 'w_stock_fill': 1.0, 'w_unique_layouts': 0.5,
-    'standardize_stock_layouts': True
+    'standardize_stock_layouts': True,
+    # --- NEW: Offcut Management Config ---
+    'selected_offcuts': [],
+    'prioritized_offcuts': [],
+    'w_priority_offcut': 10.0
 }
 
 app = Flask(__name__)
@@ -77,8 +81,13 @@ def update_config_from_form(config, form_data):
             ref_id = key.replace('required_qty_', '')
             config['required_stock_quantities'][ref_id] = int(value)
 
-    for key in ['w_waste', 'w_offcut', 'w_cuts', 'w_quantity', 'w_sheets', 'w_stock_fill', 'w_unique_layouts']:
-        config[key] = form_data.get(key, type=float)
+    # --- NEW: Get offcut selections from form ---
+    config['selected_offcuts'] = form_data.getlist('selected_offcuts')
+    config['prioritized_offcuts'] = form_data.getlist('prioritized_offcuts')
+
+    for key in ['w_waste', 'w_offcut', 'w_cuts', 'w_quantity', 'w_sheets', 'w_stock_fill', 'w_unique_layouts', 'w_priority_offcut']:
+        if form_data.get(key) is not None:
+             config[key] = form_data.get(key, type=float)
     
     return config
 
@@ -103,22 +112,27 @@ def calculate_ideal_score(parts_to_cut, optional_stock_parts, offcut_df, config)
     
     # --- Use offcuts first ---
     if config.get('use_offcuts') and offcut_df is not None and not offcut_df.empty:
-        offcuts = offcut_df.copy()
-        offcuts['area'] = offcuts['length'] * offcuts['width']
-        offcuts = offcuts.sort_values(by='area', ascending=False).to_dict('records')
+        # --- MODIFIED: Use only selected offcuts for ideal calculation ---
+        selected_ids = [int(i) for i in config.get('selected_offcuts', [])]
+        available_offcuts = offcut_df.loc[offcut_df.index.isin(selected_ids)]
         
-        num_used_offcuts = 0
-        for offcut in offcuts:
-            if remaining_area_to_place <= 0: break
-            for _ in range(int(offcut.get('quantity', 1))):
+        if not available_offcuts.empty:
+            offcuts = available_offcuts.copy()
+            offcuts['area'] = offcuts['length'] * offcuts['width']
+            offcuts = offcuts.sort_values(by='area', ascending=False).to_dict('records')
+            
+            num_used_offcuts = 0
+            for offcut in offcuts:
                 if remaining_area_to_place <= 0: break
-                remaining_area_to_place -= offcut['area']
-                num_used_offcuts += 1
-                ideal_quantity_bonus += offcut.get('quantity', 1) * config.get('w_quantity', 0.1)
-        
-        if num_used_offcuts > 0:
-            ideal_sheets_penalty += num_used_offcuts * config.get('w_sheets', 1.0)
-            num_unique_layouts += 1 # Assume one unique layout type for all offcuts
+                for _ in range(int(offcut.get('quantity', 1))):
+                    if remaining_area_to_place <= 0: break
+                    remaining_area_to_place -= offcut['area']
+                    num_used_offcuts += 1
+                    ideal_quantity_bonus += offcut.get('quantity', 1) * config.get('w_quantity', 0.1)
+            
+            if num_used_offcuts > 0:
+                ideal_sheets_penalty += num_used_offcuts * config.get('w_sheets', 1.0)
+                num_unique_layouts += 1 
 
     # --- Use default sheets for the rest ---
     reference_area = config.get('default_length', 96) * config.get('default_width', 48)
@@ -186,11 +200,22 @@ def run_optimization(config, hhos_df, offcut_df, stock_inv_df):
     is_stock_only_job = not parts_to_cut and optional_stock_parts
 
     stock_sheets = [{'id': 'default_sheet', 'length': config['default_length'], 'width': config['default_width'], 'quantity': float('inf'), 'type': 'Default'}]
-    if config['use_offcuts'] and offcut_df is not None:
-        offcuts_with_id = offcut_df.copy()
-        offcuts_with_id['id'] = 'offcut_' + offcuts_with_id.index.astype(str)
-        offcuts_with_id['type'] = 'Offcut'
-        stock_sheets.extend(offcuts_with_id.to_dict('records'))
+    
+    # --- MODIFIED: Filter offcuts based on user selection ---
+    if config.get('use_offcuts') and offcut_df is not None and not offcut_df.empty:
+        selected_ids = [int(i) for i in config.get('selected_offcuts', [])]
+        # If a user provides an offcut file but has not yet saved selections, default to using all offcuts.
+        if not selected_ids and config.get('offcut_path'):
+            filtered_offcuts = offcut_df
+        else:
+            filtered_offcuts = offcut_df.loc[offcut_df.index.isin(selected_ids)]
+        
+        if not filtered_offcuts.empty:
+            offcuts_with_id = filtered_offcuts.copy()
+            offcuts_with_id['id'] = 'offcut_' + offcuts_with_id.index.astype(str)
+            offcuts_with_id['type'] = 'Offcut'
+            stock_sheets.extend(offcuts_with_id.to_dict('records'))
+
 
     layouts, remaining, score = optimize_multiple_sheets(parts_to_cut, stock_sheets, config, optional_stock_parts, is_stock_only_job)
     return layouts, remaining, score, parts_to_cut
@@ -292,11 +317,14 @@ def get_initial_optional_parts(stock_inv_df, config):
 @app.route('/', methods=['GET', 'POST'])
 def home():
     config = load_config()
-    optimization_result, hhos_file_contents, all_stock_parts_list = None, [], []
+    optimization_result, hhos_file_contents, all_stock_parts_list, all_offcuts_list = None, [], [], []
+    
     if request.method == 'POST':
         config = update_config_from_form(config, request.form)
         save_config(config)
         flash("Configuration saved successfully!", "success")
+
+    # This block populates the file preview accordions
     for hhos_file in config.get('hhos_files', []):
         path = hhos_file.get('path')
         content_item = {'path': path, 'parts': [], 'error': None}
@@ -310,6 +338,7 @@ def home():
         else:
             content_item['error'] = "File not found."
         hhos_file_contents.append(content_item)
+
     try:
         hhos_df, offcut_df, stock_inv_df = process_uploaded_files(
             config.get('hhos_files', []), config['offcut_path'], config['stock_inv_path'],
@@ -317,9 +346,22 @@ def home():
         )
         if stock_inv_df is not None:
             all_stock_parts_list = stock_inv_df.to_dict('records')
+        
+        # --- NEW: Prepare offcuts for display and default selection ---
+        if offcut_df is not None:
+            # If an offcut file is loaded for the first time, default to selecting all.
+            if not config.get('selected_offcuts') and config.get('offcut_path'):
+                config['selected_offcuts'] = [str(i) for i in offcut_df.index]
+
+            offcut_df_for_template = offcut_df.copy()
+            offcut_df_for_template['id'] = offcut_df_for_template.index.astype(str)
+            all_offcuts_list = offcut_df_for_template.to_dict('records')
+
     except Exception as e:
         flash(f"Error processing files: {e}", "danger")
+        traceback.print_exc()
         hhos_df, offcut_df, stock_inv_df = pd.DataFrame(), None, None
+
     if request.method == 'POST' and (config.get('hhos_files') or config['stock_inv_path'] or config.get('required_stock_quantities')):
         try:
             opt_start_time = time.time()
@@ -353,9 +395,12 @@ def home():
         except Exception as e:
             flash(f"An error occurred during optimization: {e}", "danger")
             traceback.print_exc()
+
     return render_template(
         'index.html', config=config, result=optimization_result, 
-        all_stock_parts=all_stock_parts_list, hhos_file_contents=hhos_file_contents
+        all_stock_parts=all_stock_parts_list, 
+        hhos_file_contents=hhos_file_contents,
+        all_offcuts=all_offcuts_list
     )
 
 if __name__ == '__main__':

@@ -35,15 +35,15 @@ document.addEventListener('DOMContentLoaded', function() {
     /**
      * --- Stock Part Selection ---
      */
-    const selectAllBtn = document.getElementById('select-all-stock');
-    const deselectAllBtn = document.getElementById('deselect-all-stock');
-    const stockSelector = document.querySelector('.stock-selector');
+    const selectAllStockBtn = document.getElementById('select-all-stock');
+    const deselectAllStockBtn = document.getElementById('deselect-all-stock');
+    const stockSelector = document.querySelector('.stock-selector:not(.offcut-selector)');
 
-    if (selectAllBtn) selectAllBtn.addEventListener('click', () => {
+    if (selectAllStockBtn) selectAllStockBtn.addEventListener('click', () => {
         stockSelector.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = true);
         stockSelector.querySelectorAll('.required-qty-input').forEach(input => input.disabled = false);
     });
-    if (deselectAllBtn) deselectAllBtn.addEventListener('click', () => {
+    if (deselectAllStockBtn) deselectAllStockBtn.addEventListener('click', () => {
         stockSelector.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
         stockSelector.querySelectorAll('.required-qty-input').forEach(input => {
             input.disabled = true;
@@ -51,7 +51,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // NEW: Event listener to enable/disable required quantity inputs
     if (stockSelector) {
         stockSelector.addEventListener('change', (e) => {
             const checkbox = e.target.closest('input[name="selected_stock_parts"]');
@@ -67,6 +66,21 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    /**
+     * --- NEW: Offcut Selection ---
+     */
+    const selectAllOffcutsBtn = document.getElementById('select-all-offcuts');
+    const deselectAllOffcutsBtn = document.getElementById('deselect-all-offcuts');
+    const offcutSelector = document.querySelector('.offcut-selector');
+
+    if (selectAllOffcutsBtn) selectAllOffcutsBtn.addEventListener('click', () => {
+        offcutSelector.querySelectorAll('input[name="selected_offcuts"]').forEach(cb => cb.checked = true);
+    });
+    if (deselectAllOffcutsBtn) deselectAllOffcutsBtn.addEventListener('click', () => {
+        offcutSelector.querySelectorAll('input[name="selected_offcuts"]').forEach(cb => cb.checked = false);
+        offcutSelector.querySelectorAll('input[name="prioritized_offcuts"]').forEach(cb => cb.checked = false);
+    });
+
 
     /**
      * --- Activate Results Tab if Data Exists ---
@@ -81,7 +95,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const hhosList = document.getElementById('hhos-file-list');
     const addHhosBtn = document.getElementById('add-hhos-file');
 
-    // Template for a new row
     const hhosRowTemplate = () => {
         const group = document.createElement('div');
         group.className = 'file-input-group';
@@ -93,19 +106,16 @@ document.addEventListener('DOMContentLoaded', function() {
         return group;
     };
 
-    // Add new row
     if (addHhosBtn) {
         addHhosBtn.addEventListener('click', () => {
             hhosList.appendChild(hhosRowTemplate());
         });
     }
 
-    // Remove row using event delegation
     if (hhosList) {
         hhosList.addEventListener('click', (e) => {
             const removeBtn = e.target.closest('.btn-remove-file');
             if (removeBtn) {
-                // Do not remove the last input group
                 if (hhosList.querySelectorAll('.file-input-group').length > 1) {
                     removeBtn.parentElement.remove();
                 }

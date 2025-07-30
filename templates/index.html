@@ -127,6 +127,35 @@
                     </section>
                     {% endif %}
                     
+                    {% if all_offcuts %}
+                    <section class="card">
+                        <div class="card-header">
+                            <h2 class="card-title"><i class="fa-solid fa-ruler-combined"></i> Manage Offcuts</h2>
+                            <div class="button-group">
+                                <button type="button" class="btn-secondary" id="select-all-offcuts">Select All</button>
+                                <button type="button" class="btn-secondary" id="deselect-all-offcuts">Deselect All</button>
+                            </div>
+                        </div>
+                        <div class="stock-selector offcut-selector">
+                            {% for offcut in all_offcuts %}
+                            <div class="stock-item">
+                                <input type="checkbox" name="selected_offcuts" id="offcut_{{ offcut.id }}" value="{{ offcut.id }}" {% if offcut.id in config.selected_offcuts %}checked{% endif %}>
+                                <div class="stock-item-details">
+                                    <strong>{{ offcut.length|round(2) }} x {{ offcut.width|round(2) }}</strong>
+                                    <span class="stock-status">(Qty: {{ offcut.quantity | int }})</span>
+                                </div>
+                                <div class="stock-item-qty">
+                                     <label class="checkbox-group" for="prio_offcut_{{ offcut.id }}">
+                                        <input type="checkbox" name="prioritized_offcuts" id="prio_offcut_{{ offcut.id }}" value="{{ offcut.id }}" {% if offcut.id in config.prioritized_offcuts %}checked{% endif %}>
+                                        Prioritize
+                                    </label>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </section>
+                    {% endif %}
+
                     {% if all_stock_parts %}
                     <section class="card">
                         <div class="card-header">
@@ -190,7 +219,7 @@
 
                         <section class="card">
                             <h2 class="card-title"><i class="fa-solid fa-balance-scale"></i> Scoring Weights</h2>
-                            <div class="form-grid">
+                            <div class="form-grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));">
                                 <div>
                                     <label for="w_waste">Waste Penalty <span class="tooltip" data-tooltip="Penalizes unusable scrap material. Higher is stricter.">[?]</span></label>
                                     <input type="number" step="any" id="w_waste" name="w_waste" value="{{ config.w_waste }}">
@@ -218,6 +247,10 @@
                                 <div>
                                     <label for="w_unique_layouts">Unique Layouts Penalty <span class="tooltip" data-tooltip="Penalizes creating many different cutting patterns. Higher values encourage reusing layouts.">[?]</span></label>
                                     <input type="number" step="any" id="w_unique_layouts" name="w_unique_layouts" value="{{ config.w_unique_layouts }}">
+                                </div>
+                                <div>
+                                    <label for="w_priority_offcut">Priority Offcut Bonus<span class="tooltip" data-tooltip="Adds a large bonus for using an offcut marked as a priority.">[?]</span></label>
+                                    <input type="number" step="any" id="w_priority_offcut" name="w_priority_offcut" value="{{ config.w_priority_offcut }}">
                                 </div>
                             </div>
                         </section>

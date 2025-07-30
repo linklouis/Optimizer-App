@@ -43,6 +43,7 @@ FEATURES
         - Needs to look good in greyscale
         - Scaleable Manage Stock Parts section?
         - Add loading screen/bar to results page when optimization is in progress?
+        - Keep Configuration and Results tabs visible when you scroll down
 
     Code
         - 

@@ -19,7 +19,6 @@ def get_layout_signature(layout: Dict[str, Any], required_only: bool = False) ->
     sig_parts = [f"sheet_{sheet_info['length']:.3f}x{sheet_info['width']:.3f}"]
 
     parts_to_sign = (
-        # FIXED: Use 'is_optional_filler' to correctly identify required parts
         [p for p in layout['placed_parts'] if not p.get('is_optional_filler', False)]
         if required_only
         else layout['placed_parts']
@@ -78,7 +77,6 @@ def calculate_layout_score(layout: Dict[str, Any], sheet_info: Dict[str, Any], w
     has_optional_parts = False
 
     for part in layout['placed_parts']:
-        # FIXED: Differentiate between required and optional parts
         if part.get('is_optional_filler', False):
             has_optional_parts = True
         else:
@@ -90,14 +88,20 @@ def calculate_layout_score(layout: Dict[str, Any], sheet_info: Dict[str, Any], w
                 part_area = part['length'] * part['width']
                 stock_fill_bonus += (deficit / part['target_stock']) * (part_area / sheet_area) * weights.get('w_stock_fill', 1.0)
     
-    # Prevent creating layouts that only contain optional filler parts
     if not has_required_parts and has_optional_parts and not is_stock_only_job:
         return -float('inf')
 
     quantity_bonus = (sheet_info.get('quantity', 1) * weights.get('w_quantity', 0.1)) if sheet_info.get('type') != 'Default' else 0
     cuts_penalty = len(layout['placed_parts']) * weights.get('w_cuts', 0.2)
 
-    return area_based_score + stock_fill_bonus + quantity_bonus - cuts_penalty
+    # --- NEW: Add bonus for prioritized offcuts ---
+    priority_bonus = 0.0
+    if sheet_info.get('type') == 'Offcut':
+        offcut_id_str = str(sheet_info.get('id', '')).replace('offcut_', '')
+        if offcut_id_str in weights.get('prioritized_offcuts', []):
+            priority_bonus = weights.get('w_priority_offcut', 10.0)
+
+    return area_based_score + stock_fill_bonus + quantity_bonus - cuts_penalty + priority_bonus
 
 
 def _get_split_penalty(rect1: Rect, rect2: Rect) -> float:
