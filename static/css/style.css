@@ -96,6 +96,46 @@ header h1 { margin: 0; font-size: 1.75rem; font-weight: 700; display: flex; alig
 .tab-content.active { display: block; animation: fadeIn 0.5s; }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
+/* --- NEW: Styles for Collapsible Card Sections --- */
+.collapsible-section summary {
+    list-style: none;
+    cursor: pointer;
+}
+.collapsible-section summary::-webkit-details-marker {
+    display: none;
+}
+.collapsible-section > summary.card-title {
+    padding-bottom: 0;
+    border-bottom: none;
+    margin-bottom: 0;
+    width: 100%;
+}
+.collapsible-section[open] > summary.card-title {
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 1rem;
+}
+.collapsible-section .collapsible-content {
+    padding-top: 1rem;
+}
+details:not([open]) .collapsible-content {
+    display: none;
+}
+.collapsible-section > summary.card-title::after {
+    content: '\f078';
+    font-family: 'Font Awesome 6 Free';
+    font-weight: 900;
+    margin-left: auto;
+    transition: transform 0.3s ease;
+    padding-left: 1rem;
+}
+.collapsible-section[open] > summary.card-title::after {
+    transform: rotate(180deg);
+}
+.card-header {
+    margin-bottom: 1rem;
+}
+
 /* --- Forms & Inputs --- */
 .form-label { display: block; margin-bottom: 0.5rem; font-weight: 600; font-size: 0.9rem; color: var(--text-primary); }
 .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }
@@ -139,7 +179,6 @@ input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 2px
 .tooltip:hover::before { opacity: 1; }
 
 /* --- Stock Selector --- */
-.card-header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 1rem; }
 .card-header .card-title { margin: 0; border: 0; padding: 0; }
 .button-group { display: flex; gap: 0.5rem; }
 .btn-secondary { background: none; border: 1px solid var(--border-color); color: var(--text-secondary); padding: 0.25rem 0.5rem; font-size: 0.8rem; border-radius: 0.25rem; cursor: pointer; transition: all 0.2s; }
@@ -150,7 +189,6 @@ input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 2px
 .stock-item-details { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; flex-grow: 1; }
 .stock-status { color: var(--secondary); font-size: 0.875rem; }
 
-/* NEW: Styles for required quantity input */
 .stock-item-qty { display: flex; align-items: center; gap: 0.5rem; }
 .stock-item-qty label { margin: 0; font-size: 0.8rem; }
 .stock-item-qty .required-qty-input { width: 70px; text-align: center; padding: 0.3rem 0.5rem; }
@@ -173,6 +211,8 @@ table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
 th, td { padding: 0.5rem; text-align: left; border-bottom: 1px solid var(--border-color); }
 th { font-weight: 600; }
 tbody tr:last-child td { border-bottom: none; }
+th:first-child, td:first-child { text-align: center; }
+th .select-all-parts-in-file { cursor: pointer; }
 
 /* --- Results --- */
 .results-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }

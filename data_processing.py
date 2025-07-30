@@ -87,13 +87,14 @@ def process_uploaded_files(hhos_files: list, offcut_path: str, stock_inv_path: s
     offcut_df, stock_inv_df = None, None
     
     try:
-        # --- NEW: Process list of HHOS files with multipliers ---
         for hhos_file in hhos_files:
             path = hhos_file.get('path')
             multiplier = hhos_file.get('multiplier', 1)
             if path and os.path.exists(path):
                 hhos_subset_df = extract_hhos_data(pd.read_csv(path, header=None))
                 hhos_subset_df['quantity'] = hhos_subset_df['quantity'] * multiplier
+                # --- NEW: Add a unique ID to each part row ---
+                hhos_subset_df['unique_id'] = [f"{path}_{i}" for i in range(len(hhos_subset_df))]
                 all_hhos_parts.append(hhos_subset_df)
         
         hhos_df = pd.concat(all_hhos_parts, ignore_index=True) if all_hhos_parts else pd.DataFrame()

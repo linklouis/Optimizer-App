@@ -47,148 +47,165 @@
                     {% endwith %}
 
                     <section class="card">
-                        <h2 class="card-title"><i class="fa-solid fa-file-alt"></i> File Paths</h2>
-                        
-                        <div id="hhos-file-list" class="dynamic-file-list">
-                            <label class="form-label">HHOS Part Lists</label>
-                            {% if config.hhos_files %}
-                                {% for file in config.hhos_files %}
-                                <div class="file-input-group">
-                                    <input type="text" name="hhos_paths" placeholder="Path to HHOS file..." value="{{ file.path }}">
-                                    <input type="number" name="hhos_multipliers" class="multiplier-input" value="{{ file.multiplier }}" min="1">
-                                    <button type="button" class="btn-remove-file"><i class="fa-solid fa-trash"></i></button>
+                        <details class="collapsible-section" open>
+                            <summary class="card-title"><i class="fa-solid fa-file-alt"></i> File Paths</summary>
+                            <div class="collapsible-content">
+                                <div id="hhos-file-list" class="dynamic-file-list">
+                                    <label class="form-label">HHOS Part Lists</label>
+                                    {% if config.hhos_files %}
+                                        {% for file in config.hhos_files %}
+                                        <div class="file-input-group">
+                                            <input type="text" name="hhos_paths" placeholder="Path to HHOS file..." value="{{ file.path }}">
+                                            <input type="number" name="hhos_multipliers" class="multiplier-input" value="{{ file.multiplier }}" min="1">
+                                            <button type="button" class="btn-remove-file"><i class="fa-solid fa-trash"></i></button>
+                                        </div>
+                                        {% endfor %}
+                                    {% else %}
+                                        <div class="file-input-group">
+                                            <input type="text" name="hhos_paths" placeholder="Path to HHOS file...">
+                                            <input type="number" name="hhos_multipliers" class="multiplier-input" value="1" min="1">
+                                            <button type="button" class="btn-remove-file"><i class="fa-solid fa-trash"></i></button>
+                                        </div>
+                                    {% endif %}
                                 </div>
-                                {% endfor %}
-                            {% else %}
-                                <div class="file-input-group">
-                                    <input type="text" name="hhos_paths" placeholder="Path to HHOS file...">
-                                    <input type="number" name="hhos_multipliers" class="multiplier-input" value="1" min="1">
-                                    <button type="button" class="btn-remove-file"><i class="fa-solid fa-trash"></i></button>
-                                </div>
-                            {% endif %}
-                        </div>
-                        <button type="button" id="add-hhos-file" class="btn-add-file"><i class="fa-solid fa-plus"></i> Add HHOS File</button>
-                        
-                        <hr class="form-divider">
+                                <button type="button" id="add-hhos-file" class="btn-add-file"><i class="fa-solid fa-plus"></i> Add HHOS File</button>
+                                
+                                <hr class="form-divider">
 
-                        <div class="form-grid">
-                            <div><label for="stock_inv_path">Stock Part Inventory</label><input type="text" id="stock_inv_path" name="stock_inv_path" value="{{ config.stock_inv_path }}"></div>
-                            <div><label for="offcut_path">Offcut List (Optional)</label><input type="text" id="offcut_path" name="offcut_path" value="{{ config.offcut_path }}"></div>
-                        </div>
+                                <div class="form-grid">
+                                    <div><label for="stock_inv_path">Stock Part Inventory</label><input type="text" id="stock_inv_path" name="stock_inv_path" value="{{ config.stock_inv_path }}"></div>
+                                    <div><label for="offcut_path">Offcut List (Optional)</label><input type="text" id="offcut_path" name="offcut_path" value="{{ config.offcut_path }}"></div>
+                                </div>
+                            </div>
+                        </details>
                     </section>
                     
                     {% if hhos_file_contents %}
                     <section class="card">
-                        <h2 class="card-title"><i class="fa-solid fa-list-check"></i> Loaded Part Lists</h2>
-                        <div class="accordion">
-                            {% for file_content in hhos_file_contents %}
-                            <details class="accordion-item">
-                                <summary class="accordion-header">
-                                    <span class="accordion-title">{{ file_content.path.split('/')[-1].split('\\')[-1] }}</span>
-                                    {% if file_content.error %}
-                                        <span class="status-badge error">Error: {{ file_content.error }}</span>
-                                    {% else %}
-                                        <span class="status-badge success">{{ file_content.parts|length }} Parts</span>
-                                    {% endif %}
-                                </summary>
-                                <div class="accordion-content">
-                                    {% if not file_content.error and file_content.parts %}
-                                    <div class="table-container">
-                                        <table>
-                                            <thead>
-                                                <tr>
-                                                    <th>Material</th>
-                                                    <th>Length</th>
-                                                    <th>Width</th>
-                                                    <th>Qty</th>
-                                                    <th>Crate (Part Name)</th>
-                                                    <th>Ref (Label)</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {% for part in file_content.parts %}
-                                                <tr>
-                                                    <td>{{ part.material }}</td>
-                                                    <td>{{ part.length }}</td>
-                                                    <td>{{ part.width }}</td>
-                                                    <td>{{ part.quantity|int }}</td>
-                                                    <td>{{ part.part_name }}</td>
-                                                    <td>{{ part.label }}</td>
-                                                </tr>
-                                                {% endfor %}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                    {% endif %}
+                         <details class="collapsible-section" open>
+                            <summary class="card-title"><i class="fa-solid fa-list-check"></i> Loaded Part Lists</summary>
+                            <div class="collapsible-content">
+                                <div class="accordion" id="loaded-parts-accordion">
+                                    {% for file_content in hhos_file_contents %}
+                                    <details class="accordion-item" open>
+                                        <summary class="accordion-header">
+                                            <span class="accordion-title">{{ file_content.path.split('/')[-1].split('\\')[-1] }}</span>
+                                            {% if file_content.error %}
+                                                <span class="status-badge error">Error: {{ file_content.error }}</span>
+                                            {% else %}
+                                                <span class="status-badge success">{{ file_content.parts|length }} Parts</span>
+                                            {% endif %}
+                                        </summary>
+                                        <div class="accordion-content">
+                                            {% if not file_content.error and file_content.parts %}
+                                            <div class="table-container">
+                                                <table>
+                                                    <thead>
+                                                        <tr>
+                                                            <th><input type="checkbox" class="select-all-parts-in-file" title="Select/Deselect All in this File"></th>
+                                                            <th>Material</th>
+                                                            <th>Length</th>
+                                                            <th>Width</th>
+                                                            <th>Qty</th>
+                                                            <th>Crate (Part Name)</th>
+                                                            <th>Ref (Label)</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {% for part in file_content.parts %}
+                                                        <tr>
+                                                            <td><input type="checkbox" name="selected_hhos_parts" value="{{ part.unique_id }}" {% if part.unique_id in config.selected_hhos_parts %}checked{% endif %}></td>
+                                                            <td>{{ part.material }}</td>
+                                                            <td>{{ part.length }}</td>
+                                                            <td>{{ part.width }}</td>
+                                                            <td>{{ part.quantity|int }}</td>
+                                                            <td>{{ part.part_name }}</td>
+                                                            <td>{{ part.label }}</td>
+                                                        </tr>
+                                                        {% endfor %}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                            {% endif %}
+                                        </div>
+                                    </details>
+                                    {% endfor %}
                                 </div>
-                            </details>
-                            {% endfor %}
-                        </div>
+                            </div>
+                        </details>
                     </section>
                     {% endif %}
                     
                     {% if all_offcuts %}
                     <section class="card">
-                        <div class="card-header">
-                            <h2 class="card-title"><i class="fa-solid fa-ruler-combined"></i> Manage Offcuts</h2>
-                            <div class="button-group">
-                                <button type="button" class="btn-secondary" id="select-all-offcuts">Select All</button>
-                                <button type="button" class="btn-secondary" id="deselect-all-offcuts">Deselect All</button>
-                            </div>
-                        </div>
-                        <div class="stock-selector offcut-selector">
-                            {% for offcut in all_offcuts %}
-                            <div class="stock-item">
-                                <input type="checkbox" name="selected_offcuts" id="offcut_{{ offcut.id }}" value="{{ offcut.id }}" {% if offcut.id in config.selected_offcuts %}checked{% endif %}>
-                                <div class="stock-item-details">
-                                    <strong>{{ offcut.length|round(2) }} x {{ offcut.width|round(2) }}</strong>
-                                    <span class="stock-status">(Qty: {{ offcut.quantity | int }})</span>
+                        <details class="collapsible-section" open>
+                            <summary class="card-title"><i class="fa-solid fa-ruler-combined"></i> Manage Offcuts</summary>
+                             <div class="collapsible-content">
+                                <div class="card-header">
+                                    <div class="button-group">
+                                        <button type="button" class="btn-secondary" id="select-all-offcuts">Select All</button>
+                                        <button type="button" class="btn-secondary" id="deselect-all-offcuts">Deselect All</button>
+                                    </div>
                                 </div>
-                                <div class="stock-item-qty">
-                                     <label class="checkbox-group" for="prio_offcut_{{ offcut.id }}">
-                                        <input type="checkbox" name="prioritized_offcuts" id="prio_offcut_{{ offcut.id }}" value="{{ offcut.id }}" {% if offcut.id in config.prioritized_offcuts %}checked{% endif %}>
-                                        Prioritize
-                                    </label>
+                                <div class="stock-selector offcut-selector">
+                                    {% for offcut in all_offcuts %}
+                                    <div class="stock-item">
+                                        <input type="checkbox" name="selected_offcuts" id="offcut_{{ offcut.id }}" value="{{ offcut.id }}" {% if offcut.id in config.selected_offcuts %}checked{% endif %}>
+                                        <div class="stock-item-details">
+                                            <strong>{{ offcut.length|round(2) }} x {{ offcut.width|round(2) }}</strong>
+                                            <span class="stock-status">(Qty: {{ offcut.quantity | int }})</span>
+                                        </div>
+                                        <div class="stock-item-qty">
+                                            <label class="checkbox-group" for="prio_offcut_{{ offcut.id }}">
+                                                <input type="checkbox" name="prioritized_offcuts" id="prio_offcut_{{ offcut.id }}" value="{{ offcut.id }}" {% if offcut.id in config.prioritized_offcuts %}checked{% endif %}>
+                                                Prioritize
+                                            </label>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
                                 </div>
                             </div>
-                            {% endfor %}
-                        </div>
+                        </details>
                     </section>
                     {% endif %}
 
                     {% if all_stock_parts %}
                     <section class="card">
-                        <div class="card-header">
-                            <h2 class="card-title"><i class="fa-solid fa-boxes-stacked"></i>Manage Stock Parts</h2>
-                            <div class="button-group">
-                                <button type="button" class="btn-secondary" id="select-all-stock">Select All</button>
-                                <button type="button" class="btn-secondary" id="deselect-all-stock">Deselect All</button>
+                        <details class="collapsible-section" open>
+                            <summary class="card-title"><i class="fa-solid fa-boxes-stacked"></i>Manage Stock Parts</summary>
+                            <div class="collapsible-content">
+                                <div class="card-header">
+                                    <div class="button-group">
+                                        <button type="button" class="btn-secondary" id="select-all-stock">Select All</button>
+                                        <button type="button" class="btn-secondary" id="deselect-all-stock">Deselect All</button>
+                                    </div>
+                                </div>
+                                <div class="stock-selector">
+                                    {% for part in all_stock_parts %}
+                                    <label class="stock-item" for="stock_{{ part.internal_ref }}">
+                                        <input type="checkbox" name="selected_stock_parts" id="stock_{{ part.internal_ref }}" value="{{ part.internal_ref }}" {% if part.internal_ref in config.selected_stock_parts %}checked{% endif %}>
+                                        <div class="stock-item-details">
+                                            <strong>{{ part.part_name_clean or 'Unnamed Part' }}</strong>
+                                            <span>{{ part.length|round(2) }} x {{ part.width|round(2) }}</span>
+                                            <span class="stock-status">(Need: {{ (part.target_stock - part.current_stock) | int }})</span>
+                                        </div>
+                                        <div class="stock-item-qty">
+                                            <label for="req_qty_{{ part.internal_ref }}">Required Qty:</label>
+                                            <input 
+                                                type="number" 
+                                                name="required_qty_{{ part.internal_ref }}" 
+                                                id="req_qty_{{ part.internal_ref }}" 
+                                                class="required-qty-input"
+                                                value="{{ config.required_stock_quantities.get(part.internal_ref, '') }}"
+                                                min="0" 
+                                                placeholder="0"
+                                                {% if part.internal_ref not in config.selected_stock_parts %}disabled{% endif %}>
+                                        </div>
+                                    </label>
+                                    {% endfor %}
+                                </div>
                             </div>
-                        </div>
-                        <div class="stock-selector">
-                            {% for part in all_stock_parts %}
-                            <label class="stock-item" for="stock_{{ part.internal_ref }}">
-                                <input type="checkbox" name="selected_stock_parts" id="stock_{{ part.internal_ref }}" value="{{ part.internal_ref }}" {% if part.internal_ref in config.selected_stock_parts %}checked{% endif %}>
-                                <div class="stock-item-details">
-                                    <strong>{{ part.part_name_clean or 'Unnamed Part' }}</strong>
-                                    <span>{{ part.length|round(2) }} x {{ part.width|round(2) }}</span>
-                                    <span class="stock-status">(Need: {{ (part.target_stock - part.current_stock) | int }})</span>
-                                </div>
-                                <div class="stock-item-qty">
-                                    <label for="req_qty_{{ part.internal_ref }}">Required Qty:</label>
-                                    <input 
-                                        type="number" 
-                                        name="required_qty_{{ part.internal_ref }}" 
-                                        id="req_qty_{{ part.internal_ref }}" 
-                                        class="required-qty-input"
-                                        value="{{ config.required_stock_quantities.get(part.internal_ref, '') }}"
-                                        min="0" 
-                                        placeholder="0"
-                                        {% if part.internal_ref not in config.selected_stock_parts %}disabled{% endif %}>
-                                </div>
-                            </label>
-                            {% endfor %}
-                        </div>
+                        </details>
                     </section>
                     {% endif %}
                     

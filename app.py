@@ -28,10 +28,11 @@ DEFAULT_CONFIG = {
     'w_waste': 1.0, 'w_offcut': 0.5, 'w_cuts': 0.2, 'w_quantity': 0.1,
     'w_sheets': 1.0, 'w_stock_fill': 1.0, 'w_unique_layouts': 0.5,
     'standardize_stock_layouts': True,
-    # --- NEW: Offcut Management Config ---
     'selected_offcuts': [],
     'prioritized_offcuts': [],
-    'w_priority_offcut': 10.0
+    'w_priority_offcut': 10.0,
+    # --- NEW: Add default for selected HHOS parts ---
+    'selected_hhos_parts': []
 }
 
 app = Flask(__name__)
@@ -81,9 +82,10 @@ def update_config_from_form(config, form_data):
             ref_id = key.replace('required_qty_', '')
             config['required_stock_quantities'][ref_id] = int(value)
 
-    # --- NEW: Get offcut selections from form ---
     config['selected_offcuts'] = form_data.getlist('selected_offcuts')
     config['prioritized_offcuts'] = form_data.getlist('prioritized_offcuts')
+    # --- NEW: Get selected HHOS parts from form ---
+    config['selected_hhos_parts'] = form_data.getlist('selected_hhos_parts')
 
     for key in ['w_waste', 'w_offcut', 'w_cuts', 'w_quantity', 'w_sheets', 'w_stock_fill', 'w_unique_layouts', 'w_priority_offcut']:
         if form_data.get(key) is not None:
@@ -91,9 +93,9 @@ def update_config_from_form(config, form_data):
     
     return config
 
-# --- Scoring Logic ---
+# --- Scoring Logic (omitted for brevity, no changes from previous step) ---
 def calculate_ideal_score(parts_to_cut, optional_stock_parts, offcut_df, config):
-    """Calculates a more sophisticated theoretical ideal score."""
+    # ... no changes ...
     # 1. Create the full "ideal" list of all parts to be made.
     ideal_part_list = parts_to_cut + optional_stock_parts
     if not ideal_part_list:
@@ -167,8 +169,16 @@ def calculate_ideal_score(parts_to_cut, optional_stock_parts, offcut_df, config)
     # 6. Final Score
     return total_ideal_bonus - total_ideal_penalty
 
+
 # --- Main Application Logic ---
 def run_optimization(config, hhos_df, offcut_df, stock_inv_df):
+    
+    # --- MODIFIED: Filter HHOS parts based on user selection ---
+    if hhos_df is not None and not hhos_df.empty:
+        selected_hhos_ids = config.get('selected_hhos_parts', [])
+        if selected_hhos_ids: # If list is not empty, user has made a selection
+            hhos_df = hhos_df[hhos_df['unique_id'].isin(selected_hhos_ids)]
+
     hhos_parts = hhos_df.to_dict('records') if hhos_df is not None and not hhos_df.empty else []
     for part in hhos_parts:
         part['is_optional_filler'] = False
@@ -201,7 +211,6 @@ def run_optimization(config, hhos_df, offcut_df, stock_inv_df):
 
     stock_sheets = [{'id': 'default_sheet', 'length': config['default_length'], 'width': config['default_width'], 'quantity': float('inf'), 'type': 'Default'}]
     
-    # --- MODIFIED: Filter offcuts based on user selection ---
     if config.get('use_offcuts') and offcut_df is not None and not offcut_df.empty:
         selected_ids = [int(i) for i in config.get('selected_offcuts', [])]
         # If a user provides an offcut file but has not yet saved selections, default to using all offcuts.
@@ -220,8 +229,9 @@ def run_optimization(config, hhos_df, offcut_df, stock_inv_df):
     layouts, remaining, score = optimize_multiple_sheets(parts_to_cut, stock_sheets, config, optional_stock_parts, is_stock_only_job)
     return layouts, remaining, score, parts_to_cut
 
-
+# ... other functions (standardize_layouts, prepare_results_for_render, etc.) are unchanged ...
 def _calculate_live_stock_bonus(layout: dict, live_deficit_tracker: Counter, config: dict) -> float:
+    # ... no changes ...
     stock_fill_bonus = 0.0
     sheet_area = layout['sheet_info']['length'] * layout['sheet_info']['width']
     if sheet_area == 0: return 0.0
@@ -234,8 +244,8 @@ def _calculate_live_stock_bonus(layout: dict, live_deficit_tracker: Counter, con
                 stock_fill_bonus += (1 / initial_deficit) * (part_area / sheet_area) * w_stock_fill
     return stock_fill_bonus
 
-
 def standardize_layouts(layouts: list, initial_optional_parts: list, config: dict) -> list:
+    # ... no changes ...
     live_deficit_tracker = Counter({p['internal_ref']: int(p['target_stock'] - p['current_stock']) for p in initial_optional_parts})
     grouped_layouts = {}
     for i, layout in enumerate(layouts):
@@ -270,9 +280,8 @@ def standardize_layouts(layouts: list, initial_optional_parts: list, config: dic
             final_layouts[original_layout['original_index']] = standardized_layout
     return final_layouts
 
-
 def prepare_results_for_render(layouts, remaining_parts, final_score, config, elapsed_time, ideal_score, score_percentage):
-    """Processes and groups layout data for Jinja rendering."""
+    # ... no changes ...
     if not layouts: return None
     total_placed_area = sum(l['total_placed_area'] for l in layouts)
     total_sheet_area = sum(l['sheet_info']['length'] * l['sheet_info']['width'] for l in layouts)
@@ -301,6 +310,7 @@ def prepare_results_for_render(layouts, remaining_parts, final_score, config, el
     }
 
 def get_initial_optional_parts(stock_inv_df, config):
+    # ... no changes ...
     if not config['add_stock_parts'] or stock_inv_df is None: return []
     required_refs = config.get('required_stock_quantities', {}).keys()
     mask = (
@@ -318,26 +328,34 @@ def get_initial_optional_parts(stock_inv_df, config):
 def home():
     config = load_config()
     optimization_result, hhos_file_contents, all_stock_parts_list, all_offcuts_list = None, [], [], []
+    all_hhos_part_ids = []
     
     if request.method == 'POST':
         config = update_config_from_form(config, request.form)
         save_config(config)
         flash("Configuration saved successfully!", "success")
 
-    # This block populates the file preview accordions
+    # This block populates the file preview accordions and gathers all possible part IDs
     for hhos_file in config.get('hhos_files', []):
         path = hhos_file.get('path')
         content_item = {'path': path, 'parts': [], 'error': None}
         if path and os.path.exists(path):
             try:
-                df = extract_hhos_data(pd.read_csv(path, header=None))
-                df['quantity'] *= hhos_file.get('multiplier', 1)
-                content_item['parts'] = df.to_dict('records')
+                # Use a temporary df to generate IDs for the template
+                temp_df = extract_hhos_data(pd.read_csv(path, header=None))
+                temp_df['quantity'] *= hhos_file.get('multiplier', 1)
+                temp_df['unique_id'] = [f"{path}_{i}" for i in range(len(temp_df))]
+                all_hhos_part_ids.extend(temp_df['unique_id'].tolist())
+                content_item['parts'] = temp_df.to_dict('records')
             except Exception as e:
                 content_item['error'] = str(e)
         else:
             content_item['error'] = "File not found."
         hhos_file_contents.append(content_item)
+
+    # --- NEW: Default to selecting all HHOS parts if none are specified ---
+    if all_hhos_part_ids and not config.get('selected_hhos_parts'):
+        config['selected_hhos_parts'] = all_hhos_part_ids
 
     try:
         hhos_df, offcut_df, stock_inv_df = process_uploaded_files(
@@ -347,9 +365,7 @@ def home():
         if stock_inv_df is not None:
             all_stock_parts_list = stock_inv_df.to_dict('records')
         
-        # --- NEW: Prepare offcuts for display and default selection ---
         if offcut_df is not None:
-            # If an offcut file is loaded for the first time, default to selecting all.
             if not config.get('selected_offcuts') and config.get('offcut_path'):
                 config['selected_offcuts'] = [str(i) for i in offcut_df.index]
 
@@ -373,7 +389,6 @@ def home():
             if config.get('standardize_stock_layouts', False) and layouts:
                 final_layouts = standardize_layouts(layouts, initial_optional_parts, config)
 
-            # --- New Score Calculation ---
             ideal_score = calculate_ideal_score(parts_to_cut, initial_optional_parts, offcut_df, config)
             score_percentage = 0.0
             if final_score >= ideal_score:
@@ -382,7 +397,7 @@ def home():
                 score_percentage = max(0.0, (final_score / ideal_score) * 100.0)
             elif ideal_score < 0:
                 score_percentage = (ideal_score / final_score) * 100.0 if final_score != 0 else 0.0
-            else: # ideal_score == 0 and final_score < 0
+            else:
                 score_percentage = 0.0
             score_percentage = max(0.0, min(score_percentage, 100.0))
 

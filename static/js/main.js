@@ -65,9 +65,27 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+    
+    /**
+     * --- NEW: Loaded Part Selection ---
+     */
+    const loadedPartsAccordion = document.getElementById('loaded-parts-accordion');
+    if (loadedPartsAccordion) {
+        loadedPartsAccordion.addEventListener('change', e => {
+            const selectAllCheckbox = e.target.closest('.select-all-parts-in-file');
+            if (selectAllCheckbox) {
+                const table = selectAllCheckbox.closest('table');
+                const isChecked = selectAllCheckbox.checked;
+                table.querySelectorAll('tbody input[name="selected_hhos_parts"]').forEach(cb => {
+                    cb.checked = isChecked;
+                });
+            }
+        });
+    }
+
 
     /**
-     * --- NEW: Offcut Selection ---
+     * --- Offcut Selection ---
      */
     const selectAllOffcutsBtn = document.getElementById('select-all-offcuts');
     const deselectAllOffcutsBtn = document.getElementById('deselect-all-offcuts');
