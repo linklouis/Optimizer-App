@@ -130,7 +130,7 @@
                     {% if all_stock_parts %}
                     <section class="card">
                         <div class="card-header">
-                            <h2 class="card-title"><i class="fa-solid fa-boxes-stacked"></i>Include Stock Parts</h2>
+                            <h2 class="card-title"><i class="fa-solid fa-boxes-stacked"></i>Manage Stock Parts</h2>
                             <div class="button-group">
                                 <button type="button" class="btn-secondary" id="select-all-stock">Select All</button>
                                 <button type="button" class="btn-secondary" id="deselect-all-stock">Deselect All</button>
@@ -144,6 +144,18 @@
                                     <strong>{{ part.part_name_clean or 'Unnamed Part' }}</strong>
                                     <span>{{ part.length|round(2) }} x {{ part.width|round(2) }}</span>
                                     <span class="stock-status">(Need: {{ (part.target_stock - part.current_stock) | int }})</span>
+                                </div>
+                                <div class="stock-item-qty">
+                                    <label for="req_qty_{{ part.internal_ref }}">Required Qty:</label>
+                                    <input 
+                                        type="number" 
+                                        name="required_qty_{{ part.internal_ref }}" 
+                                        id="req_qty_{{ part.internal_ref }}" 
+                                        class="required-qty-input"
+                                        value="{{ config.required_stock_quantities.get(part.internal_ref, '') }}"
+                                        min="0" 
+                                        placeholder="0"
+                                        {% if part.internal_ref not in config.selected_stock_parts %}disabled{% endif %}>
                                 </div>
                             </label>
                             {% endfor %}

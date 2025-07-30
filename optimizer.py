@@ -19,7 +19,8 @@ def get_layout_signature(layout: Dict[str, Any], required_only: bool = False) ->
     sig_parts = [f"sheet_{sheet_info['length']:.3f}x{sheet_info['width']:.3f}"]
 
     parts_to_sign = (
-        [p for p in layout['placed_parts'] if not p.get('is_stock_part', False)]
+        # FIXED: Use 'is_optional_filler' to correctly identify required parts
+        [p for p in layout['placed_parts'] if not p.get('is_optional_filler', False)]
         if required_only
         else layout['placed_parts']
     )
@@ -74,19 +75,23 @@ def calculate_layout_score(layout: Dict[str, Any], sheet_info: Dict[str, Any], w
 
     stock_fill_bonus = 0
     has_required_parts = False
-    has_stock_parts = False
+    has_optional_parts = False
 
     for part in layout['placed_parts']:
+        # FIXED: Differentiate between required and optional parts
+        if part.get('is_optional_filler', False):
+            has_optional_parts = True
+        else:
+            has_required_parts = True
+
         if part.get('is_stock_part', False):
-            has_stock_parts = True
             deficit = part.get('target_stock', 1) - part.get('current_stock', 0)
             if part.get('target_stock', 0) > 0 and deficit > 0:
                 part_area = part['length'] * part['width']
                 stock_fill_bonus += (deficit / part['target_stock']) * (part_area / sheet_area) * weights.get('w_stock_fill', 1.0)
-        else:
-            has_required_parts = True
-
-    if not has_required_parts and has_stock_parts and not is_stock_only_job:
+    
+    # Prevent creating layouts that only contain optional filler parts
+    if not has_required_parts and has_optional_parts and not is_stock_only_job:
         return -float('inf')
 
     quantity_bonus = (sheet_info.get('quantity', 1) * weights.get('w_quantity', 0.1)) if sheet_info.get('type') != 'Default' else 0
@@ -238,7 +243,7 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
     primary_parts_list = parts_to_cut if not is_stock_only_job else (optional_stock_parts or [])
     
     for part in primary_parts_list:
-        qty = int(part.get('quantity', 1)) if not part.get('is_stock_part') else int(part.get('target_stock', 1) - part.get('current_stock', 0))
+        qty = int(part.get('quantity', 1))
         for _ in range(qty):
             p_copy = part.copy()
             p_copy['part_id'] = part_id_counter
@@ -257,7 +262,6 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
 
     initial_bound = -_calculate_bound(list(initial_parts_dict.values()), 0, config, reference_area)
     
-    # FIXED: Add a unique counter to act as a tie-breaker for the priority queue
     node_counter = 0
     # Node: (priority, score, counter, parts_dict, layouts, signatures_set)
     pq = [ (initial_bound, 0.0, node_counter, initial_parts_dict, [], frozenset()) ]
@@ -303,7 +307,6 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
                 else:
                     child_bound = _calculate_bound(list(child_parts.values()), child_score, config, reference_area)
                     if -child_bound > best_score:
-                        # FIXED: Add counter to the pushed tuple
                         heapq.heappush(pq, (-child_bound, child_score, node_counter, child_parts, child_layouts, child_signatures))
                         node_counter += 1
 

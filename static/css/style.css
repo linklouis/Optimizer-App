@@ -116,7 +116,7 @@ input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 2px
 .submit-button:active { transform: translateY(1px); }
 .form-divider { border: 0; height: 1px; background-color: var(--border-color); margin: 1.5rem 0; }
 
-/* NEW: Dynamic File Inputs */
+/* Dynamic File Inputs */
 .dynamic-file-list { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 0.75rem; }
 .file-input-group { display: flex; align-items: center; gap: 0.5rem; }
 .file-input-group input[name="hhos_paths"] { flex-grow: 1; }
@@ -150,7 +150,13 @@ input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 2px
 .stock-item-details { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; flex-grow: 1; }
 .stock-status { color: var(--secondary); font-size: 0.875rem; }
 
-/* NEW: Accordion for Part Display */
+/* NEW: Styles for required quantity input */
+.stock-item-qty { display: flex; align-items: center; gap: 0.5rem; }
+.stock-item-qty label { margin: 0; font-size: 0.8rem; }
+.stock-item-qty .required-qty-input { width: 70px; text-align: center; padding: 0.3rem 0.5rem; }
+.stock-item-qty .required-qty-input:disabled { background-color: var(--border-color); cursor: not-allowed; }
+
+/* Accordion for Part Display */
 .accordion-item { border-bottom: 1px solid var(--border-color); }
 .accordion-item:last-child { border-bottom: none; }
 .accordion-header { cursor: pointer; padding: 1rem 0; display: flex; justify-content: space-between; align-items: center; }

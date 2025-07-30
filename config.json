@@ -18,8 +18,8 @@
     "min_offcut_dim": 12.0,
     "use_offcuts": true,
     "add_stock_parts": true,
-    "search_time_limit": 200.0,
-    "branching_factor": 20,
+    "search_time_limit": 100.0,
+    "branching_factor": 10,
     "selected_stock_parts": [
         "OSB-15-126126",
         "OSB-15-140126",
@@ -56,6 +56,9 @@
         "OSB-15-898478",
         "OSB-15-958238"
     ],
+    "required_stock_quantities": {
+        "OSB-15-140126": 3
+    },
     "dark_mode": false,
     "w_waste": 1.0,
     "w_offcut": 0.5,
@@ -65,6 +68,7 @@
     "w_stock_fill": 5.0,
     "w_unique_layouts": 1.0,
     "standardize_stock_layouts": true,
+    "required_stock_parts": [],
     "beam_width": null,
     "w_layout_variety": null,
     "w_layouts": 3.0,

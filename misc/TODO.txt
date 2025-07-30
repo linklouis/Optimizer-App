@@ -12,7 +12,7 @@ FEATURES
 
         - Allow uploading a temp Offcut List that doesn't override the current one?
         - Save offcuts
-        - Clear Offcut List File after optimization
+        - Clear Offcut List File input space after optimization
         - Notes section for offcuts
         - Allow user to select what offcuts to consider like the stock parts
         - Add description of scoring weight/all settings on hover
@@ -24,6 +24,8 @@ FEATURES
         - Way to automatically stop when the score is sufficient? Maybe calculate the 
         - Page to display all available offcuts
         - Add time limiting as a toggleable option
+        - Be aware of whether the parts in an HHOS file are labeled as stock for checking if a sheet is only stock parts
+        - [ASK] Make a way to automatically pick all of the most needed stock parts for a stock-only job?
     
     Optimizer
         - ✓ ---> Only keep reusing a layout of stock parts until another layout is better because the number of the original stock parts needed has been filled.
@@ -34,21 +36,23 @@ FEATURES
         - Penalize higher numbers of unique default sheet layouts more than offcut sheets?
 
     Visual
-        - Add measurements to layout display
+        - ✓ Add measurements to layout display
+        
         - Needs to look good in greyscale
+        - Scaleable Manage Stock Parts section?
 
     Code
         - 
 
 BUGS
     - ✓ Allow part rotation check box not working?
+    - X Overall Yield not consistant?
+    - X 30 sec (w/o standardize stock layouts) took like 5+ minutes.
 
     - Downcasting issue with replace in extract_hhos_data
     - Stock text doesn't go sidways
     - Doesn't remember theme selection
     - Adding a new HHOS file doesn't make it pop up in the Loaded Parts List until after optimization
-    - Overall Yield not consistant?
-    - 30 sec (w/o standardize stock layouts) took like 5+ minutes.
 
 IDEAS
     - X Try every combination of cut order for every sheet? 
@@ -73,7 +77,7 @@ QUESTIONS
       Maybe weight space used by stock parts as slightly worse than normal parts, but better than offcuts?(slightly negative) [See screenshot]
     - ✓ How should we handle deciding what the goal stock is for a stock part? -> Don't worry abt it for now
     - X Should it be called default "board" size?
+    - ✓ Should the smaller sheets be zoomed in more (like now) or displayed at their relative size?
+    - X We can always standardize the stock part layout, but for a big job, that might have us make way more of a stock part than we need.
     
     - Always rotate labels to be on the widest axis, or just when they don't fit?
-    - Should the smaller sheets be zoomed in more (like now) or displayed at their relative size?
-    - We can always standardize the stock part layout, but for a big job, that might have us make way more of a stock part than we need.

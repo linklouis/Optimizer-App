@@ -20,8 +20,10 @@ DEFAULT_CONFIG = {
     'stock_inv_path': '', 'kerf': 0.125, 'allow_rotation': True,
     'min_offcut_dim': 4.0, 'use_offcuts': True, 'add_stock_parts': False,
     'search_time_limit': 5.0,
-    'branching_factor': 1, # NEW: Added branching factor
-    'selected_stock_parts': [], 'dark_mode': False,
+    'branching_factor': 1,
+    'selected_stock_parts': [],
+    'required_stock_quantities': {},
+    'dark_mode': False,
     'w_waste': 1.0, 'w_offcut': 0.5, 'w_cuts': 0.2, 'w_quantity': 0.1,
     'w_sheets': 1.0, 'w_stock_fill': 1.0, 'w_unique_layouts': 0.5,
     'standardize_stock_layouts': True
@@ -36,6 +38,7 @@ def load_config():
     if os.path.exists(CONFIG_FILE):
         with open(CONFIG_FILE, 'r') as f:
             config.update(json.load(f))
+    config['required_stock_quantities'] = config.get('required_stock_quantities', {})
     return config
 
 def save_config(config):
@@ -59,13 +62,19 @@ def update_config_from_form(config, form_data):
     config['kerf'] = form_data.get('kerf', type=float)
     config['min_offcut_dim'] = form_data.get('min_offcut_dim', type=float)
     config['search_time_limit'] = form_data.get('search_time_limit', type=float)
-    config['branching_factor'] = form_data.get('branching_factor', type=int) # NEW
+    config['branching_factor'] = form_data.get('branching_factor', type=int)
     config['allow_rotation'] = form_data.get('allow_rotation') == 'true'
     config['use_offcuts'] = form_data.get('use_offcuts') == 'true'
     config['add_stock_parts'] = form_data.get('add_stock_parts') == 'true'
     config['dark_mode'] = form_data.get('dark_mode_state') == 'on'
     config['selected_stock_parts'] = form_data.getlist('selected_stock_parts')
     config['standardize_stock_layouts'] = form_data.get('standardize_stock_layouts') == 'true'
+    
+    config['required_stock_quantities'] = {}
+    for key, value in form_data.items():
+        if key.startswith('required_qty_') and value.isdigit() and int(value) > 0:
+            ref_id = key.replace('required_qty_', '')
+            config['required_stock_quantities'][ref_id] = int(value)
 
     for key in ['w_waste', 'w_offcut', 'w_cuts', 'w_quantity', 'w_sheets', 'w_stock_fill', 'w_unique_layouts']:
         config[key] = form_data.get(key, type=float)
@@ -74,16 +83,42 @@ def update_config_from_form(config, form_data):
 
 # --- Main Application Logic ---
 def run_optimization(config, hhos_df, offcut_df, stock_inv_df):
-    parts_to_cut = hhos_df.to_dict('records') if hhos_df is not None and not hhos_df.empty else []
-    
+    hhos_parts = hhos_df.to_dict('records') if hhos_df is not None and not hhos_df.empty else []
+    # Mark HHOS parts as not optional
+    for part in hhos_parts:
+        part['is_optional_filler'] = False
+
+    required_stock_parts = []
     optional_stock_parts = []
-    if config['add_stock_parts'] and stock_inv_df is not None:
-        mask = (stock_inv_df['internal_ref'].isin(config['selected_stock_parts'])) & \
-               (stock_inv_df['current_stock'] < stock_inv_df['target_stock'])
-        needy_stock = stock_inv_df[mask].copy()
-        if not needy_stock.empty:
-            needy_stock['is_stock_part'] = True
-            optional_stock_parts = needy_stock.to_dict('records')
+    
+    if stock_inv_df is not None:
+        required_qtys = config.get('required_stock_quantities', {})
+        
+        # Process required stock parts
+        for ref_id, qty in required_qtys.items():
+            part_series = stock_inv_df[stock_inv_df['internal_ref'] == ref_id]
+            if not part_series.empty:
+                part_dict = part_series.iloc[0].to_dict()
+                part_dict['quantity'] = qty
+                part_dict['is_stock_part'] = True
+                part_dict['is_optional_filler'] = False # FIXED: Mark as NOT optional
+                part_dict['label'] = part_dict.get('part_name_clean', 'STOCK')
+                required_stock_parts.append(part_dict)
+                
+        # Process optional stock parts (for filling gaps)
+        if config['add_stock_parts']:
+            mask = (
+                stock_inv_df['internal_ref'].isin(config['selected_stock_parts'])) & \
+                (stock_inv_df['current_stock'] < stock_inv_df['target_stock']) & \
+                (~stock_inv_df['internal_ref'].isin(required_qtys.keys())
+            )
+            needy_stock = stock_inv_df[mask].copy()
+            if not needy_stock.empty:
+                needy_stock['is_stock_part'] = True
+                needy_stock['is_optional_filler'] = True # FIXED: Mark as optional
+                optional_stock_parts = needy_stock.to_dict('records')
+
+    parts_to_cut = hhos_parts + required_stock_parts
             
     is_stock_only_job = not parts_to_cut and optional_stock_parts
 
@@ -128,7 +163,7 @@ def standardize_layouts(layouts: list, initial_optional_parts: list, config: dic
         unique_variations = {get_layout_signature(l): l for l in group}.values()
         scored_variations = []
         for v in unique_variations:
-            is_stock_only_job = not any(not p.get('is_stock_part', False) for p in v['placed_parts'])
+            is_stock_only_job = not any(not p.get('is_optional_filler', False) for p in v['placed_parts'])
             base_score = calculate_layout_score(v, v['sheet_info'], config, config['min_offcut_dim'], config['default_length'] * config['default_width'], is_stock_only_job)
             stock_bonus_to_remove = _calculate_live_stock_bonus(v, live_deficit_tracker, config)
             scored_variations.append({'base_score': base_score - stock_bonus_to_remove, 'layout': v})
@@ -178,7 +213,12 @@ def prepare_results_for_render(layouts, remaining_parts, final_score, config, el
 
 def get_initial_optional_parts(stock_inv_df, config):
     if not config['add_stock_parts'] or stock_inv_df is None: return []
-    mask = (stock_inv_df['internal_ref'].isin(config['selected_stock_parts'])) & (stock_inv_df['current_stock'] < stock_inv_df['target_stock'])
+    required_refs = config.get('required_stock_quantities', {}).keys()
+    mask = (
+        stock_inv_df['internal_ref'].isin(config['selected_stock_parts'])) & \
+        (stock_inv_df['current_stock'] < stock_inv_df['target_stock']) & \
+        (~stock_inv_df['internal_ref'].isin(required_refs)
+    )
     needy_stock = stock_inv_df[mask].copy()
     if needy_stock.empty: return []
     needy_stock['is_stock_part'] = True
@@ -216,7 +256,7 @@ def home():
     except Exception as e:
         flash(f"Error processing files: {e}", "danger")
         hhos_df, offcut_df, stock_inv_df = pd.DataFrame(), None, None
-    if request.method == 'POST' and (config.get('hhos_files') or config['stock_inv_path']):
+    if request.method == 'POST' and (config.get('hhos_files') or config['stock_inv_path'] or config.get('required_stock_quantities')):
         try:
             opt_start_time = time.time()
             layouts, remaining_parts, final_score = run_optimization(config, hhos_df, offcut_df, stock_inv_df)

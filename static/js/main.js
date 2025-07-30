@@ -37,10 +37,36 @@ document.addEventListener('DOMContentLoaded', function() {
      */
     const selectAllBtn = document.getElementById('select-all-stock');
     const deselectAllBtn = document.getElementById('deselect-all-stock');
-    const stockCheckboxes = document.querySelectorAll('input[name="selected_stock_parts"]');
+    const stockSelector = document.querySelector('.stock-selector');
 
-    if (selectAllBtn) selectAllBtn.addEventListener('click', () => stockCheckboxes.forEach(cb => cb.checked = true));
-    if (deselectAllBtn) deselectAllBtn.addEventListener('click', () => stockCheckboxes.forEach(cb => cb.checked = false));
+    if (selectAllBtn) selectAllBtn.addEventListener('click', () => {
+        stockSelector.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = true);
+        stockSelector.querySelectorAll('.required-qty-input').forEach(input => input.disabled = false);
+    });
+    if (deselectAllBtn) deselectAllBtn.addEventListener('click', () => {
+        stockSelector.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
+        stockSelector.querySelectorAll('.required-qty-input').forEach(input => {
+            input.disabled = true;
+            input.value = '';
+        });
+    });
+
+    // NEW: Event listener to enable/disable required quantity inputs
+    if (stockSelector) {
+        stockSelector.addEventListener('change', (e) => {
+            const checkbox = e.target.closest('input[name="selected_stock_parts"]');
+            if (checkbox) {
+                const qtyInput = checkbox.closest('.stock-item').querySelector('.required-qty-input');
+                if (qtyInput) {
+                    qtyInput.disabled = !checkbox.checked;
+                    if (!checkbox.checked) {
+                        qtyInput.value = '';
+                    }
+                }
+            }
+        });
+    }
+
 
     /**
      * --- Activate Results Tab if Data Exists ---
@@ -50,7 +76,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     /**
-     * --- NEW: Dynamic HHOS File Inputs ---
+     * --- Dynamic HHOS File Inputs ---
      */
     const hhosList = document.getElementById('hhos-file-list');
     const addHhosBtn = document.getElementById('add-hhos-file');
