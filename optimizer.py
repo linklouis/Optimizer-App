@@ -237,16 +237,23 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
     primary_parts_list = parts_to_cut if not is_stock_only_job else (optional_stock_parts or [])
     
     for part in primary_parts_list:
-        qty = int(part.get('quantity', 1)) if not part.get('is_stock_part') else int(part['target_stock'] - part['current_stock'])
+        qty = int(part.get('quantity', 1)) if not part.get('is_stock_part') else int(part.get('target_stock', 1) - part.get('current_stock', 0))
         for _ in range(qty):
             p_copy = part.copy()
             p_copy['part_id'] = part_id_counter
             initial_parts_dict[part_id_counter] = p_copy
             part_id_counter += 1
 
+    # FIXED: Correctly process optional stock parts, giving each a unique part_id
     optional_parts_list = []
     if not is_stock_only_job and optional_stock_parts:
-        optional_parts_list = optional_stock_parts
+        for part in optional_stock_parts:
+            deficit = int(part.get('target_stock', 1) - part.get('current_stock', 0))
+            for _ in range(deficit):
+                p_copy = part.copy()
+                p_copy['part_id'] = part_id_counter
+                optional_parts_list.append(p_copy)
+                part_id_counter += 1
 
     # The priority queue will store tuples: (-bound, -score, remaining_parts, used_layouts, used_signatures)
     # We use negative scores/bounds because heapq is a min-heap, and we want to maximize score.
@@ -262,8 +269,7 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
         _, current_score, current_parts, used_layouts, used_signatures = heapq.heappop(pq)
 
         # If the optimistic bound of this node is worse than our best solution, prune it.
-        # (Scores are negative, so we use >)
-        if -current_score < best_score:
+        if -_calculate_bound(list(current_parts.values()), current_score, config, reference_area) < best_score:
             continue
 
         # Generate child nodes by trying to place parts on one more sheet
@@ -277,7 +283,7 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
                 sheet_tpl, remaining_primary_parts, config, reference_area, optional_parts_list
             )
             
-            placed_part_ids = {p['part_id'] for p in layout_attempt['placed_parts'] if p['part_id'] in current_parts}
+            placed_part_ids = {p['part_id'] for p in layout_attempt['placed_parts'] if p.get('part_id') in current_parts}
             if not placed_part_ids:
                 continue
 
@@ -301,7 +307,8 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
             else:
                 # Otherwise, calculate its bound and push to the queue to explore later
                 child_bound = _calculate_bound(list(child_parts.values()), child_score, config, reference_area)
-                heapq.heappush(pq, (-child_bound, child_score, child_parts, child_layouts, child_signatures))
+                if -child_bound > best_score:
+                    heapq.heappush(pq, (-child_bound, child_score, child_parts, child_layouts, child_signatures))
 
     final_layouts, remaining_parts = best_solution
     return final_layouts, remaining_parts, best_score
