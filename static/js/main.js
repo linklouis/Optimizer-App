@@ -102,6 +102,7 @@ document.addEventListener('DOMContentLoaded', function() {
             <div class="summary-metric"><span class="value">${totalSheets}</span><span class="label">Total Sheets Used</span></div>
             <div class="summary-metric"><span class="value">${result.num_unique_layouts}</span><span class="label">Unique Layouts</span></div>
             <div class="summary-metric"><span class="value">${result.overall_yield.toFixed(2)}%</span><span class="label">Overall Yield</span></div>
+            <div class="summary-metric"><span class="value">${result.elapsed_time.toFixed(2)}s</span><span class="label">Time Spent</span></div>
             <div class="summary-metric ${result.remaining_parts.length > 0 ? 'is-alert' : ''}"><span class="value">${result.remaining_parts.length}</span><span class="label">Parts Not Placed</span></div>
             <div class="summary-metric action-metric">
                 <button id="undo-button" class="btn-undo"><i class="fa-solid fa-rotate-left"></i> Undo</button>
@@ -120,9 +121,12 @@ document.addEventListener('DOMContentLoaded', function() {
             card.querySelector('.layout-title').innerHTML = `${sheet.type} ${sheet.length.toFixed(1)}x${sheet.width.toFixed(1)} | x<span>${layout.quantity}</span> | Yield: <span>${layout.yield_percentage.toFixed(2)}</span>%`;
             const svg = card.querySelector('svg');
             svg.setAttribute('viewBox', `-2 -2 ${sheet.width + 4} ${sheet.length + 4}`);
-            svg.querySelector('.sheet-bg').setAttribute('width', sheet.width);
-            svg.querySelector('.sheet-bg').setAttribute('height', sheet.length);
-            let partsSvg = '';
+            const sheetBg = svg.querySelector('.sheet-bg');
+            sheetBg.setAttribute('width', sheet.width);
+            sheetBg.setAttribute('height', sheet.length);
+            
+            let svgContent = '';
+
             layout.placed_parts.forEach((part, index) => {
                 const p_len = part.rotated ? part.width : part.length;
                 const p_wid = part.rotated ? part.length : part.width;
@@ -130,25 +134,56 @@ document.addEventListener('DOMContentLoaded', function() {
                 const itemType = part.is_stock_part ? 'stock_part' : 'job_part';
                 const p_class = part.is_stock_part ? 'stock-part' : 'job-part';
                 const label = part.is_stock_part ? 'STOCK' : (part.label || '');
-                partsSvg += `<g class="part-group interactive-item" transform="translate(${part.x},${svg_y})" data-item-index="${index}" data-item-type="${itemType}"><rect class="${p_class}" width="${p_wid}" height="${p_len}"/><text class="part-label" x="${p_wid/2}" y="${p_len/2}" dominant-baseline="middle" text-anchor="middle">${label}</text></g>`;
+
+                let dimLabels = '';
+                if (p_wid > 8 && p_len > 8) {
+                    const textY = 1.5;
+                    const textX = 1.5;
+                    dimLabels += `<text class="inner-dim-text" x="${p_wid/2}" y="${textY}" dominant-baseline="hanging" text-anchor="middle">${p_wid.toFixed(2)}</text>`;
+                    dimLabels += `<text class="inner-dim-text" x="${textX}" y="${p_len/2}" transform="rotate(-90, ${textX}, ${p_len/2})" dominant-baseline="middle" text-anchor="middle">${p_len.toFixed(2)}</text>`;
+                }
+
+                svgContent += `<g class="part-group interactive-item" transform="translate(${part.x},${svg_y})" data-item-index="${index}" data-item-type="${itemType}">
+                                <rect class="${p_class}" width="${p_wid}" height="${p_len}"/>
+                                <text class="part-label" x="${p_wid/2}" y="${p_len/2}" dominant-baseline="middle" text-anchor="middle">${label}</text>
+                                ${dimLabels}
+                            </g>`;
             });
-            let offcutsSvg = '';
+
             (layout.usable_offcuts || []).forEach((offcut, index) => {
-                const svg_y = sheet.length - offcut.y - offcut.length;
-                offcutsSvg += `<g class="offcut-group interactive-item" transform="translate(${offcut.x},${svg_y})" data-item-index="${index}" data-item-type="offcut"><rect class="offcut" width="${offcut.width}" height="${offcut.length}"/><text class="offcut-label" x="${offcut.width/2}" y="${offcut.length/2}" dominant-baseline="middle" text-anchor="middle">Offcut</text></g>`;
+                const o_wid = offcut.width;
+                const o_len = offcut.length;
+                const svg_y = sheet.length - offcut.y - o_len;
+                
+                let dimLabels = '';
+                if (o_wid > 8 && o_len > 8) {
+                    const textY = 4;
+                    const textX = 4;
+                    dimLabels += `<text class="inner-dim-text" x="${o_wid/2}" y="${textY}" dominant-baseline="hanging" text-anchor="middle">${o_wid.toFixed(2)}</text>`;
+                    dimLabels += `<text class="inner-dim-text" x="${textX}" y="${o_len/2}" transform="rotate(-90, ${textX}, ${o_len/2})" dominant-baseline="middle" text-anchor="middle">${o_len.toFixed(2)}</text>`;
+                }
+
+                svgContent += `<g class="offcut-group interactive-item" transform="translate(${offcut.x},${svg_y})" data-item-index="${index}" data-item-type="offcut">
+                                <rect class="offcut" width="${o_wid}" height="${o_len}"/>
+                                <text class="offcut-label" x="${o_wid/2}" y="${o_len/2}" dominant-baseline="middle" text-anchor="middle">Offcut</text>
+                                ${dimLabels}
+                            </g>`;
             });
-            svg.innerHTML += partsSvg + offcutsSvg;
+            
+            sheetBg.insertAdjacentHTML('afterend', svgContent);
             grid.appendChild(card);
         });
+        
         fragment.appendChild(grid);
         container.appendChild(fragment);
+        
         const undoButton = document.getElementById('undo-button');
         if (undoButton) {
             undoButton.disabled = stateHistory.length === 0;
             undoButton.addEventListener('click', handleUndo);
         }
     }
-    
+        
     // --- Event Listeners and Initial Setup ---
 
     document.addEventListener('keydown', (event) => {
