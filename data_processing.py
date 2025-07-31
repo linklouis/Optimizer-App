@@ -3,6 +3,9 @@ import numpy as np
 import os
 import re
 
+# Set Pandas options to avoid silent downcasting warnings in terminal
+pd.set_option('future.no_silent_downcasting', True)
+
 def extract_hhos_data(hhos_df: pd.DataFrame) -> pd.DataFrame:
     """
     Parses a semicolon-delimited string from the first column of a DataFrame,

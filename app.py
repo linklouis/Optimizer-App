@@ -1,4 +1,4 @@
-from flask import Flask, request, render_template, flash, session, redirect, url_for
+from flask import Flask, request, render_template, flash, session, jsonify
 import os
 import json
 import pandas as pd
@@ -36,6 +36,62 @@ DEFAULT_CONFIG = {
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
+
+# --- CORRECTED HELPER ---
+def merge_rectangles(rects):
+    """
+    Merges adjacent rectangles in a list into the largest possible rectangles.
+    Repeats the process until no more merges are possible.
+    """
+    if len(rects) < 2:
+        return rects
+
+    TOLERANCE = 1e-6
+    while True:
+        merged_in_pass = False
+        i = len(rects) - 1
+        while i >= 1:
+            r1 = rects[i]
+            was_merged = False
+            j = i - 1
+            while j >= 0:
+                r2 = rects[j]
+                
+                # Try vertical merge
+                if abs(r1['x'] - r2['x']) < TOLERANCE and abs(r1['width'] - r2['width']) < TOLERANCE:
+                    # Case 1: r1 is directly above r2
+                    if abs((r2['y'] + r2['length']) - r1['y']) < TOLERANCE:
+                        r2['length'] += r1['length'] # r2 expands upwards
+                        was_merged = True
+                    # Case 2: r2 is directly above r1
+                    elif abs((r1['y'] + r1['length']) - r2['y']) < TOLERANCE:
+                        r1['length'] += r2['length'] # r1 expands upwards
+                        rects[j] = r1 # replace r2 with the new expanded r1
+                        was_merged = True
+                
+                # Try horizontal merge
+                elif abs(r1['y'] - r2['y']) < TOLERANCE and abs(r1['length'] - r2['length']) < TOLERANCE:
+                    # Case 1: r1 is to the right of r2
+                    if abs((r2['x'] + r2['width']) - r1['x']) < TOLERANCE:
+                        r2['width'] += r1['width'] # r2 expands right
+                        was_merged = True
+                    # Case 2: r2 is to the right of r1
+                    elif abs((r1['x'] + r1['width']) - r2['x']) < TOLERANCE:
+                        r1['width'] += r2['width'] # r1 expands right
+                        rects[j] = r1 # replace r2 with new expanded r1
+                        was_merged = True
+
+                if was_merged:
+                    rects.pop(i)
+                    merged_in_pass = True
+                    break
+                j -= 1
+            i -= 1
+
+        if not merged_in_pass:
+            break
+            
+    return rects
 
 # --- Configuration Handling ---
 def load_config():
@@ -163,38 +219,77 @@ def calculate_ideal_score(parts_to_cut, optional_stock_parts, offcut_df, config)
     
     return total_ideal_bonus - total_ideal_penalty
 
+def recalculate_global_summary(result_obj, config):
+    """Recalculates all summary metrics based on the current list of layouts."""
+    if not result_obj or not result_obj.get('layouts'):
+        return result_obj
+
+    layouts = result_obj['layouts']
+    reference_area = config.get('default_length', 96) * config.get('default_width', 48)
+
+    total_score_from_layouts = 0
+    total_placed_area = 0
+    total_sheet_area = 0
+    total_sheets = 0
+    
+    is_stock_only_job = all(
+        all(p.get('is_optional_filler', False) for p in layout['placed_parts'])
+        for layout in layouts
+    )
+
+    for layout in layouts:
+        sheet_info = layout['sheet_info']
+        quantity = layout.get('quantity') or 1
+        layout_sheet_area = sheet_info['length'] * sheet_info['width']
+        
+        layout['total_placed_area'] = sum(p['length'] * p['width'] for p in layout['placed_parts'])
+        layout['yield_percentage'] = (layout['total_placed_area'] / layout_sheet_area) * 100 if layout_sheet_area > 0 else 0
+        layout['usable_offcuts'] = [r for r in layout.get('offcuts', []) if r['length'] >= config['min_offcut_dim'] and r['width'] >= config['min_offcut_dim']]
+        
+        layout_score = calculate_layout_score(layout, sheet_info, config, config['min_offcut_dim'], reference_area, is_stock_only_job)
+        total_score_from_layouts += layout_score * quantity
+
+        total_placed_area += layout['total_placed_area'] * quantity
+        total_sheet_area += layout_sheet_area * quantity
+        total_sheets += quantity
+
+    sheets_penalty = total_sheets * config.get('w_sheets', 1.0)
+    unique_layouts_penalty = len(layouts) * config.get('w_unique_layouts', 0.5)
+    final_score = total_score_from_layouts - sheets_penalty - unique_layouts_penalty
+    result_obj['final_score'] = final_score
+
+    result_obj['overall_yield'] = (total_placed_area / total_sheet_area) * 100 if total_sheet_area > 0 else 0
+    result_obj['num_unique_layouts'] = len(layouts)
+
+    ideal_score = result_obj.get('ideal_score', 0)
+    score_percentage = 0.0
+    if final_score >= ideal_score: score_percentage = 100.0
+    elif ideal_score > 0: score_percentage = max(0.0, (final_score / ideal_score) * 100.0)
+    elif ideal_score < 0: score_percentage = (ideal_score / final_score) * 100.0 if final_score != 0 else 0.0
+    result_obj['score_percentage'] = max(0.0, min(score_percentage, 100.0))
+    
+    return result_obj
 
 # --- Main Application Logic ---
 def run_optimization(config, hhos_df, offcut_df, stock_inv_df):
-    
     if hhos_df is not None and not hhos_df.empty:
         part_quantities = config.get('part_quantities', {})
         if part_quantities:
-            hhos_df['quantity'] = hhos_df.apply(
-                lambda row: part_quantities.get(row['unique_id'], row['quantity']),
-                axis=1
-            )
-        
+            hhos_df['quantity'] = hhos_df.apply(lambda r: part_quantities.get(r['unique_id'], r['quantity']), axis=1)
         selected_hhos_ids = config.get('selected_hhos_parts', [])
         hhos_df = hhos_df[hhos_df['unique_id'].isin(selected_hhos_ids)]
 
     hhos_parts = hhos_df.to_dict('records') if hhos_df is not None and not hhos_df.empty else []
-    for part in hhos_parts:
-        part['is_optional_filler'] = False
+    for part in hhos_parts: part['is_optional_filler'] = False
 
-    required_stock_parts = []
-    optional_stock_parts = []
-    
+    required_stock_parts, optional_stock_parts = [], []
     if stock_inv_df is not None:
         required_qtys = config.get('required_stock_quantities', {})
         for ref_id, qty in required_qtys.items():
             part_series = stock_inv_df[stock_inv_df['internal_ref'] == ref_id]
             if not part_series.empty:
                 part_dict = part_series.iloc[0].to_dict()
-                part_dict['quantity'] = qty
-                part_dict['is_stock_part'] = True
-                part_dict['is_optional_filler'] = False
-                part_dict['label'] = part_dict.get('part_name_clean', 'STOCK')
+                part_dict.update({'quantity': qty, 'is_stock_part': True, 'is_optional_filler': False, 'label': part_dict.get('part_name_clean', 'STOCK')})
                 required_stock_parts.append(part_dict)
                 
         if config['add_stock_parts']:
@@ -207,16 +302,11 @@ def run_optimization(config, hhos_df, offcut_df, stock_inv_df):
 
     parts_to_cut = hhos_parts + required_stock_parts
     is_stock_only_job = not parts_to_cut and optional_stock_parts
-
     stock_sheets = [{'id': 'default_sheet', 'length': config['default_length'], 'width': config['default_width'], 'quantity': float('inf'), 'type': 'Default'}]
     
     if config.get('use_offcuts') and offcut_df is not None and not offcut_df.empty:
         selected_ids = [int(i) for i in config.get('selected_offcuts', [])]
-        if not selected_ids and config.get('offcut_path'):
-            filtered_offcuts = offcut_df
-        else:
-            filtered_offcuts = offcut_df.loc[offcut_df.index.isin(selected_ids)]
-        
+        filtered_offcuts = offcut_df.loc[offcut_df.index.isin(selected_ids)] if selected_ids else offcut_df
         if not filtered_offcuts.empty:
             offcuts_with_id = filtered_offcuts.copy()
             offcuts_with_id['id'] = 'offcut_' + offcuts_with_id.index.astype(str)
@@ -246,12 +336,10 @@ def standardize_layouts(layouts: list, initial_optional_parts: list, config: dic
         layout['original_index'] = i
         signature = get_layout_signature(layout, required_only=True)
         grouped_layouts.setdefault(signature, []).append(layout)
-
     final_layouts = [None] * len(layouts)
     for signature, group in grouped_layouts.items():
         if len(group) <= 1:
-            for layout in group:
-                final_layouts[layout['original_index']] = layout
+            for layout in group: final_layouts[layout['original_index']] = layout
             continue
         unique_variations = {get_layout_signature(l): l for l in group}.values()
         scored_variations = []
@@ -268,37 +356,36 @@ def standardize_layouts(layouts: list, initial_optional_parts: list, config: dic
             for part in chosen_layout.get('placed_parts', []):
                 if part.get('is_stock_part'):
                     ref = part.get('internal_ref')
-                    if live_deficit_tracker[ref] > 0:
-                        live_deficit_tracker[ref] -= 1
+                    if live_deficit_tracker[ref] > 0: live_deficit_tracker[ref] -= 1
         for original_layout, standardized_layout in zip(group, standardized_group):
             final_layouts[original_layout['original_index']] = standardized_layout
     return final_layouts
 
 def prepare_results_for_render(layouts, remaining_parts, final_score, config, elapsed_time, ideal_score, score_percentage):
     if not layouts: return None
-    total_placed_area = sum(l['total_placed_area'] * l.get('quantity', 1) for l in layouts)
-    total_sheet_area = sum(l['sheet_info']['length'] * l['sheet_info']['width'] * l.get('quantity', 1) for l in layouts)
+    total_placed_area = sum(l['total_placed_area'] for l in layouts)
+    total_sheet_area = sum(l['sheet_info']['length'] * l['sheet_info']['width'] for l in layouts if l['sheet_info']['length'] * l['sheet_info']['width'] > 0)
     overall_yield = (total_placed_area / total_sheet_area) * 100 if total_sheet_area > 0 else 0
-
+    
     grouped_layouts = {}
     for layout in layouts:
         use_required_sig = config.get('standardize_stock_layouts', False)
         signature = get_layout_signature(layout, required_only=use_required_sig)
         if signature not in grouped_layouts:
             sheet_info = layout['sheet_info']
-            sheet_area = sheet_info['length'] * sheet_info['width']
             
-            # Add a unique instance ID to each part for DOM manipulation
-            for i, part in enumerate(layout['placed_parts']):
-                part['part_instance_id'] = f"{signature}_{i}"
+            if sheet_info.get('quantity') == float('inf'):
+                sheet_info['quantity'] = None
 
+            sheet_area = sheet_info['length'] * sheet_info['width']
             grouped_layouts[signature] = {
                 'signature': signature,
                 'placed_parts': layout['placed_parts'],
                 'sheet_info': sheet_info,
                 'yield_percentage': (layout['total_placed_area'] / sheet_area) * 100 if sheet_area > 0 else 0,
-                'usable_offcuts': [r for r in layout['offcuts'] if r['length'] >= config['min_offcut_dim'] and r['width'] >= config['min_offcut_dim']],
-                'quantity': 1
+                'usable_offcuts': [r for r in layout.get('offcuts', []) if r['length'] >= config['min_offcut_dim'] and r['width'] >= config['min_offcut_dim']],
+                'quantity': 1,
+                'offcuts': layout.get('offcuts', [])
             }
         else:
             grouped_layouts[signature]['quantity'] += 1
@@ -307,83 +394,57 @@ def prepare_results_for_render(layouts, remaining_parts, final_score, config, el
         'layouts': list(grouped_layouts.values()), 'remaining_parts': remaining_parts,
         'final_score': final_score, 'ideal_score': ideal_score, 'score_percentage': score_percentage,
         'overall_yield': overall_yield, 'num_unique_layouts': len(grouped_layouts),
-        'elapsed_time': elapsed_time
+        'elapsed_time': elapsed_time,
+        'config': {'default_width': config['default_width'], 'default_length': config['default_length']}
     }
-
 
 def get_initial_optional_parts(stock_inv_df, config):
     if not config['add_stock_parts'] or stock_inv_df is None: return []
     required_refs = config.get('required_stock_quantities', {}).keys()
-    mask = (
-        stock_inv_df['internal_ref'].isin(config['selected_stock_parts'])) & \
-        (stock_inv_df['current_stock'] < stock_inv_df['target_stock']) & \
-        (~stock_inv_df['internal_ref'].isin(required_refs)
-    )
+    mask = (stock_inv_df['internal_ref'].isin(config['selected_stock_parts'])) & (stock_inv_df['current_stock'] < stock_inv_df['target_stock']) & (~stock_inv_df['internal_ref'].isin(required_refs))
     needy_stock = stock_inv_df[mask].copy()
     if needy_stock.empty: return []
     needy_stock['is_stock_part'] = True
     return needy_stock.to_dict('records')
 
-
 @app.route('/', methods=['GET', 'POST'])
 def home():
     config = load_config()
-    optimization_result = session.get('last_result', None)
-    hhos_file_contents, all_stock_parts_list, all_offcuts_list = [], [], []
-
+    optimization_result, hhos_file_contents, all_stock_parts_list, all_offcuts_list = None, [], [], []
+    
     if request.method == 'POST':
-        # Clear previous results when a new optimization is run
-        session.pop('last_result', None)
-        optimization_result = None
-
+        session.pop('optimization_result', None)
         config = update_config_from_form(config, request.form)
         save_config(config)
         flash("Configuration saved successfully!", "success")
 
     all_hhos_part_ids = []
     for hhos_file in config.get('hhos_files', []):
-        path = hhos_file.get('path')
-        content_item = {'path': path, 'parts': [], 'error': None}
+        path, content_item = hhos_file.get('path'), {'path': hhos_file.get('path'), 'parts': [], 'error': None}
         if path and os.path.exists(path):
             try:
                 temp_df = extract_hhos_data(pd.read_csv(path, header=None))
                 temp_df['quantity'] *= hhos_file.get('multiplier', 1)
                 temp_df['unique_id'] = [f"{path}_{i}" for i in range(len(temp_df))]
                 all_hhos_part_ids.extend(temp_df['unique_id'].tolist())
-                
                 part_quantities = config.get('part_quantities', {})
-                if part_quantities:
-                    temp_df['quantity'] = temp_df.apply(
-                        lambda row: part_quantities.get(row['unique_id'], row['quantity']),
-                        axis=1
-                    )
+                if part_quantities: temp_df['quantity'] = temp_df.apply(lambda r: part_quantities.get(r['unique_id'], r['quantity']), axis=1)
                 content_item['parts'] = temp_df.to_dict('records')
-            except Exception as e:
-                content_item['error'] = str(e)
-        else:
-            content_item['error'] = "File not found."
+            except Exception as e: content_item['error'] = str(e)
+        else: content_item['error'] = "File not found."
         hhos_file_contents.append(content_item)
 
-    if request.method == 'GET' and all_hhos_part_ids:
-        if not config.get('selected_hhos_parts'):
-            config['selected_hhos_parts'] = all_hhos_part_ids
+    if request.method == 'GET' and all_hhos_part_ids and not config.get('selected_hhos_parts'):
+        config['selected_hhos_parts'] = all_hhos_part_ids
 
     try:
-        hhos_df, offcut_df, stock_inv_df = process_uploaded_files(
-            config.get('hhos_files', []), config['offcut_path'], config['stock_inv_path'],
-            config['default_length'], config['default_width']
-        )
-        if stock_inv_df is not None:
-            all_stock_parts_list = stock_inv_df.to_dict('records')
-        
+        hhos_df, offcut_df, stock_inv_df = process_uploaded_files(config.get('hhos_files', []), config['offcut_path'], config['stock_inv_path'], config['default_length'], config['default_width'])
+        if stock_inv_df is not None: all_stock_parts_list = stock_inv_df.to_dict('records')
         if offcut_df is not None:
-            if not config.get('selected_offcuts') and config.get('offcut_path'):
-                config['selected_offcuts'] = [str(i) for i in offcut_df.index]
-
+            if not config.get('selected_offcuts') and config.get('offcut_path'): config['selected_offcuts'] = [str(i) for i in offcut_df.index]
             offcut_df_for_template = offcut_df.copy()
             offcut_df_for_template['id'] = offcut_df_for_template.index.astype(str)
             all_offcuts_list = offcut_df_for_template.to_dict('records')
-
     except Exception as e:
         flash(f"Error processing files: {e}", "danger")
         traceback.print_exc()
@@ -394,104 +455,85 @@ def home():
             opt_start_time = time.time()
             layouts, remaining_parts, final_score, parts_to_cut = run_optimization(config, hhos_df, offcut_df, stock_inv_df)
             opt_elapsed_time = time.time() - opt_start_time
-            
             initial_optional_parts = get_initial_optional_parts(stock_inv_df, config)
-            final_layouts = layouts
-            if config.get('standardize_stock_layouts', False) and layouts:
-                final_layouts = standardize_layouts(layouts, initial_optional_parts, config)
-
+            final_layouts = standardize_layouts(layouts, initial_optional_parts, config) if config.get('standardize_stock_layouts', False) and layouts else layouts
             ideal_score = calculate_ideal_score(parts_to_cut, initial_optional_parts, offcut_df, config)
             score_percentage = 0.0
-            if final_score >= ideal_score:
-                score_percentage = 100.0
-            elif ideal_score > 0:
-                score_percentage = max(0.0, (final_score / ideal_score) * 100.0)
-            elif ideal_score < 0:
-                score_percentage = (ideal_score / final_score) * 100.0 if final_score != 0 else 0.0
-            else:
-                score_percentage = 0.0
+            if final_score >= ideal_score: score_percentage = 100.0
+            elif ideal_score > 0: score_percentage = max(0.0, (final_score / ideal_score) * 100.0)
+            elif ideal_score < 0: score_percentage = (ideal_score / final_score) * 100.0 if final_score != 0 else 0.0
             score_percentage = max(0.0, min(score_percentage, 100.0))
-
             optimization_result = prepare_results_for_render(final_layouts, remaining_parts, final_score, config, opt_elapsed_time, ideal_score, score_percentage)
-            
             if optimization_result:
-                session['last_result'] = optimization_result
+                session['optimization_result'] = optimization_result
                 flash("Optimization complete.", "success")
             elif not layouts:
-                 flash("Optimization timed out before a valid solution could be found. Try increasing the search time.", "danger")
+                 flash("Optimization timed out. Try increasing the search time.", "danger")
         except Exception as e:
             flash(f"An error occurred during optimization: {e}", "danger")
             traceback.print_exc()
+    elif request.method == 'GET' and 'optimization_result' in session:
+        optimization_result = session['optimization_result']
 
-    return render_template(
-        'index.html', config=config, result=optimization_result, 
-        all_stock_parts=all_stock_parts_list, 
-        hhos_file_contents=hhos_file_contents,
-        all_offcuts=all_offcuts_list
-    )
+    return render_template('index.html', config=config, result=optimization_result, all_stock_parts=all_stock_parts_list, hhos_file_contents=hhos_file_contents, all_offcuts=all_offcuts_list)
 
-@app.route('/remove-part', methods=['POST'])
-def remove_part_from_layout():
-    """Removes a single stock part from a layout stored in the session."""
-    layout_signature = request.form.get('layout_signature')
-    part_instance_id = request.form.get('part_instance_id')
-    result = session.get('last_result')
-
-    if not all([layout_signature, part_instance_id, result]):
-        flash("Could not remove part: session expired or invalid data.", "danger")
-        return redirect(url_for('home'))
-
-    # Find the layout and part
-    layout_found = None
-    part_to_remove = None
-    part_index = -1
-
-    for layout in result['layouts']:
-        if layout['signature'] == layout_signature:
-            layout_found = layout
-            for i, part in enumerate(layout['placed_parts']):
-                if part.get('part_instance_id') == part_instance_id:
-                    part_to_remove = part
-                    part_index = i
-                    break
-        if layout_found:
-            break
+@app.route('/update_layout', methods=['POST'])
+def update_layout():
+    if 'optimization_result' not in session: 
+        return jsonify({"error": "No result found in session."}), 400
+    
+    data = request.get_json()
+    action, layout_sig, item_index = data.get('action'), data.get('layout_signature'), data.get('item_index')
+    if not all([action, layout_sig, item_index is not None]): 
+        return jsonify({"error": "Missing required data."}), 400
+    
+    config = load_config()
+    result = session['optimization_result']
+    
+    layout_to_modify = next((g for g in result['layouts'] if g.get('signature') == layout_sig), None)
             
-    if layout_found and part_to_remove:
-        # Remove the part
-        layout_found['placed_parts'].pop(part_index)
+    if not layout_to_modify: 
+        return jsonify({"error": "Layout group not found."}), 404
 
-        # Recalculate layout metrics
-        part_area = part_to_remove['length'] * part_to_remove['width']
-        sheet_info = layout_found['sheet_info']
-        sheet_area = sheet_info['length'] * sheet_info['width']
+    if action == 'remove_stock_part':
+        if item_index < 0 or item_index >= len(layout_to_modify['placed_parts']): 
+            return jsonify({"error": "Part index out of bounds."}), 400
         
-        # Simple recalculation of total placed area
-        new_placed_area = sum(p['length'] * p['width'] for p in layout_found['placed_parts'])
+        part_to_remove = layout_to_modify['placed_parts'].pop(item_index)
         
-        # Add the removed part's space back to usable_offcuts for visualization
-        removed_part_rect = {
-            'x': part_to_remove['x'],
-            'y': part_to_remove['y'],
-            'length': part_to_remove['width'] if part_to_remove.get('rotated') else part_to_remove['length'],
-            'width': part_to_remove['length'] if part_to_remove.get('rotated') else part_to_remove['width'],
-        }
-        layout_found['usable_offcuts'].append(removed_part_rect)
-        layout_found['yield_percentage'] = (new_placed_area / sheet_area) * 100 if sheet_area > 0 else 0
-
-        # Recalculate overall metrics
-        total_placed_area = sum(l['yield_percentage']/100 * l['sheet_info']['length'] * l['sheet_info']['width'] * l.get('quantity', 1) for l in result['layouts'])
-        total_sheet_area = sum(l['sheet_info']['length'] * l['sheet_info']['width'] * l.get('quantity', 1) for l in result['layouts'])
-        result['overall_yield'] = (total_placed_area / total_sheet_area) * 100 if total_sheet_area > 0 else 0
+        p_dims = {'length': part_to_remove['width'] if part_to_remove.get('rotated') else part_to_remove['length'], 
+                  'width': part_to_remove['length'] if part_to_remove.get('rotated') else part_to_remove['width']}
         
-        # Update session and redirect
-        session['last_result'] = result
-        flash(f"Removed stock part from layout.", "success")
-    else:
-        flash("Error: Part or layout not found.", "danger")
+        # Combine the new empty space with existing offcuts and merge them
+        new_empty_rect = {'x': part_to_remove['x'], 'y': part_to_remove['y'], 'length': p_dims['length'], 'width': p_dims['width']}
+        all_empty_rects = layout_to_modify.get('offcuts', []) + [new_empty_rect]
+        layout_to_modify['offcuts'] = merge_rectangles(all_empty_rects)
 
-    return redirect(url_for('home'))
+    elif action == 'remove_offcut':
+        usable_offcuts = [r for r in layout_to_modify.get('offcuts', []) if r['length'] >= config['min_offcut_dim'] and r['width'] >= config['min_offcut_dim']]
+        
+        if item_index < 0 or item_index >= len(usable_offcuts): 
+            return jsonify({"error": "Offcut index out of bounds."}), 400
+        
+        offcut_to_remove = usable_offcuts[item_index]
+        try:
+            layout_to_modify['offcuts'].remove(offcut_to_remove)
+        except ValueError:
+            return jsonify({"error": "Offcut could not be removed."}), 500
 
+    else: 
+        return jsonify({"error": "Invalid action."}), 400
+
+    # Generate a new signature for the modified layout
+    use_req_sig = config.get('standardize_stock_layouts', False)
+    new_signature = get_layout_signature(layout_to_modify, required_only=use_req_sig)
+    layout_to_modify['signature'] = new_signature
+    
+    # Recalculate all summary scores and update the result object
+    updated_result = recalculate_global_summary(result, config)
+
+    session['optimization_result'] = updated_result
+    return jsonify(updated_result)
 
 if __name__ == '__main__':
     app.run(debug=True, port=5001)

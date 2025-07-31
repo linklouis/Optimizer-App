@@ -384,25 +384,3 @@ input:checked + .slider:before { transform: translateX(20px); }
     .container { padding: 1rem; }
     header { flex-direction: column; gap: 1rem; }
 }
-
-/* --- SVG Styles for Remove Button --- */
-.remove-stock-part-btn {
-    cursor: pointer;
-    opacity: 0.7;
-    transition: opacity 0.2s ease-in-out;
-}
-
-.remove-stock-part-btn:hover {
-    opacity: 1;
-}
-
-.remove-stock-part-btn circle {
-    fill: var(--danger);
-}
-
-.remove-stock-part-btn text {
-    font-size: 3px;
-    font-weight: 700;
-    fill: white;
-    font-family: var(--font-sans);
-}

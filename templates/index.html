@@ -103,26 +103,17 @@
                                                     <thead>
                                                         <tr>
                                                             <th><input type="checkbox" class="select-all-parts-in-file" title="Select/Deselect All in this File"></th>
-                                                            <th>Material</th>
-                                                            <th>Length</th>
-                                                            <th>Width</th>
-                                                            <th>Qty</th>
-                                                            <th>Crate (Part Name)</th>
-                                                            <th>Ref (Label)</th>
+                                                            <th>Material</th><th>Length</th><th>Width</th><th>Qty</th>
+                                                            <th>Crate (Part Name)</th><th>Ref (Label)</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody>
                                                         {% for part in file_content.parts %}
                                                         <tr>
                                                             <td><input type="checkbox" name="selected_hhos_parts" value="{{ part.unique_id }}" {% if part.unique_id in config.selected_hhos_parts %}checked{% endif %}></td>
-                                                            <td>{{ part.material }}</td>
-                                                            <td>{{ part.length }}</td>
-                                                            <td>{{ part.width }}</td>
-                                                            <td>
-                                                                <input type="number" name="part_qty_{{ part.unique_id }}" class="part-qty-input" value="{{ part.quantity|int }}" min="1">
-                                                            </td>
-                                                            <td>{{ part.part_name }}</td>
-                                                            <td>{{ part.label }}</td>
+                                                            <td>{{ part.material }}</td><td>{{ part.length }}</td><td>{{ part.width }}</td>
+                                                            <td><input type="number" name="part_qty_{{ part.unique_id }}" class="part-qty-input" value="{{ part.quantity|int }}" min="1"></td>
+                                                            <td>{{ part.part_name }}</td><td>{{ part.label }}</td>
                                                         </tr>
                                                         {% endfor %}
                                                     </tbody>
@@ -143,12 +134,10 @@
                         <details class="collapsible-section animated-accordion">
                             <summary class="card-title"><i class="fa-solid fa-ruler-combined"></i> Manage Offcuts</summary>
                              <div class="collapsible-content">
-                                <div class="card-header">
-                                    <div class="button-group">
-                                        <button type="button" class="btn-secondary" id="select-all-offcuts">Select All</button>
-                                        <button type="button" class="btn-secondary" id="deselect-all-offcuts">Deselect All</button>
-                                    </div>
-                                </div>
+                                <div class="card-header"><div class="button-group">
+                                    <button type="button" class="btn-secondary" id="select-all-offcuts">Select All</button>
+                                    <button type="button" class="btn-secondary" id="deselect-all-offcuts">Deselect All</button>
+                                </div></div>
                                 <div class="stock-selector offcut-selector">
                                     {% for offcut in all_offcuts %}
                                     <div class="stock-item">
@@ -159,8 +148,7 @@
                                         </div>
                                         <div class="stock-item-qty">
                                             <label class="checkbox-group" for="prio_offcut_{{ offcut.id }}">
-                                                <input type="checkbox" name="prioritized_offcuts" id="prio_offcut_{{ offcut.id }}" value="{{ offcut.id }}" {% if offcut.id in config.prioritized_offcuts %}checked{% endif %}>
-                                                Prioritize
+                                                <input type="checkbox" name="prioritized_offcuts" id="prio_offcut_{{ offcut.id }}" value="{{ offcut.id }}" {% if offcut.id in config.prioritized_offcuts %}checked{% endif %}> Prioritize
                                             </label>
                                         </div>
                                     </div>
@@ -177,12 +165,10 @@
                         <details class="collapsible-section animated-accordion">
                             <summary class="card-title"><i class="fa-solid fa-boxes-stacked"></i>Manage Stock Parts</summary>
                             <div class="collapsible-content">
-                                <div class="card-header">
-                                    <div class="button-group">
-                                        <button type="button" class="btn-secondary" id="select-all-stock">Select All</button>
-                                        <button type="button" class="btn-secondary" id="deselect-all-stock">Deselect All</button>
-                                    </div>
-                                </div>
+                                <div class="card-header"><div class="button-group">
+                                    <button type="button" class="btn-secondary" id="select-all-stock">Select All</button>
+                                    <button type="button" class="btn-secondary" id="deselect-all-stock">Deselect All</button>
+                                </div></div>
                                 <div class="stock-selector">
                                     {% for part in all_stock_parts %}
                                     <label class="stock-item" for="stock_{{ part.internal_ref }}">
@@ -194,15 +180,7 @@
                                         </div>
                                         <div class="stock-item-qty">
                                             <label for="req_qty_{{ part.internal_ref }}">Required Qty:</label>
-                                            <input 
-                                                type="number" 
-                                                name="required_qty_{{ part.internal_ref }}" 
-                                                id="req_qty_{{ part.internal_ref }}" 
-                                                class="required-qty-input"
-                                                value="{{ config.required_stock_quantities.get(part.internal_ref, '') }}"
-                                                min="0" 
-                                                placeholder="0"
-                                                {% if part.internal_ref not in config.selected_stock_parts %}disabled{% endif %}>
+                                            <input type="number" name="required_qty_{{ part.internal_ref }}" id="req_qty_{{ part.internal_ref }}" class="required-qty-input" value="{{ config.required_stock_quantities.get(part.internal_ref, '') }}" min="0" placeholder="0" {% if part.internal_ref not in config.selected_stock_parts %}disabled{% endif %}>
                                         </div>
                                     </label>
                                     {% endfor %}
@@ -217,16 +195,16 @@
                         <section class="card">
                             <h2 class="card-title"><i class="fa-solid fa-cogs"></i> General Settings</h2>
                             <div class="form-grid">
-                                <div><label for="default_length">Default Length</label><input type="number" step="any" id="default_length" name="default_length" value="{{ config.default_length }}"></div>
-                                <div><label for="default_width">Default Width</label><input type="number" step="any" id="default_width" name="default_width" value="{{ config.default_width }}"></div>
-                                <div><label for="kerf">Kerf (Saw Blade)</label><input type="number" step="any" id="kerf" name="kerf" value="{{ config.kerf }}"></div>
-                                <div><label for="min_offcut_dim">Min. Usable Offcut</label><input type="number" step="any" id="min_offcut_dim" name="min_offcut_dim" value="{{ config.min_offcut_dim }}"></div>
+                                <div><label for="default_length">Default Sheet Length</label><input type="number" step="any" id="default_length" name="default_length" value="{{ config.default_length }}"></div>
+                                <div><label for="default_width">Default Sheet Width</label><input type="number" step="any" id="default_width" name="default_width" value="{{ config.default_width }}"></div>
+                                <div><label for="kerf">Kerf <span class="tooltip" data-tooltip="The width of the saw blade.">[?]</span></label><input type="number" step="any" id="kerf" name="kerf" value="{{ config.kerf }}"></div>
+                                <div><label for="min_offcut_dim">Min. Usable Offcut Width</label><input type="number" step="any" id="min_offcut_dim" name="min_offcut_dim" value="{{ config.min_offcut_dim }}"></div>
                                 <div>
-                                    <label for="search_time_limit">Search Time (s) <span class="tooltip" data-tooltip="Total time for the optimizer to run. Longer times allow for a more thorough search and better results.">[?]</span></label>
+                                    <label for="search_time_limit">Search Time (s) <span class="tooltip" data-tooltip="Total time for the optimizer to run. Longer times allow for a more thorough search and better results.&#013;Note: Ideally, the algorithm will finish before the time runs out. If it doesn't, it will pick the best option it's found so far. If it hasn't found a viable option yet, an error will occur.">[?]</span></label>
                                     <input type="number" step="any" id="search_time_limit" name="search_time_limit" value="{{ config.search_time_limit }}">
                                 </div>
                                 <div>
-                                    <label for="branching_factor">Branching Factor <span class="tooltip" data-tooltip="Number of random layouts to generate at each search step. Higher values explore more options but are slower. Default is 1.">[?]</span></label>
+                                    <label for="branching_factor">Branching Factor <span class="tooltip" data-tooltip="Number of random layouts to generate at each search step. Higher values explore more options but are slower.">[?]</span></label>
                                     <input type="number" step="1" min="1" id="branching_factor" name="branching_factor" value="{{ config.branching_factor }}">
                                 </div>
                             </div>
@@ -242,35 +220,35 @@
                             <h2 class="card-title"><i class="fa-solid fa-balance-scale"></i> Scoring Weights</h2>
                             <div class="form-grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));">
                                 <div>
-                                    <label for="w_waste">Waste Penalty <span class="tooltip" data-tooltip="Penalizes unusable scrap material. Higher is stricter.">[?]</span></label>
+                                    <label for="w_waste">Waste Penalty <span class="tooltip" data-tooltip="Penalizes unusable scrap material.">[?]</span></label>
                                     <input type="number" step="any" id="w_waste" name="w_waste" value="{{ config.w_waste }}">
                                 </div>
                                 <div>
-                                    <label for="w_offcut">Offcut Penalty <span class="tooltip" data-tooltip="Penalizes usable leftover pieces (offcuts). Use a lower value (even negative) if you want more offcuts.">[?]</span></label>
+                                    <label for="w_offcut">Offcut Penalty <span class="tooltip" data-tooltip="Penalizes usable leftover pieces (offcuts).">[?]</span></label>
                                     <input type="number" step="any" id="w_offcut" name="w_offcut" value="{{ config.w_offcut }}">
                                 </div>
                                 <div>
-                                    <label for="w_cuts"># of Cuts Penalty <span class="tooltip" data-tooltip="Slightly penalizes each cut made to favor layouts with fewer cuts.">[?]</span></label>
+                                    <label for="w_cuts"># of Cuts Penalty <span class="tooltip" data-tooltip="Favors layouts with fewer cuts.">[?]</span></label>
                                     <input type="number" step="any" id="w_cuts" name="w_cuts" value="{{ config.w_cuts }}">
                                 </div>
                                 <div>
-                                    <label for="w_quantity">Offcut Inv. Bonus <span class="tooltip" data-tooltip="Adds a small bonus for using offcuts that have a high quantity.">[?]</span></label>
+                                    <label for="w_quantity">Offcut Inv. Bonus <span class="tooltip" data-tooltip="Bonus for using offcuts with high quantity.">[?]</span></label>
                                     <input type="number" step="any" id="w_quantity" name="w_quantity" value="{{ config.w_quantity }}">
                                 </div>
                                 <div>
-                                    <label for="w_sheets"># of Sheets Penalty <span class="tooltip" data-tooltip="Penalizes using more sheets. Higher values prioritize filling existing sheets.">[?]</span></label>
+                                    <label for="w_sheets"># of Sheets Penalty <span class="tooltip" data-tooltip="Penalizes using more sheets.">[?]</span></label>
                                     <input type="number" step="any" id="w_sheets" name="w_sheets" value="{{ config.w_sheets }}">
                                 </div>
                                 <div>
-                                    <label for="w_stock_fill">Stock Part Inv. Bonus <span class="tooltip" data-tooltip="Prioritizes creating stock parts that are low in inventory.">[?]</span></label>
+                                    <label for="w_stock_fill">Stock Part Inv. Bonus <span class="tooltip" data-tooltip="Prioritizes creating low-inventory stock parts.">[?]</span></label>
                                     <input type="number" step="any" id="w_stock_fill" name="w_stock_fill" value="{{ config.w_stock_fill }}">
                                 </div>
                                 <div>
-                                    <label for="w_unique_layouts">Unique Layouts Penalty <span class="tooltip" data-tooltip="Penalizes creating many different cutting patterns. Higher values encourage reusing layouts.">[?]</span></label>
+                                    <label for="w_unique_layouts">Unique Layouts Penalty <span class="tooltip" data-tooltip="Encourages reusing cutting patterns.">[?]</span></label>
                                     <input type="number" step="any" id="w_unique_layouts" name="w_unique_layouts" value="{{ config.w_unique_layouts }}">
                                 </div>
                                 <div>
-                                    <label for="w_priority_offcut">Priority Offcut Bonus<span class="tooltip" data-tooltip="Adds a large bonus for using an offcut marked as a priority.">[?]</span></label>
+                                    <label for="w_priority_offcut">Priority Offcut Bonus<span class="tooltip" data-tooltip="Large bonus for using a priority offcut.">[?]</span></label>
                                     <input type="number" step="any" id="w_priority_offcut" name="w_priority_offcut" value="{{ config.w_priority_offcut }}">
                                 </div>
                             </div>
@@ -285,128 +263,78 @@
                 <div id="loading-overlay" style="display: none;">
                     <div class="loading-content">
                         <div class="spinner"></div>
-                        <h3>Optimizing Layouts...</h3>
+                        <h3>Updating Layout...</h3>
                     </div>
-                    <p>This may take a few moments, especially for complex jobs.</p>
                 </div>
 
-                 {% if result and result.layouts %}
-                    <section class="results-summary">
-                        <div class="summary-metric">
-                            <span class="value">{{ result.score_percentage|round(1) }}%</span>
-                            <span class="label">
-                                Overall Score
-                                <span class="tooltip" data-tooltip="Actual: {{ '%.2f'|format(result.final_score) }} | Ideal: {{ '%.2f'|format(result.ideal_score) }}">[?]</span>
-                            </span>
-                        </div>
-                        <div class="summary-metric"><span class="value">{{ result.layouts|map(attribute='quantity')|sum }}</span><span class="label">Total Sheets Used</span></div>
-                        <div class="summary-metric"><span class="value">{{ result.num_unique_layouts }}</span><span class="label">Unique Layouts</span></div>
-                        <div class="summary-metric"><span class="value">{{ result.overall_yield|round(2) }}%</span><span class="label">Overall Yield</span></div>
-                        <div class="summary-metric">
-                            <span class="value">{{ '%.2f'|format(result.elapsed_time) }}s</span>
-                            <span class="label">Time Spent</span>
-                        </div>
-                        <div class="summary-metric {% if result.remaining_parts|length > 0 %}is-alert{% endif %}">
-                            <span class="value">{{ result.remaining_parts|length }}</span>
-                            <span class="label">Parts Not Placed</span>
-                        </div>
-                    </section>
-                    
-                    <div class="results-grid">
-                        {% set max_card_width = 450 %}
-                        {% for layout in result.layouts %}
-                            {% set display_width = (layout.sheet_info.width / config.default_width) * max_card_width %}
-                            
-                            <div class="layout-card card" style="width: {{ display_width }}px;">
-                                <h3 class="layout-title">{{ layout.sheet_info.type }} {{ layout.sheet_info.length|round(1) }}x{{ layout.sheet_info.width|round(1) }} | x{{ layout.quantity }} | Yield: {{ layout.yield_percentage|round(2) }}%</h3>
-                                <div class="svg-container">
-                                    <svg viewBox="-2 -2 {{ layout.sheet_info.width + 4 }} {{ layout.sheet_info.length + 4 }}">
-                                        <defs>
-                                            <pattern id="stockPattern" patternUnits="userSpaceOnUse" width="5" height="5">
-                                                <rect width="5" height="5" fill="var(--stock-part-fill)"/>
-                                                <circle cx="2.5" cy="2.5" r="0.8" fill="rgba(0,0,0,0.4)"/>
-                                            </pattern>
-                                    
-                                            <pattern id="offcutPattern" patternUnits="userSpaceOnUse" width="6" height="6">
-                                                <rect width="6" height="6" fill="var(--offcut-fill)"/>
-                                                <path d="M-1,1 l2,-2 M0,6 l6,-6 M5,7 l2,-2" stroke-width="0.7" stroke="rgba(0,0,0,0.4)" stroke-linecap="round"/>
-                                            </pattern>
-                                        </defs>
-                                        <rect class="sheet-bg" x="0" y="0" width="{{ layout.sheet_info.width }}" height="{{ layout.sheet_info.length }}"/>
-                                        {% for part in layout.placed_parts %}
-                                            {% set p_length = part.width if part.rotated else part.length %}
-                                            {% set p_width = part.length if part.rotated else part.width %}
-                                            {% set svg_y = layout.sheet_info.length - part.y - p_length %}
-                                            <g class="part-group" transform="translate({{ part.x }}, {{ svg_y }})">
-                                                <rect class="{{ 'stock-part' if part.is_stock_part else 'job-part' }}" width="{{ p_width }}" height="{{ p_length }}"/>
-                                                
-                                                {# --- Text & Button Logic --- #}
-                                                {% if p_length > p_width * 1.5 and p_width > 4 %}
-                                                    <text class="part-label" text-anchor="middle" dominant-baseline="middle" transform="translate({{ p_width / 2 }}, {{ p_length / 2 }}) rotate(90)">
-                                                        {% if part.is_stock_part %}STOCK{% else %}{{ part.label }}{% endif %}
-                                                    </text>
-                                                {% elif p_width > 8 and p_length > 4 %} 
-                                                     <text class="part-label" x="{{ p_width / 2 }}" y="{{ p_length / 2 }}" dominant-baseline="middle" text-anchor="middle">
-                                                        {% if part.is_stock_part %}STOCK{% else %}{{ part.label }}{% endif %}
-                                                    </text>
-                                                {% endif %}
+                <div id="results-container">
+                    {% if result and result.layouts %}
+                        <section class="results-summary">
+                            <div class="summary-metric">
+                                <span class="value" id="summary-score-percentage">{{ result.score_percentage|round(1) }}%</span>
+                                <span class="label">
+                                    Overall Score
+                                    <span class="tooltip" data-tooltip="Actual: {{ '%.2f'|format(result.final_score) }} | Ideal: {{ '%.2f'|format(result.ideal_score) }}">[?]</span>
+                                </span>
+                            </div>
+                            <div class="summary-metric"><span class="value" id="summary-total-sheets">{{ result.layouts|map(attribute='quantity')|sum }}</span><span class="label">Total Sheets Used</span></div>
+                            <div class="summary-metric"><span class="value" id="summary-unique-layouts">{{ result.num_unique_layouts }}</span><span class="label">Unique Layouts</span></div>
+                            <div class="summary-metric"><span class="value" id="summary-overall-yield">{{ result.overall_yield|round(2) }}%</span><span class="label">Overall Yield</span></div>
+                            <div class="summary-metric">
+                                <span class="value">{{ '%.2f'|format(result.elapsed_time) }}s</span>
+                                <span class="label">Time Spent</span>
+                            </div>
+                            <div class="summary-metric {% if result.remaining_parts|length > 0 %}is-alert{% endif %}">
+                                <span class="value" id="summary-remaining-parts">{{ result.remaining_parts|length }}</span>
+                                <span class="label">Parts Not Placed</span>
+                            </div>
+                        </section>
+                        
+                        <div class="results-grid" id="results-grid">
+                            {% set max_card_width = 450 %}
+                            {% for layout in result.layouts %}
+                                {% set display_width = (layout.sheet_info.width / result.config.default_width) * max_card_width %}
                                 
-                                                {% set text_padding = 1.5 %}
-                                                {% if p_width > 6 %}
-                                                    <text class="inner-dim-text" text-anchor="middle" dominant-baseline="hanging" x="{{ p_width / 2 }}" y="{{ text_padding }}">{{ '%.2f' % p_width }}</text>
-                                                {% endif %}
-                                                {% if p_length > 6 %}
-                                                     <text class="inner-dim-text" text-anchor="middle" dominant-baseline="hanging" transform="translate({{ text_padding }}, {{ p_length / 2 }}) rotate(-90)">{{ '%.2f' % p_length }}</text>
-                                                {% endif %}
-
-                                                {# --- Remove Button for Stock Parts --- #}
-                                                {% if part.is_stock_part and p_width > 4 and p_length > 4 %}
-                                                <g class="remove-stock-part-btn" data-layout-signature="{{ layout.signature }}" data-part-instance-id="{{ part.part_instance_id }}">
-                                                    <title>Remove Stock Part</title>
-                                                    <circle cx="{{ p_width - 2.5 }}" cy="2.5" r="2"/>
-                                                    <text x="{{ p_width - 2.5 }}" y="2.5" dominant-baseline="central" text-anchor="middle">x</text>
-                                                </g>
-                                                {% endif %}
-                                            </g>
-                                        {% endfor %}
-                                        {% for offcut in layout.usable_offcuts %}
-                                            {% set svg_y = layout.sheet_info.length - offcut.y - offcut.length %}
-                                            <g class="offcut-group" transform="translate({{ offcut.x }}, {{ svg_y }})">
-                                                <rect class="offcut" width="{{ offcut.width }}" height="{{ offcut.length }}"/>
-                                                {% if offcut.length > offcut.width * 1.5 and offcut.width > 4 %}
-                                                    <text class="offcut-label" text-anchor="middle" dominant-baseline="middle" transform="translate({{ offcut.width / 2 }}, {{ offcut.length / 2 }}) rotate(90)">Offcut</text>
-                                                {% elif offcut.width > 8 and offcut.length > 4 %}
-                                                    <text class="offcut-label" x="{{ offcut.width / 2 }}" y="{{ offcut.length / 2 }}" dominant-baseline="middle" text-anchor="middle">Offcut</text>
-                                                {% endif %}
-                                                {% set text_padding = 1.5 %}
-                                                {% if offcut.width > 6 %}
-                                                    <text class="inner-dim-text" text-anchor="middle" dominant-baseline="hanging" x="{{ offcut.width / 2 }}" y="{{ text_padding }}">{{ '%.2f' % offcut.width }}</text>
-                                                {% endif %}
-                                                {% if offcut.length > 6 %}
-                                                    <text class="inner-dim-text" text-anchor="middle" dominant-baseline="hanging" transform="translate({{ text_padding }}, {{ offcut.length / 2 }}) rotate(-90)">{{ '%.2f' % offcut.length }}</text>
-                                                {% endif %}
-                                            </g>
-                                        {% endfor %}
-                                        <g class="cut-line-group">
+                                <div class="layout-card card" style="width: {{ display_width }}px;" data-layout-signature="{{ layout.signature }}">
+                                    <h3 class="layout-title">{{ layout.sheet_info.type }} {{ layout.sheet_info.length|round(1) }}x{{ layout.sheet_info.width|round(1) }} | x<span class="layout-quantity">{{ layout.quantity }}</span> | Yield: <span class="layout-yield">{{ layout.yield_percentage|round(2) }}</span>%</h3>
+                                    <div class="svg-container">
+                                        <svg viewBox="-2 -2 {{ layout.sheet_info.width + 4 }} {{ layout.sheet_info.length + 4 }}">
+                                            <defs>
+                                                <pattern id="stockPattern" patternUnits="userSpaceOnUse" width="5" height="5"><rect width="5" height="5" fill="var(--stock-part-fill)"/><circle cx="2.5" cy="2.5" r="0.8" fill="rgba(0,0,0,0.4)"/></pattern>
+                                                <pattern id="offcutPattern" patternUnits="userSpaceOnUse" width="6" height="6"><rect width="6" height="6" fill="var(--offcut-fill)"/><path d="M-1,1 l2,-2 M0,6 l6,-6 M5,7 l2,-2" stroke-width="0.7" stroke="rgba(0,0,0,0.4)" stroke-linecap="round"/></pattern>
+                                            </defs>
+                                            <rect class="sheet-bg" x="0" y="0" width="{{ layout.sheet_info.width }}" height="{{ layout.sheet_info.length }}"/>
+                                            
                                             {% for part in layout.placed_parts %}
                                                 {% set p_length = part.width if part.rotated else part.length %}
                                                 {% set p_width = part.length if part.rotated else part.width %}
                                                 {% set svg_y = layout.sheet_info.length - part.y - p_length %}
-                                                <line class="cut-line" x1="{{ part.x }}" y1="{{ svg_y + p_length }}" x2="{{ part.x + p_width }}" y2="{{ svg_y + p_length }}" />
-                                                <line class="cut-line" x1="{{ part.x + p_width }}" y1="{{ svg_y }}" x2="{{ part.x + p_width }}" y2="{{ svg_y + p_length }}" />
+                                                {% set is_interactive = part.is_stock_part %}
+                                                <g class="part-group {{ 'interactive-item' if is_interactive else '' }}" transform="translate({{ part.x }}, {{ svg_y }})" data-item-index="{{ loop.index0 }}" data-item-type="stock_part">
+                                                    <rect class="{{ 'stock-part' if part.is_stock_part else 'job-part' }}" width="{{ p_width }}" height="{{ p_length }}"/>
+                                                    <text class="part-label" x="{{ p_width / 2 }}" y="{{ p_length / 2 }}" dominant-baseline="middle" text-anchor="middle">{% if part.is_stock_part %}STOCK{% else %}{{ part.label }}{% endif %}</text>
+                                                </g>
                                             {% endfor %}
-                                        </g>
-                                    </svg>
+
+                                            {% for offcut in layout.usable_offcuts %}
+                                                {% set svg_y = layout.sheet_info.length - offcut.y - offcut.length %}
+                                                <g class="offcut-group interactive-item" transform="translate({{ offcut.x }}, {{ svg_y }})" data-item-index="{{ loop.index0 }}" data-item-type="offcut">
+                                                    <rect class="offcut" width="{{ offcut.width }}" height="{{ offcut.length }}"/>
+                                                    <text class="offcut-label" x="{{ offcut.width / 2 }}" y="{{ offcut.length / 2 }}" dominant-baseline="middle" text-anchor="middle">Offcut</text>
+                                                </g>
+                                            {% endfor %}
+                                        </svg>
+                                    </div>
                                 </div>
-                            </div>
-                        {% endfor %}
-                    </div>
-                {% else %}
-                    <div class="card placeholder">
-                        <h3><i class="fa-solid fa-lightbulb"></i> No Results to Display</h3>
-                        <p>Configure your settings and run the optimizer to generate cutting layouts.</p>
-                    </div>
-                {% endif %}
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="card placeholder">
+                            <h3><i class="fa-solid fa-lightbulb"></i> No Results to Display</h3>
+                            <p>Configure your settings and run the optimizer to generate cutting layouts.</p>
+                        </div>
+                    {% endif %}
+                </div>
             </div>
         </main>
     </div>

@@ -48,7 +48,7 @@ FEATURES
         - Make the Loaded Parts List section look better
 
     Code
-        - 
+        - Start separating some of the big files (index, app)
 
 BUGS
     - ✓ Allow part rotation check box not working?
@@ -63,6 +63,9 @@ BUGS
     - Does the priority offcut bonus affect the ideal score?
     - Only clicking on the center of a closed dropdown opens it, not the bottom
     - Remove the parenthesies in the names of some of the columns in the Loaded Parts Lists.
+
+MISC
+    - Change default branching factor to 2 or 3. Also update tooltip.
 
 IDEAS
     - X Try every combination of cut order for every sheet? 
