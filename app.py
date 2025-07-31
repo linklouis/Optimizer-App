@@ -134,60 +134,6 @@ def consolidate_empty_space(rects: list, kerf: float) -> list:
             
     return rects
 
-def find_best_offcut_in_area(area_rect, min_offcut_dim):
-    """
-    Finds the largest, most square-like rectangle within a given area.
-    This simplified version just returns the area if it's large enough,
-    as our consolidated areas will be rectangular.
-    A more complex version could find inscribed rectangles in non-rectangular polygons.
-    """
-    if area_rect['width'] >= min_offcut_dim and area_rect['length'] >= min_offcut_dim:
-        return area_rect
-    return None
-
-def find_largest_inscribed_rectangle(area: dict, min_offcut_dim: float) -> dict | None:
-    """
-    Finds the largest rectangle that fits inside a potentially non-rectangular area.
-    For a simple rectangle, it just returns the rectangle if it's valid.
-    This is a placeholder for a more complex algorithm if areas were non-rectangular.
-    Since consolidate_empty_space now produces only rectangles, we just validate it.
-    """
-    if area['width'] >= min_offcut_dim and area['length'] >= min_offcut_dim:
-        return area.copy()
-    return None
-
-def recalculate_offcuts_from_empty_space(empty_areas: list, min_offcut_dim: float, kerf: float) -> list:
-    """
-    Given a list of consolidated empty areas, iteratively harvests the best
-    possible offcuts until no usable offcuts can be made.
-    """
-    final_offcuts = []
-    
-    # A list of areas to be processed. Initially, it's the consolidated empty spaces.
-    workable_areas = empty_areas[:]
-
-    while workable_areas:
-        area_to_process = workable_areas.pop(0)
-        
-        # Find the largest possible rectangular offcut in the current area
-        best_offcut = find_largest_inscribed_rectangle(area_to_process, min_offcut_dim)
-        
-        if best_offcut:
-            final_offcuts.append(best_offcut)
-            
-            # After "cutting" the best_offcut, what remains of the area_to_process?
-            # Since our `find_largest_inscribed_rectangle` for now handles only rectangular areas
-            # and returns the area itself, there are no remainders. If the function was
-            # more complex (handling L-shapes), we would calculate the remaining pieces here.
-            
-            # For example, if we took a piece out of an L-shape, we'd be left with one or two smaller rectangles.
-            # remainder1 = {...}
-            # remainder2 = {...}
-            # if is_valid(remainder1): workable_areas.append(remainder1)
-            # if is_valid(remainder2): workable_areas.append(remainder2)
-
-    return final_offcuts
-
 # --- Configuration Handling ---
 def load_config():
     config = DEFAULT_CONFIG.copy()

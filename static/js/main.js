@@ -67,9 +67,15 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    /** --- Activate Results Tab if Data Exists --- */
-    if (document.body.dataset.hasResults === 'true') {
-        document.querySelector('.tab-button[data-tab="results"]')?.click();
+    // In main.js
+    /** --- Render Initial Results from Embedded Data --- */
+    const initialDataElement = document.getElementById('initial-results-data');
+    if (initialDataElement) {
+        const initialData = JSON.parse(initialDataElement.textContent);
+        if (initialData) {
+            renderResults(initialData);
+            document.querySelector('.tab-button[data-tab="results"]')?.click();
+        }
     }
     
     /** --- Dynamic HHOS File Inputs --- */
@@ -178,6 +184,7 @@ async function handleLayoutClick(e) {
     }
 }
 
+// In main.js, replace the renderResults function
 function renderResults(result) {
     const container = document.getElementById('results-container');
     if (!container) return;
@@ -190,6 +197,7 @@ function renderResults(result) {
 
     const fragment = document.createDocumentFragment();
     
+    // 1. Render Summary
     const summary = document.createElement('section');
     summary.className = 'results-summary';
     const totalSheets = result.layouts.reduce((sum, l) => sum + l.quantity, 0);
@@ -202,49 +210,45 @@ function renderResults(result) {
         <div class="summary-metric ${result.remaining_parts.length > 0 ? 'is-alert' : ''}"><span class="value">${result.remaining_parts.length}</span><span class="label">Parts Not Placed</span></div>`;
     fragment.appendChild(summary);
 
+    // 2. Render Layout Grid using the template
     const grid = document.createElement('div');
     grid.className = 'results-grid';
+    const cardTemplate = document.getElementById('layout-card-template');
     const max_card_width = 450;
     const default_width = result.config.default_width;
 
     result.layouts.forEach(layout => {
-        const card = document.createElement('div');
-        card.className = 'layout-card card';
-        card.style.width = `${(layout.sheet_info.width / default_width) * max_card_width}px`;
-        card.dataset.layoutSignature = layout.signature;
+        const card = cardTemplate.content.cloneNode(true).querySelector('.layout-card');
+        const sheet = layout.sheet_info;
 
-        // Corrected logic for rendering parts
-        const partsSvg = layout.placed_parts.map((part, index) => {
+        card.style.width = `${(sheet.width / default_width) * max_card_width}px`;
+        card.dataset.layoutSignature = layout.signature;
+        card.querySelector('.layout-title').innerHTML = `${sheet.type} ${sheet.length.toFixed(1)}x${sheet.width.toFixed(1)} | x<span>${layout.quantity}</span> | Yield: <span>${layout.yield_percentage.toFixed(2)}</span>%`;
+
+        const svg = card.querySelector('svg');
+        svg.setAttribute('viewBox', `-2 -2 ${sheet.width + 4} ${sheet.length + 4}`);
+        const sheetBg = svg.querySelector('.sheet-bg');
+        sheetBg.setAttribute('width', sheet.width);
+        sheetBg.setAttribute('height', sheet.length);
+
+        let partsSvg = '';
+        layout.placed_parts.forEach((part, index) => {
             const p_len = part.rotated ? part.width : part.length;
             const p_wid = part.rotated ? part.length : part.width;
-            const svg_y = layout.sheet_info.length - part.y - p_len;
+            const svg_y = sheet.length - part.y - p_len;
             const itemType = part.is_stock_part ? 'stock_part' : 'job_part';
             const p_class = part.is_stock_part ? 'stock-part' : 'job-part';
             const label = part.is_stock_part ? 'STOCK' : (part.label || '');
-            
-            return `<g class="part-group interactive-item" transform="translate(${part.x},${svg_y})" data-item-index="${index}" data-item-type="${itemType}">
-                        <rect class="${p_class}" width="${p_wid}" height="${p_len}"/>
-                        <text class="part-label" x="${p_wid/2}" y="${p_len/2}" dominant-baseline="middle" text-anchor="middle">${label}</text>
-                    </g>`;
-        }).join('');
+            partsSvg += `<g class="part-group interactive-item" transform="translate(${part.x},${svg_y})" data-item-index="${index}" data-item-type="${itemType}"><rect class="${p_class}" width="${p_wid}" height="${p_len}"/><text class="part-label" x="${p_wid/2}" y="${p_len/2}" dominant-baseline="middle" text-anchor="middle">${label}</text></g>`;
+        });
 
-        const offcutsSvg = (layout.usable_offcuts || []).map((offcut, index) => {
-            const svg_y = layout.sheet_info.length - offcut.y - offcut.length;
-            return `<g class="offcut-group interactive-item" transform="translate(${offcut.x},${svg_y})" data-item-index="${index}" data-item-type="offcut">
-                        <rect class="offcut" width="${offcut.width}" height="${offcut.length}"/>
-                        <text class="offcut-label" x="${offcut.width/2}" y="${offcut.length/2}" dominant-baseline="middle" text-anchor="middle">Offcut</text>
-                    </g>`;
-        }).join('');
+        let offcutsSvg = '';
+        (layout.usable_offcuts || []).forEach((offcut, index) => {
+            const svg_y = sheet.length - offcut.y - offcut.length;
+            offcutsSvg += `<g class="offcut-group interactive-item" transform="translate(${offcut.x},${svg_y})" data-item-index="${index}" data-item-type="offcut"><rect class="offcut" width="${offcut.width}" height="${offcut.length}"/><text class="offcut-label" x="${offcut.width/2}" y="${offcut.length/2}" dominant-baseline="middle" text-anchor="middle">Offcut</text></g>`;
+        });
         
-        card.innerHTML = `
-            <h3 class="layout-title">${layout.sheet_info.type} ${layout.sheet_info.length.toFixed(1)}x${layout.sheet_info.width.toFixed(1)} | x<span>${layout.quantity}</span> | Yield: <span>${layout.yield_percentage.toFixed(2)}</span>%</h3>
-            <div class="svg-container">
-                <svg viewBox="-2 -2 ${layout.sheet_info.width + 4} ${layout.sheet_info.length + 4}">
-                    <defs><pattern id="stockPattern" patternUnits="userSpaceOnUse" width="5" height="5"><rect width="5" height="5" fill="var(--stock-part-fill)"/><circle cx="2.5" cy="2.5" r="0.8" fill="rgba(0,0,0,0.4)"/></pattern><pattern id="offcutPattern" patternUnits="userSpaceOnUse" width="6" height="6"><rect width="6" height="6" fill="var(--offcut-fill)"/><path d="M-1,1 l2,-2 M0,6 l6,-6 M5,7 l2,-2" stroke-width="0.7" stroke="rgba(0,0,0,0.4)"/></pattern></defs>
-                    <rect class="sheet-bg" x="0" y="0" width="${layout.sheet_info.width}" height="${layout.sheet_info.length}"/>
-                    ${partsSvg}${offcutsSvg}
-                </svg>
-            </div>`;
+        svg.innerHTML += partsSvg + offcutsSvg;
         grid.appendChild(card);
     });
     

@@ -15,6 +15,7 @@ FEATURES
         - ✓ Add description of scoring weight/all settings on hover
         - ✓ Multiple parts list files
         - ✓ Be able to click on stock parts and remove them from the sheet layout
+        - ✓ Removing stock parts from the sheet layouts replaces them with an offcut, but it should reevaluate where to up the offcut. Also should update metrics.
 
         - Allow uploading a temp Offcut List that doesn't override the current one?
         - Save offcuts
@@ -22,13 +23,11 @@ FEATURES
         - Notes section for offcuts
         - Tell user when the files they're pointing to don't exist
         - Allow the quantity of a given layout to be adjusted manually after optimization?
-        - Way to automatically stop when the score is sufficient? Maybe calculate the 
         - Make time limiting a toggleable option
         - Be aware of whether the parts in an HHOS file are labeled as stock for checking if a sheet is only stock parts
         - [ASK] Make a way to automatically pick all of the most needed stock parts for a stock-only job?
         - Add button to reset required stock part quantity?
         - Add reset weights button
-        - Removing stock parts from the sheet layouts replaces them with an offcut, but it should reevaluate where to up the offcut. Also should update metrics.
     
     Optimizer
         - ✓ ---> Only keep reusing a layout of stock parts until another layout is better because the number of the original stock parts needed has been filled.

@@ -10,7 +10,10 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
-<body class="{{ 'dark-mode' if config.dark_mode else '' }}" data-has-results="{{ 'true' if result else 'false' }}">
+<body class="{{ 'dark-mode' if config.dark_mode else '' }}">
+    <script id="initial-results-data" type="application/json">
+        {{ result | tojson | safe if result else 'null' }}
+    </script>
     <div class="container">
         <header>
             <h1><i class="fa-solid fa-cubes-stacked"></i> Automatic Saw Layout Optimizer</h1>
@@ -268,73 +271,22 @@
                 </div>
 
                 <div id="results-container">
-                    {% if result and result.layouts %}
-                        <section class="results-summary">
-                            <div class="summary-metric">
-                                <span class="value" id="summary-score-percentage">{{ result.score_percentage|round(1) }}%</span>
-                                <span class="label">
-                                    Overall Score
-                                    <span class="tooltip" data-tooltip="Actual: {{ '%.2f'|format(result.final_score) }} | Ideal: {{ '%.2f'|format(result.ideal_score) }}">[?]</span>
-                                </span>
-                            </div>
-                            <div class="summary-metric"><span class="value" id="summary-total-sheets">{{ result.layouts|map(attribute='quantity')|sum }}</span><span class="label">Total Sheets Used</span></div>
-                            <div class="summary-metric"><span class="value" id="summary-unique-layouts">{{ result.num_unique_layouts }}</span><span class="label">Unique Layouts</span></div>
-                            <div class="summary-metric"><span class="value" id="summary-overall-yield">{{ result.overall_yield|round(2) }}%</span><span class="label">Overall Yield</span></div>
-                            <div class="summary-metric">
-                                <span class="value">{{ '%.2f'|format(result.elapsed_time) }}s</span>
-                                <span class="label">Time Spent</span>
-                            </div>
-                            <div class="summary-metric {% if result.remaining_parts|length > 0 %}is-alert{% endif %}">
-                                <span class="value" id="summary-remaining-parts">{{ result.remaining_parts|length }}</span>
-                                <span class="label">Parts Not Placed</span>
-                            </div>
-                        </section>
-                        
-                        <div class="results-grid" id="results-grid">
-                            {% set max_card_width = 450 %}
-                            {% for layout in result.layouts %}
-                                {% set display_width = (layout.sheet_info.width / result.config.default_width) * max_card_width %}
-                                
-                                <div class="layout-card card" style="width: {{ display_width }}px;" data-layout-signature="{{ layout.signature }}">
-                                    <h3 class="layout-title">{{ layout.sheet_info.type }} {{ layout.sheet_info.length|round(1) }}x{{ layout.sheet_info.width|round(1) }} | x<span class="layout-quantity">{{ layout.quantity }}</span> | Yield: <span class="layout-yield">{{ layout.yield_percentage|round(2) }}</span>%</h3>
-                                    <div class="svg-container">
-                                        <svg viewBox="-2 -2 {{ layout.sheet_info.width + 4 }} {{ layout.sheet_info.length + 4 }}">
-                                            <defs>
-                                                <pattern id="stockPattern" patternUnits="userSpaceOnUse" width="5" height="5"><rect width="5" height="5" fill="var(--stock-part-fill)"/><circle cx="2.5" cy="2.5" r="0.8" fill="rgba(0,0,0,0.4)"/></pattern>
-                                                <pattern id="offcutPattern" patternUnits="userSpaceOnUse" width="6" height="6"><rect width="6" height="6" fill="var(--offcut-fill)"/><path d="M-1,1 l2,-2 M0,6 l6,-6 M5,7 l2,-2" stroke-width="0.7" stroke="rgba(0,0,0,0.4)" stroke-linecap="round"/></pattern>
-                                            </defs>
-                                            <rect class="sheet-bg" x="0" y="0" width="{{ layout.sheet_info.width }}" height="{{ layout.sheet_info.length }}"/>
-                                            
-                                            {% for part in layout.placed_parts %}
-                                                {% set p_length = part.width if part.rotated else part.length %}
-                                                {% set p_width = part.length if part.rotated else part.width %}
-                                                {% set svg_y = layout.sheet_info.length - part.y - p_length %}
-                                                {% set is_interactive = part.is_stock_part %}
-                                                <g class="part-group interactive-item" transform="translate({{ part.x }}, {{ svg_y }})" data-item-index="{{ loop.index0 }}" data-item-type="{{ 'stock_part' if part.is_stock_part else 'job_part' }}">
-                                                    <rect class="{{ 'stock-part' if part.is_stock_part else 'job-part' }}" width="{{ p_width }}" height="{{ p_length }}"/>
-                                                    <text class="part-label" x="{{ p_width / 2 }}" y="{{ p_length / 2 }}" dominant-baseline="middle" text-anchor="middle">{% if part.is_stock_part %}STOCK{% else %}{{ part.label }}{% endif %}</text>
-                                                </g>
-                                            {% endfor %}
+                    </div>
 
-                                            {% for offcut in layout.usable_offcuts %}
-                                                {% set svg_y = layout.sheet_info.length - offcut.y - offcut.length %}
-                                                <g class="offcut-group interactive-item" transform="translate({{ offcut.x }}, {{ svg_y }})" data-item-index="{{ loop.index0 }}" data-item-type="offcut">
-                                                    <rect class="offcut" width="{{ offcut.width }}" height="{{ offcut.length }}"/>
-                                                    <text class="offcut-label" x="{{ offcut.width / 2 }}" y="{{ offcut.length / 2 }}" dominant-baseline="middle" text-anchor="middle">Offcut</text>
-                                                </g>
-                                            {% endfor %}
-                                        </svg>
-                                    </div>
-                                </div>
-                            {% endfor %}
+                <template id="layout-card-template">
+                    <div class="layout-card card">
+                        <h3 class="layout-title"></h3>
+                        <div class="svg-container">
+                            <svg viewBox="-2 -2 100 100">
+                                <defs>
+                                    <pattern id="stockPattern" patternUnits="userSpaceOnUse" width="5" height="5"><rect width="5" height="5" fill="var(--stock-part-fill)"/><circle cx="2.5" cy="2.5" r="0.8" fill="rgba(0,0,0,0.4)"/></pattern>
+                                    <pattern id="offcutPattern" patternUnits="userSpaceOnUse" width="6" height="6"><rect width="6" height="6" fill="var(--offcut-fill)"/><path d="M-1,1 l2,-2 M0,6 l6,-6 M5,7 l2,-2" stroke-width="0.7" stroke="rgba(0,0,0,0.4)"/></pattern>
+                                </defs>
+                                <rect class="sheet-bg"></rect>
+                                </svg>
                         </div>
-                    {% else %}
-                        <div class="card placeholder">
-                            <h3><i class="fa-solid fa-lightbulb"></i> No Results to Display</h3>
-                            <p>Configure your settings and run the optimizer to generate cutting layouts.</p>
-                        </div>
-                    {% endif %}
-                </div>
+                    </div>
+                </template>
             </div>
         </main>
     </div>
