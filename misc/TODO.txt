@@ -16,6 +16,9 @@ FEATURES
         - ✓ Multiple parts list files
         - ✓ Be able to click on stock parts and remove them from the sheet layout
         - ✓ Removing stock parts from the sheet layouts replaces them with an offcut, but it should reevaluate where to up the offcut. Also should update metrics.
+        - ✓ Make time limiting a toggleable option
+        - ✓ Add button to reset required stock part quantity?
+        - ✓ Add reset weights button
 
         - Allow uploading a temp Offcut List that doesn't override the current one?
         - Save offcuts
@@ -23,11 +26,8 @@ FEATURES
         - Notes section for offcuts
         - Tell user when the files they're pointing to don't exist
         - Allow the quantity of a given layout to be adjusted manually after optimization?
-        - Make time limiting a toggleable option
         - Be aware of whether the parts in an HHOS file are labeled as stock for checking if a sheet is only stock parts
         - [ASK] Make a way to automatically pick all of the most needed stock parts for a stock-only job?
-        - Add button to reset required stock part quantity?
-        - Add reset weights button
     
     Optimizer
         - ✓ ---> Only keep reusing a layout of stock parts until another layout is better because the number of the original stock parts needed has been filled.
@@ -54,16 +54,16 @@ BUGS
     - ✓ Allow part rotation check box not working?
     - X Overall Yield not consistant?
     - X 30 sec (w/o standardize stock layouts) took like 5+ minutes.
-
-    - Downcasting issue with replace in extract_hhos_data
+    - ✓ Downcasting issue with replace in extract_hhos_data
+    - ✓ Doesn't remember theme selection
+    - ✓ Only clicking on the center of a closed dropdown opens it, not the bottom
+    - ✓ Remove the parenthesies in the names of some of the columns in the Loaded Parts Lists.
+    - ✓ The dragging to resize cards isn't working?
+    
     - Stock text doesn't go sidways
-    - Doesn't remember theme selection
     - Adding a new HHOS file doesn't make it pop up in the Loaded Parts List until after optimization
     - Stock part standardizing doesn't affect final score.
     - Does the priority offcut bonus affect the ideal score?
-    - Only clicking on the center of a closed dropdown opens it, not the bottom
-    - Remove the parenthesies in the names of some of the columns in the Loaded Parts Lists.
-    - The dragging to resize cards isn't working?
 
 MISC
     - Change default branching factor to 2 or 3. Also update tooltip.

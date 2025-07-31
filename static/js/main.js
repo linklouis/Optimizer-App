@@ -126,6 +126,9 @@ document.addEventListener('DOMContentLoaded', function() {
             if (loadingOverlay) {
                 loadingOverlay.style.display = 'flex';
                 loadingOverlay.querySelector('h3').textContent = 'Updating Layout...';
+                 // For async updates, always use indeterminate
+                const progressBarContainer = document.querySelector('.progress-bar-container');
+                if (progressBarContainer) progressBarContainer.classList.add('indeterminate');
             }
         }, 250); // Flicker fix: only show overlay for actions taking > 250ms
 
@@ -346,17 +349,45 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const configForm = document.querySelector('.config-form');
     if (configForm) {
+        let progressInterval = null;
+
         configForm.addEventListener('submit', () => {
-            const hasHhosFile = Array.from(document.querySelectorAll('input[name="hhos_paths"]')).some(i => i.value.trim() !== '');
-            const hasRequiredStock = Array.from(document.querySelectorAll('.required-qty-input')).some(i => i.value.trim() !== '' && parseInt(i.value) > 0);
-            if (hasHhosFile || hasRequiredStock) {
-                const loadingOverlay = document.getElementById('loading-overlay');
-                if(loadingOverlay) {
-                    loadingOverlay.style.display = 'flex';
-                    loadingOverlay.querySelector('h3').textContent = 'Optimizing Layouts...';
-                }
-                document.querySelector('.tab-button[data-tab="results"]')?.click();
+            const loadingOverlay = document.getElementById('loading-overlay');
+            const timeLimitInput = document.getElementById('search_time_limit');
+            const noTimeLimitCb = document.getElementById('no-time-limit-cb');
+            const progressBarFill = document.getElementById('progress-bar-fill');
+            const progressBarContainer = progressBarFill.parentElement;
+
+            if (!loadingOverlay || !timeLimitInput || !noTimeLimitCb || !progressBarFill || !progressBarContainer) return;
+
+            loadingOverlay.style.display = 'flex';
+            loadingOverlay.querySelector('h3').textContent = 'Optimizing Layouts...';
+
+            if (progressInterval) clearInterval(progressInterval);
+
+            const useTimeLimit = !noTimeLimitCb.checked;
+            const timeLimit = parseFloat(timeLimitInput.value) * 1000;
+
+            if (useTimeLimit && timeLimit > 0) {
+                progressBarContainer.classList.remove('indeterminate');
+                progressBarFill.style.width = '0%';
+                const startTime = Date.now();
+
+                progressInterval = setInterval(() => {
+                    const elapsedTime = Date.now() - startTime;
+                    const progress = Math.min((elapsedTime / timeLimit) * 100, 100);
+                    progressBarFill.style.width = `${progress}%`;
+
+                    if (progress >= 100) {
+                        clearInterval(progressInterval);
+                    }
+                }, 100);
+            } else {
+                progressBarContainer.classList.add('indeterminate');
+                progressBarFill.style.width = '100%';
             }
+
+            document.querySelector('.tab-button[data-tab="results"]')?.click();
         });
     }
 
