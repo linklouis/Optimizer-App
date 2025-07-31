@@ -14,6 +14,14 @@
     <script id="initial-results-data" type="application/json">
         {{ result | tojson | safe if result else 'null' }}
     </script>
+    
+    <div id="loading-overlay" style="display: none;">
+        <div class="loading-content">
+            <div class="spinner"></div>
+            <h3>Updating Layout...</h3>
+        </div>
+    </div>
+
     <div class="container">
         <header>
             <h1><i class="fa-solid fa-cubes-stacked"></i> Automatic Saw Layout Optimizer</h1>
@@ -262,24 +270,8 @@
                 </form>
             </div>
 
-            <body class="{{ 'dark-mode' if config.dark_mode else '' }}">
-                <script id="initial-results-data" type="application/json">
-                    {{ result | tojson | safe if result else 'null' }}
-                </script>
-                
-                <div id="loading-overlay" style="display: none;">
-                    <div class="loading-content">
-                        <div class="spinner"></div>
-                        <h3>Updating Layout...</h3>
-                    </div>
-                </div>
-
-                <div class="container">
-                    <main>
-                        <div id="results" class="tab-content">
-                            <div id="results-container">
-                            </div>
-
+            <div id="results" class="tab-content">
+                <div id="results-container"></div>
                 <template id="layout-card-template">
                     <div class="layout-card card">
                         <h3 class="layout-title"></h3>
@@ -290,7 +282,7 @@
                                     <pattern id="offcutPattern" patternUnits="userSpaceOnUse" width="6" height="6"><rect width="6" height="6" fill="var(--offcut-fill)"/><path d="M-1,1 l2,-2 M0,6 l6,-6 M5,7 l2,-2" stroke-width="0.7" stroke="rgba(0,0,0,0.4)"/></pattern>
                                 </defs>
                                 <rect class="sheet-bg"></rect>
-                                </svg>
+                            </svg>
                         </div>
                     </div>
                 </template>

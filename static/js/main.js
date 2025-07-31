@@ -137,10 +137,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 let dimLabels = '';
                 if (p_wid > 8 && p_len > 8) {
-                    const textY = 1.5;
-                    const textX = 1.5;
-                    dimLabels += `<text class="inner-dim-text" x="${p_wid/2}" y="${textY}" dominant-baseline="hanging" text-anchor="middle">${p_wid.toFixed(2)}</text>`;
-                    dimLabels += `<text class="inner-dim-text" x="${textX}" y="${p_len/2}" transform="rotate(-90, ${textX}, ${p_len/2})" dominant-baseline="middle" text-anchor="middle">${p_len.toFixed(2)}</text>`;
+                    const textOffset = 1.5; // Using your preferred value
+                    dimLabels += `<text class="inner-dim-text" x="${p_wid/2}" y="${textOffset}" dominant-baseline="hanging" text-anchor="middle">${p_wid.toFixed(2)}</text>`;
+                    dimLabels += `<text class="inner-dim-text" x="${textOffset}" y="${p_len/2}" transform="rotate(-90, ${textOffset}, ${p_len/2})" dominant-baseline="middle" text-anchor="middle">${p_len.toFixed(2)}</text>`;
                 }
 
                 svgContent += `<g class="part-group interactive-item" transform="translate(${part.x},${svg_y})" data-item-index="${index}" data-item-type="${itemType}">
@@ -157,10 +156,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 let dimLabels = '';
                 if (o_wid > 8 && o_len > 8) {
-                    const textY = 4;
-                    const textX = 4;
-                    dimLabels += `<text class="inner-dim-text" x="${o_wid/2}" y="${textY}" dominant-baseline="hanging" text-anchor="middle">${o_wid.toFixed(2)}</text>`;
-                    dimLabels += `<text class="inner-dim-text" x="${textX}" y="${o_len/2}" transform="rotate(-90, ${textX}, ${o_len/2})" dominant-baseline="middle" text-anchor="middle">${o_len.toFixed(2)}</text>`;
+                    const textOffset = 1.5; // Applying consistent positioning to offcuts
+                    dimLabels += `<text class="inner-dim-text" x="${o_wid/2}" y="${textOffset}" dominant-baseline="hanging" text-anchor="middle">${o_wid.toFixed(2)}</text>`;
+                    dimLabels += `<text class="inner-dim-text" x="${textOffset}" y="${o_len/2}" transform="rotate(-90, ${textOffset}, ${o_len/2})" dominant-baseline="middle" text-anchor="middle">${o_len.toFixed(2)}</text>`;
                 }
 
                 svgContent += `<g class="offcut-group interactive-item" transform="translate(${offcut.x},${svg_y})" data-item-index="${index}" data-item-type="offcut">
