@@ -37,61 +37,156 @@ DEFAULT_CONFIG = {
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
-# --- CORRECTED HELPER ---
-def merge_rectangles(rects):
+# --- OFFCUT RECALCULATION LOGIC ---
+def find_all_empty_rectangles(sheet_info: dict, placed_parts: list) -> list:
     """
-    Merges adjacent rectangles in a list into the largest possible rectangles.
-    Repeats the process until no more merges are possible.
+    Finds all empty space on the sheet by creating a grid from all part edges
+    and identifying the empty cells.
+    """
+    TOLERANCE = 1e-6
+    # Collect all unique x and y coordinates from the sheet and part boundaries
+    all_x = {0, sheet_info['width']}
+    all_y = {0, sheet_info['length']}
+
+    for part in placed_parts:
+        p_len = part['width'] if part.get('rotated') else part['length']
+        p_wid = part['length'] if part.get('rotated') else part['width']
+        all_x.add(part['x'])
+        all_x.add(part['x'] + p_wid)
+        all_y.add(part['y'])
+        all_y.add(part['y'] + p_len)
+    
+    sorted_x = sorted([x for x in all_x if x <= sheet_info['width'] + TOLERANCE])
+    sorted_y = sorted([y for y in all_y if y <= sheet_info['length'] + TOLERANCE])
+
+    empty_cells = []
+    # Iterate through the grid cells to find empty ones
+    for i in range(len(sorted_x) - 1):
+        for j in range(len(sorted_y) - 1):
+            x, y = sorted_x[i], sorted_y[j]
+            w, l = sorted_x[i+1] - x, sorted_y[j+1] - y
+
+            if w < TOLERANCE or l < TOLERANCE:
+                continue
+
+            # Check if the center of the cell is occupied by a placed part
+            cell_center_x = x + w / 2
+            cell_center_y = y + l / 2
+            is_occupied = False
+            for part in placed_parts:
+                p_len = part['width'] if part.get('rotated') else part['length']
+                p_wid = part['length'] if part.get('rotated') else part['width']
+                if (part['x'] - TOLERANCE <= cell_center_x < part['x'] + p_wid + TOLERANCE and
+                    part['y'] - TOLERANCE <= cell_center_y < part['y'] + p_len + TOLERANCE):
+                    is_occupied = True
+                    break
+            
+            if not is_occupied:
+                empty_cells.append({'x': x, 'y': y, 'width': w, 'length': l})
+
+    return empty_cells
+
+def consolidate_empty_space(rects: list, kerf: float) -> list:
+    """
+    Consolidates a list of rectangles by merging perfectly aligned adjacent ones.
+    This process is repeated until no more merges can be made.
     """
     if len(rects) < 2:
         return rects
 
     TOLERANCE = 1e-6
+    
     while True:
         merged_in_pass = False
-        i = len(rects) - 1
-        while i >= 1:
-            r1 = rects[i]
-            was_merged = False
-            j = i - 1
-            while j >= 0:
-                r2 = rects[j]
+        i = 0
+        while i < len(rects):
+            j = i + 1
+            while j < len(rects):
+                r1, r2 = rects[i], rects[j]
                 
-                # Try vertical merge
-                if abs(r1['x'] - r2['x']) < TOLERANCE and abs(r1['width'] - r2['width']) < TOLERANCE:
-                    # Case 1: r1 is directly above r2
-                    if abs((r2['y'] + r2['length']) - r1['y']) < TOLERANCE:
-                        r2['length'] += r1['length'] # r2 expands upwards
-                        was_merged = True
-                    # Case 2: r2 is directly above r1
-                    elif abs((r1['y'] + r1['length']) - r2['y']) < TOLERANCE:
-                        r1['length'] += r2['length'] # r1 expands upwards
-                        rects[j] = r1 # replace r2 with the new expanded r1
-                        was_merged = True
-                
-                # Try horizontal merge
-                elif abs(r1['y'] - r2['y']) < TOLERANCE and abs(r1['length'] - r2['length']) < TOLERANCE:
-                    # Case 1: r1 is to the right of r2
-                    if abs((r2['x'] + r2['width']) - r1['x']) < TOLERANCE:
-                        r2['width'] += r1['width'] # r2 expands right
-                        was_merged = True
-                    # Case 2: r2 is to the right of r1
-                    elif abs((r1['x'] + r1['width']) - r2['x']) < TOLERANCE:
-                        r1['width'] += r2['width'] # r1 expands right
-                        rects[j] = r1 # replace r2 with new expanded r1
-                        was_merged = True
+                merged_rect = None
 
-                if was_merged:
-                    rects.pop(i)
+                # Check for vertical merge (must have same width and x-coordinate)
+                if abs(r1['x'] - r2['x']) < TOLERANCE and abs(r1['width'] - r2['width']) < TOLERANCE:
+                    if abs(r1['y'] + r1['length'] - r2['y']) < TOLERANCE: # r2 is above r1
+                        merged_rect = {'x': r1['x'], 'y': r1['y'], 'length': r1['length'] + r2['length'], 'width': r1['width']}
+                    elif abs(r2['y'] + r2['length'] - r1['y']) < TOLERANCE: # r1 is above r2
+                        merged_rect = {'x': r2['x'], 'y': r2['y'], 'length': r1['length'] + r2['length'], 'width': r1['width']}
+
+                # Check for horizontal merge (must have same length and y-coordinate)
+                if not merged_rect and abs(r1['y'] - r2['y']) < TOLERANCE and abs(r1['length'] - r2['length']) < TOLERANCE:
+                    if abs(r1['x'] + r1['width'] - r2['x']) < TOLERANCE: # r2 is to the right of r1
+                        merged_rect = {'x': r1['x'], 'y': r1['y'], 'length': r1['length'], 'width': r1['width'] + r2['width']}
+                    elif abs(r2['x'] + r2['width'] - r1['x']) < TOLERANCE: # r1 is to the right of r2
+                        merged_rect = {'x': r2['x'], 'y': r2['y'], 'length': r1['length'], 'width': r1['width'] + r2['width']}
+                
+                if merged_rect:
+                    rects.pop(j)
+                    rects[i] = merged_rect
                     merged_in_pass = True
-                    break
-                j -= 1
-            i -= 1
+                    j = i + 1 
+                else:
+                    j += 1
+            i += 1
 
         if not merged_in_pass:
             break
             
     return rects
+
+def find_best_offcut_in_area(area_rect, min_offcut_dim):
+    """
+    Finds the largest, most square-like rectangle within a given area.
+    This simplified version just returns the area if it's large enough,
+    as our consolidated areas will be rectangular.
+    A more complex version could find inscribed rectangles in non-rectangular polygons.
+    """
+    if area_rect['width'] >= min_offcut_dim and area_rect['length'] >= min_offcut_dim:
+        return area_rect
+    return None
+
+def find_largest_inscribed_rectangle(area: dict, min_offcut_dim: float) -> dict | None:
+    """
+    Finds the largest rectangle that fits inside a potentially non-rectangular area.
+    For a simple rectangle, it just returns the rectangle if it's valid.
+    This is a placeholder for a more complex algorithm if areas were non-rectangular.
+    Since consolidate_empty_space now produces only rectangles, we just validate it.
+    """
+    if area['width'] >= min_offcut_dim and area['length'] >= min_offcut_dim:
+        return area.copy()
+    return None
+
+def recalculate_offcuts_from_empty_space(empty_areas: list, min_offcut_dim: float, kerf: float) -> list:
+    """
+    Given a list of consolidated empty areas, iteratively harvests the best
+    possible offcuts until no usable offcuts can be made.
+    """
+    final_offcuts = []
+    
+    # A list of areas to be processed. Initially, it's the consolidated empty spaces.
+    workable_areas = empty_areas[:]
+
+    while workable_areas:
+        area_to_process = workable_areas.pop(0)
+        
+        # Find the largest possible rectangular offcut in the current area
+        best_offcut = find_largest_inscribed_rectangle(area_to_process, min_offcut_dim)
+        
+        if best_offcut:
+            final_offcuts.append(best_offcut)
+            
+            # After "cutting" the best_offcut, what remains of the area_to_process?
+            # Since our `find_largest_inscribed_rectangle` for now handles only rectangular areas
+            # and returns the area itself, there are no remainders. If the function was
+            # more complex (handling L-shapes), we would calculate the remaining pieces here.
+            
+            # For example, if we took a piece out of an L-shape, we'd be left with one or two smaller rectangles.
+            # remainder1 = {...}
+            # remainder2 = {...}
+            # if is_valid(remainder1): workable_areas.append(remainder1)
+            # if is_valid(remainder2): workable_areas.append(remainder2)
+
+    return final_offcuts
 
 # --- Configuration Handling ---
 def load_config():
@@ -499,15 +594,20 @@ def update_layout():
         if item_index < 0 or item_index >= len(layout_to_modify['placed_parts']): 
             return jsonify({"error": "Part index out of bounds."}), 400
         
-        part_to_remove = layout_to_modify['placed_parts'].pop(item_index)
+        # Remove the part from the list
+        layout_to_modify['placed_parts'].pop(item_index)
         
-        p_dims = {'length': part_to_remove['width'] if part_to_remove.get('rotated') else part_to_remove['length'], 
-                  'width': part_to_remove['length'] if part_to_remove.get('rotated') else part_to_remove['width']}
+        # --- THIS IS THE NEW ROBUST PROCESS ---
+        # 1. Regenerate all empty space from scratch based on remaining parts.
+        #    This creates a "tiled" view of the empty space.
+        tiled_empty_space = find_all_empty_rectangles(layout_to_modify['sheet_info'], layout_to_modify['placed_parts'])
         
-        # Combine the new empty space with existing offcuts and merge them
-        new_empty_rect = {'x': part_to_remove['x'], 'y': part_to_remove['y'], 'length': p_dims['length'], 'width': p_dims['width']}
-        all_empty_rects = layout_to_modify.get('offcuts', []) + [new_empty_rect]
-        layout_to_modify['offcuts'] = merge_rectangles(all_empty_rects)
+        # 2. Consolidate the tiled space into the largest possible empty rectangles.
+        new_offcuts = consolidate_empty_space(tiled_empty_space, config['kerf'])
+        
+        # 3. Update the layout with the new, correct offcut geometry.
+        layout_to_modify['offcuts'] = new_offcuts
+        # The old recalculate_offcuts_from_empty_space() is no longer needed here.
 
     elif action == 'remove_offcut':
         usable_offcuts = [r for r in layout_to_modify.get('offcuts', []) if r['length'] >= config['min_offcut_dim'] and r['width'] >= config['min_offcut_dim']]
@@ -516,24 +616,24 @@ def update_layout():
             return jsonify({"error": "Offcut index out of bounds."}), 400
         
         offcut_to_remove = usable_offcuts[item_index]
-        try:
-            layout_to_modify['offcuts'].remove(offcut_to_remove)
-        except ValueError:
-            return jsonify({"error": "Offcut could not be removed."}), 500
-
+        original_offcuts = layout_to_modify['offcuts']
+        for i in range(len(original_offcuts) - 1, -1, -1):
+            oc = original_offcuts[i]
+            if all(abs(oc[k] - offcut_to_remove[k]) < 1e-6 for k in ['x', 'y', 'length', 'width']):
+                original_offcuts.pop(i)
+                break
     else: 
         return jsonify({"error": "Invalid action."}), 400
 
-    # Generate a new signature for the modified layout
     use_req_sig = config.get('standardize_stock_layouts', False)
     new_signature = get_layout_signature(layout_to_modify, required_only=use_req_sig)
     layout_to_modify['signature'] = new_signature
     
-    # Recalculate all summary scores and update the result object
     updated_result = recalculate_global_summary(result, config)
 
     session['optimization_result'] = updated_result
     return jsonify(updated_result)
+
 
 if __name__ == '__main__':
     app.run(debug=True, port=5001)
