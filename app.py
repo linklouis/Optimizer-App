@@ -1,4 +1,4 @@
-from flask import Flask, request, render_template, flash, session, jsonify
+from flask import Flask, request, render_template, flash, session, jsonify, Response
 import os
 import json
 import pandas as pd
@@ -6,6 +6,8 @@ import traceback
 import time
 from collections import Counter
 import math
+import uuid
+import threading
 
 from data_processing import process_uploaded_files, extract_hhos_data
 from optimizer import (
@@ -36,6 +38,11 @@ DEFAULT_CONFIG = {
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
+
+# --- Global Task Management ---
+tasks = {}
+tasks_lock = threading.Lock()
+
 
 # --- OFFCUT RECALCULATION LOGIC ---
 def find_all_empty_rectangles(sheet_info: dict, placed_parts: list) -> list:
@@ -157,34 +164,37 @@ def update_config_from_form(config, form_data):
             multiplier = int(mult_str) if mult_str.isdigit() else 1
             config['hhos_files'].append({'path': path, 'multiplier': multiplier})
 
-    config['offcut_path'] = form_data.get('offcut_path', '').strip(' "')
-    config['stock_inv_path'] = form_data.get('stock_inv_path', '').strip(' "')
-    config['default_length'] = form_data.get('default_length', type=float)
-    config['default_width'] = form_data.get('default_width', type=float)
-    config['kerf'] = form_data.get('kerf', type=float)
-    config['min_offcut_dim'] = form_data.get('min_offcut_dim', type=float)
+    if 'offcut_path' in form_data: config['offcut_path'] = form_data.get('offcut_path', '').strip(' "')
+    if 'stock_inv_path' in form_data: config['stock_inv_path'] = form_data.get('stock_inv_path', '').strip(' "')
+    if 'default_length' in form_data: config['default_length'] = form_data.get('default_length', type=float)
+    if 'default_width' in form_data: config['default_width'] = form_data.get('default_width', type=float)
+    if 'kerf' in form_data: config['kerf'] = form_data.get('kerf', type=float)
+    if 'min_offcut_dim' in form_data: config['min_offcut_dim'] = form_data.get('min_offcut_dim', type=float)
+    
     time_limit_val = form_data.get('search_time_limit', type=float)
     config['search_time_limit'] = time_limit_val if time_limit_val is not None else 0.0
-    config['branching_factor'] = form_data.get('branching_factor', type=int)
-    config['allow_rotation'] = form_data.get('allow_rotation') == 'true'
-    config['use_offcuts'] = form_data.get('use_offcuts') == 'true'
-    config['add_stock_parts'] = form_data.get('add_stock_parts') == 'true'
-    config['dark_mode'] = form_data.get('dark_mode_state') == 'on'
-    config['selected_stock_parts'] = form_data.getlist('selected_stock_parts')
-    config['standardize_stock_layouts'] = form_data.get('standardize_stock_layouts') == 'true'
     
+    if 'branching_factor' in form_data: config['branching_factor'] = form_data.get('branching_factor', type=int)
+    
+    config['allow_rotation'] = form_data.get('allow_rotation') in ['true', 'on']
+    config['use_offcuts'] = form_data.get('use_offcuts') in ['true', 'on']
+    config['add_stock_parts'] = form_data.get('add_stock_parts') in ['true', 'on']
+    config['dark_mode'] = form_data.get('dark_mode_state') in ['true', 'on']
+    config['standardize_stock_layouts'] = form_data.get('standardize_stock_layouts') in ['true', 'on']
+
+    config['selected_stock_parts'] = form_data.getlist('selected_stock_parts')
+    config['selected_offcuts'] = form_data.getlist('selected_offcuts')
+    config['prioritized_offcuts'] = form_data.getlist('prioritized_offcuts')
+    config['selected_hhos_parts'] = form_data.getlist('selected_hhos_parts')
+
     config['required_stock_quantities'] = {}
     for key, value in form_data.items():
         if key.startswith('required_qty_') and value.isdigit() and int(value) > 0:
             ref_id = key.replace('required_qty_', '')
             config['required_stock_quantities'][ref_id] = int(value)
 
-    config['selected_offcuts'] = form_data.getlist('selected_offcuts')
-    config['prioritized_offcuts'] = form_data.getlist('prioritized_offcuts')
-    config['selected_hhos_parts'] = form_data.getlist('selected_hhos_parts')
-
     for key in ['w_waste', 'w_offcut', 'w_cuts', 'w_quantity', 'w_sheets', 'w_stock_fill', 'w_unique_layouts', 'w_priority_offcut']:
-        if form_data.get(key) is not None:
+        if key in form_data:
              config[key] = form_data.get(key, type=float)
     
     config.setdefault('part_quantities', {})
@@ -262,7 +272,6 @@ def calculate_ideal_score(parts_to_cut, optional_stock_parts, offcut_df, config)
     return total_ideal_bonus - total_ideal_penalty
 
 def recalculate_global_summary(result_obj, config):
-    """Recalculates all summary metrics based on the current list of layouts."""
     if not result_obj or not result_obj.get('layouts'):
         return result_obj
 
@@ -315,52 +324,6 @@ def recalculate_global_summary(result_obj, config):
     result_obj['score_percentage'] = max(0.0, min(score_percentage, 100.0))
     
     return result_obj
-
-# --- Main Application Logic ---
-def run_optimization(config, hhos_df, offcut_df, stock_inv_df):
-    if hhos_df is not None and not hhos_df.empty:
-        part_quantities = config.get('part_quantities', {})
-        if part_quantities:
-            hhos_df['quantity'] = hhos_df.apply(lambda r: part_quantities.get(r['unique_id'], r['quantity']), axis=1)
-        selected_hhos_ids = config.get('selected_hhos_parts', [])
-        hhos_df = hhos_df[hhos_df['unique_id'].isin(selected_hhos_ids)]
-
-    hhos_parts = hhos_df.to_dict('records') if hhos_df is not None and not hhos_df.empty else []
-    for part in hhos_parts: part['is_optional_filler'] = False
-
-    required_stock_parts, optional_stock_parts = [], []
-    if stock_inv_df is not None:
-        required_qtys = config.get('required_stock_quantities', {})
-        for ref_id, qty in required_qtys.items():
-            part_series = stock_inv_df[stock_inv_df['internal_ref'] == ref_id]
-            if not part_series.empty:
-                part_dict = part_series.iloc[0].to_dict()
-                part_dict.update({'quantity': qty, 'is_stock_part': True, 'is_optional_filler': False, 'label': part_dict.get('part_name_clean', 'STOCK')})
-                required_stock_parts.append(part_dict)
-                
-        if config['add_stock_parts']:
-            mask = (stock_inv_df['internal_ref'].isin(config['selected_stock_parts'])) & (stock_inv_df['current_stock'] < stock_inv_df['target_stock']) & (~stock_inv_df['internal_ref'].isin(required_qtys.keys()))
-            needy_stock = stock_inv_df[mask].copy()
-            if not needy_stock.empty:
-                needy_stock['is_stock_part'] = True
-                needy_stock['is_optional_filler'] = True
-                optional_stock_parts = needy_stock.to_dict('records')
-
-    parts_to_cut = hhos_parts + required_stock_parts
-    is_stock_only_job = not parts_to_cut and optional_stock_parts
-    stock_sheets = [{'id': 'default_sheet', 'length': config['default_length'], 'width': config['default_width'], 'quantity': float('inf'), 'type': 'Default'}]
-    
-    if config.get('use_offcuts') and offcut_df is not None and not offcut_df.empty:
-        selected_ids = [int(i) for i in config.get('selected_offcuts', [])]
-        filtered_offcuts = offcut_df.loc[offcut_df.index.isin(selected_ids)] if selected_ids else offcut_df
-        if not filtered_offcuts.empty:
-            offcuts_with_id = filtered_offcuts.copy()
-            offcuts_with_id['id'] = 'offcut_' + offcuts_with_id.index.astype(str)
-            offcuts_with_id['type'] = 'Offcut'
-            stock_sheets.extend(offcuts_with_id.to_dict('records'))
-
-    layouts, remaining, score = optimize_multiple_sheets(parts_to_cut, stock_sheets, config, optional_stock_parts, is_stock_only_job)
-    return layouts, remaining, score, parts_to_cut
 
 def _calculate_live_stock_bonus(layout: dict, live_deficit_tracker: Counter, config: dict) -> float:
     stock_fill_bonus = 0.0
@@ -453,16 +416,94 @@ def get_initial_optional_parts(stock_inv_df, config):
     needy_stock['is_stock_part'] = True
     return needy_stock.to_dict('records')
 
-@app.route('/', methods=['GET', 'POST'])
+# --- Main Application Logic ---
+def run_optimization_task(task_id, config):
+    """The function that will run in a background thread."""
+    try:
+        def progress_callback(progress):
+            with tasks_lock:
+                if task_id in tasks:
+                    tasks[task_id]['progress'] = progress
+
+        opt_start_time = time.time()
+        hhos_df, offcut_df, stock_inv_df = process_uploaded_files(config.get('hhos_files', []), config['offcut_path'], config['stock_inv_path'], config['default_length'], config['default_width'])
+        
+        if hhos_df is not None and not hhos_df.empty:
+            part_quantities = config.get('part_quantities', {})
+            if part_quantities:
+                hhos_df['quantity'] = hhos_df.apply(lambda r: part_quantities.get(r['unique_id'], r['quantity']), axis=1)
+            selected_hhos_ids = config.get('selected_hhos_parts', [])
+            hhos_df = hhos_df[hhos_df['unique_id'].isin(selected_hhos_ids)]
+
+        hhos_parts = hhos_df.to_dict('records') if hhos_df is not None and not hhos_df.empty else []
+        for part in hhos_parts: part['is_optional_filler'] = False
+
+        required_stock_parts, optional_stock_parts = [], []
+        if stock_inv_df is not None:
+            required_qtys = config.get('required_stock_quantities', {})
+            for ref_id, qty in required_qtys.items():
+                part_series = stock_inv_df[stock_inv_df['internal_ref'] == ref_id]
+                if not part_series.empty:
+                    part_dict = part_series.iloc[0].to_dict()
+                    part_dict.update({'quantity': qty, 'is_stock_part': True, 'is_optional_filler': False, 'label': part_dict.get('part_name_clean', 'STOCK')})
+                    required_stock_parts.append(part_dict)
+                    
+            if config['add_stock_parts']:
+                mask = (stock_inv_df['internal_ref'].isin(config['selected_stock_parts'])) & (stock_inv_df['current_stock'] < stock_inv_df['target_stock']) & (~stock_inv_df['internal_ref'].isin(required_qtys.keys()))
+                needy_stock = stock_inv_df[mask].copy()
+                if not needy_stock.empty:
+                    needy_stock['is_stock_part'] = True
+                    needy_stock['is_optional_filler'] = True
+                    optional_stock_parts = needy_stock.to_dict('records')
+
+        parts_to_cut = hhos_parts + required_stock_parts
+        is_stock_only_job = not parts_to_cut and optional_stock_parts
+        stock_sheets = [{'id': 'default_sheet', 'length': config['default_length'], 'width': config['default_width'], 'quantity': float('inf'), 'type': 'Default'}]
+        
+        if config.get('use_offcuts') and offcut_df is not None and not offcut_df.empty:
+            selected_ids = [int(i) for i in config.get('selected_offcuts', [])]
+            filtered_offcuts = offcut_df.loc[offcut_df.index.isin(selected_ids)] if selected_ids else offcut_df
+            if not filtered_offcuts.empty:
+                offcuts_with_id = filtered_offcuts.copy()
+                offcuts_with_id['id'] = 'offcut_' + offcuts_with_id.index.astype(str)
+                offcuts_with_id['type'] = 'Offcut'
+                stock_sheets.extend(offcuts_with_id.to_dict('records'))
+
+        layouts, remaining, score = optimize_multiple_sheets(
+            parts_to_cut, stock_sheets, config, optional_stock_parts, is_stock_only_job, progress_callback
+        )
+        opt_elapsed_time = time.time() - opt_start_time
+        
+        initial_optional_parts = get_initial_optional_parts(stock_inv_df, config)
+        final_layouts = standardize_layouts(layouts, initial_optional_parts, config) if config.get('standardize_stock_layouts', False) and layouts else layouts
+        
+        ideal_score = calculate_ideal_score(parts_to_cut, initial_optional_parts, offcut_df, config)
+        score_percentage = 0.0
+        if score >= ideal_score: score_percentage = 100.0
+        elif ideal_score > 0: score_percentage = max(0.0, (score / ideal_score) * 100.0)
+        elif ideal_score < 0: score_percentage = (ideal_score / score) * 100.0 if score != 0 else 0.0
+        score_percentage = max(0.0, min(score_percentage, 100.0))
+        
+        optimization_result = prepare_results_for_render(
+            final_layouts, remaining, score, config, opt_elapsed_time, ideal_score, score_percentage
+        )
+        
+        with tasks_lock:
+            if task_id in tasks:
+                tasks[task_id]['status'] = 'complete'
+                tasks[task_id]['result'] = optimization_result if optimization_result else {"error": "No layouts could be generated."}
+    
+    except Exception as e:
+        traceback.print_exc()
+        with tasks_lock:
+            if task_id in tasks:
+                tasks[task_id]['status'] = 'error'
+                tasks[task_id]['result'] = {"error": f"An error occurred: {e}"}
+
+@app.route('/')
 def home():
     config = load_config()
-    optimization_result, hhos_file_contents, all_stock_parts_list, all_offcuts_list = None, [], [], []
-    
-    if request.method == 'POST':
-        session.pop('optimization_result', None)
-        config = update_config_from_form(config, request.form)
-        save_config(config)
-        flash("Configuration saved successfully!", "success")
+    hhos_file_contents, all_stock_parts_list, all_offcuts_list = [], [], []
 
     all_hhos_part_ids = []
     for hhos_file in config.get('hhos_files', []):
@@ -480,11 +521,11 @@ def home():
         else: content_item['error'] = "File not found."
         hhos_file_contents.append(content_item)
 
-    if request.method == 'GET' and all_hhos_part_ids and not config.get('selected_hhos_parts'):
+    if not config.get('selected_hhos_parts') and all_hhos_part_ids:
         config['selected_hhos_parts'] = all_hhos_part_ids
 
     try:
-        hhos_df, offcut_df, stock_inv_df = process_uploaded_files(config.get('hhos_files', []), config['offcut_path'], config['stock_inv_path'], config['default_length'], config['default_width'])
+        _, offcut_df, stock_inv_df = process_uploaded_files(config.get('hhos_files', []), config['offcut_path'], config['stock_inv_path'], config['default_length'], config['default_width'])
         if stock_inv_df is not None: all_stock_parts_list = stock_inv_df.to_dict('records')
         if offcut_df is not None:
             if not config.get('selected_offcuts') and config.get('offcut_path'): config['selected_offcuts'] = [str(i) for i in offcut_df.index]
@@ -494,33 +535,8 @@ def home():
     except Exception as e:
         flash(f"Error processing files: {e}", "danger")
         traceback.print_exc()
-        hhos_df, offcut_df, stock_inv_df = pd.DataFrame(), None, None
 
-    if request.method == 'POST' and (config.get('hhos_files') or config['stock_inv_path'] or config.get('required_stock_quantities')):
-        try:
-            opt_start_time = time.time()
-            layouts, remaining_parts, final_score, parts_to_cut = run_optimization(config, hhos_df, offcut_df, stock_inv_df)
-            opt_elapsed_time = time.time() - opt_start_time
-            initial_optional_parts = get_initial_optional_parts(stock_inv_df, config)
-            final_layouts = standardize_layouts(layouts, initial_optional_parts, config) if config.get('standardize_stock_layouts', False) and layouts else layouts
-            ideal_score = calculate_ideal_score(parts_to_cut, initial_optional_parts, offcut_df, config)
-            score_percentage = 0.0
-            if final_score >= ideal_score: score_percentage = 100.0
-            elif ideal_score > 0: score_percentage = max(0.0, (final_score / ideal_score) * 100.0)
-            elif ideal_score < 0: score_percentage = (ideal_score / final_score) * 100.0 if final_score != 0 else 0.0
-            score_percentage = max(0.0, min(score_percentage, 100.0))
-            optimization_result = prepare_results_for_render(final_layouts, remaining_parts, final_score, config, opt_elapsed_time, ideal_score, score_percentage)
-            if optimization_result:
-                session['optimization_result'] = optimization_result
-                flash("Optimization complete.", "success")
-            elif not layouts:
-                 flash("Optimization timed out. Try increasing the search time.", "danger")
-        except Exception as e:
-            flash(f"An error occurred during optimization: {e}", "danger")
-            traceback.print_exc()
-    elif request.method == 'GET' and 'optimization_result' in session:
-        optimization_result = session['optimization_result']
-
+    optimization_result = session.get('optimization_result')
     default_weights = {k: v for k, v in DEFAULT_CONFIG.items() if k.startswith('w_')}
 
     return render_template('index.html',
@@ -531,18 +547,62 @@ def home():
                            all_offcuts=all_offcuts_list,
                            default_weights=default_weights)
 
+@app.route('/start_optimization', methods=['POST'])
+def start_optimization():
+    config = load_config()
+    config = update_config_from_form(config, request.form)
+    save_config(config)
+
+    task_id = str(uuid.uuid4())
+    with tasks_lock:
+        tasks[task_id] = {'status': 'running', 'progress': 0, 'result': None}
+    
+    thread = threading.Thread(target=run_optimization_task, args=(task_id, config))
+    thread.daemon = True
+    thread.start()
+    
+    return jsonify({"task_id": task_id})
+
+@app.route('/stream/<task_id>')
+def stream(task_id):
+    def event_stream():
+        while True:
+            with tasks_lock:
+                task = tasks.get(task_id)
+                if not task:
+                    break
+                
+                progress = task['progress']
+                status = task['status']
+
+            yield f"data: {progress}\n\n"
+            
+            if status in ['complete', 'error']:
+                with tasks_lock:
+                    result = tasks[task_id]['result']
+                    if task_id in tasks:
+                        del tasks[task_id]
+                
+                yield f"event: done\ndata: {json.dumps(result)}\n\n"
+                break
+            
+            time.sleep(0.1)
+
+    return Response(event_stream(), mimetype='text/event-stream')
+
+
 @app.route('/update_layout', methods=['POST'])
 def update_layout():
-    if 'optimization_result' not in session: 
-        return jsonify({"error": "No result found in session."}), 400
-    
     data = request.get_json()
+    result = data.get('current_state')
+    if not result:
+        return jsonify({"error": "No current_state provided."}), 400
+    
     action, layout_sig, item_index = data.get('action'), data.get('layout_signature'), data.get('item_index')
     if not all([action, layout_sig, item_index is not None]): 
         return jsonify({"error": "Missing required data."}), 400
     
     config = load_config()
-    result = session['optimization_result']
     
     layout_to_modify = next((g for g in result['layouts'] if g.get('signature') == layout_sig), None)
             
@@ -588,24 +648,14 @@ def update_layout():
         return jsonify({"error": "Invalid action."}), 400
     
     updated_result = recalculate_global_summary(result, config)
-    session['optimization_result'] = updated_result
     return jsonify(updated_result)
 
 @app.route('/restore_state', methods=['POST'])
 def restore_state():
-    """Restores the entire optimization result in the session from a client-provided state."""
-    if 'optimization_result' not in session:
-        return jsonify({"error": "No session to restore."}), 400
-    
     new_state = request.get_json()
-    # Basic validation to ensure we're getting a plausible state object
     if not new_state or 'layouts' not in new_state or 'final_score' not in new_state:
         return jsonify({"error": "Invalid state data provided."}), 400
-        
-    session['optimization_result'] = new_state
-    session.modified = True # Ensure the session is saved
-    
-    return jsonify({"success": True})
+    return jsonify(new_state)
 
 
 if __name__ == '__main__':

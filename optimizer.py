@@ -232,7 +232,8 @@ def _calculate_bound(remaining_parts: list, current_score: float, config: dict, 
 
 def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict], config: Dict, 
                              optional_stock_parts: Optional[List[Part]] = None, 
-                             is_stock_only_job: bool = False) -> Tuple[List[Dict], List[Part], float]:
+                             is_stock_only_job: bool = False,
+                             progress_callback=None) -> Tuple[List[Dict], List[Part], float]:
     """
     Optimizes cutting stock using a time-limited Branch and Bound search.
     """
@@ -240,6 +241,7 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
     time_limit = config.get('search_time_limit', 1.0)
     branching_factor = config.get('branching_factor', 1)
     reference_area = config.get('default_length', 96) * config.get('default_width', 48)
+    last_update_time = start_time
 
     # --- Initial State Setup ---
     part_id_counter = 0
@@ -253,6 +255,8 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
             p_copy['part_id'] = part_id_counter
             initial_parts_dict[part_id_counter] = p_copy
             part_id_counter += 1
+
+    total_initial_parts = len(initial_parts_dict)
 
     optional_parts_list = []
     if not is_stock_only_job and optional_stock_parts:
@@ -277,6 +281,20 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
     # --- Branch and Bound Loop ---
     while pq and (time_limit <= 0 or (time.time() - start_time) < time_limit):
         _, current_score, _, current_parts, used_layouts, used_signatures = heapq.heappop(pq)
+        
+        current_time = time.time()
+        if progress_callback and (current_time - last_update_time > 0.1):
+            progress = 0
+            # Always prioritize part-based progress if possible
+            if total_initial_parts > 0:
+                num_remaining_parts = len(current_parts)
+                progress = ((total_initial_parts - num_remaining_parts) / total_initial_parts) * 100
+            # Fallback to time-based if no parts were in the initial job
+            elif time_limit > 0:
+                progress = min(((current_time - start_time) / time_limit) * 100, 100)
+            
+            progress_callback(int(progress))
+            last_update_time = current_time
 
         if -_calculate_bound(list(current_parts.values()), current_score, config, reference_area) < best_score:
             continue
@@ -313,6 +331,9 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
                     if -child_bound > best_score:
                         heapq.heappush(pq, (-child_bound, child_score, node_counter, child_parts, child_layouts, child_signatures))
                         node_counter += 1
+    
+    if progress_callback:
+        progress_callback(100)
 
     final_layouts, remaining_parts = best_solution
     return final_layouts, remaining_parts, best_score

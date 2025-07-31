@@ -90,7 +90,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
             if (!response.ok) throw new Error('Server failed to restore state.');
 
-            currentState = previousState;
+            currentState = await response.json();
             renderResults(currentState);
 
         } catch (error) {
@@ -136,7 +136,12 @@ document.addEventListener('DOMContentLoaded', function() {
             const response = await fetch('/update_layout', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
-                body: JSON.stringify({ action, layout_signature: layoutSignature, item_index: itemIndex })
+                body: JSON.stringify({ 
+                    action, 
+                    layout_signature: layoutSignature, 
+                    item_index: itemIndex,
+                    current_state: currentState
+                })
             });
             if (!response.ok) throw new Error((await response.json()).error || `HTTP ${response.status}`);
 
@@ -156,8 +161,14 @@ document.addEventListener('DOMContentLoaded', function() {
         const container = document.getElementById('results-container');
         if (!container) return;
         container.innerHTML = '';
-        if (!result || !result.layouts || result.layouts.length === 0) {
-            container.innerHTML = `<div class="card placeholder"><h3>No Results to Display</h3><p>Run the optimizer to generate layouts.</p></div>`;
+        if (!result || result.error || !result.layouts || result.layouts.length === 0) {
+            let message = "No Results to Display";
+            let subtext = "Run the optimizer to generate layouts.";
+            if (result && result.error) {
+                message = "Optimization Failed";
+                subtext = result.error;
+            }
+            container.innerHTML = `<div class="card placeholder"><h3>${message}</h3><p>${subtext}</p></div>`;
             return;
         }
         const fragment = document.createDocumentFragment();
@@ -349,45 +360,67 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const configForm = document.querySelector('.config-form');
     if (configForm) {
-        let progressInterval = null;
+        configForm.addEventListener('submit', async (e) => {
+            e.preventDefault(); // Prevent default form submission
 
-        configForm.addEventListener('submit', () => {
             const loadingOverlay = document.getElementById('loading-overlay');
-            const timeLimitInput = document.getElementById('search_time_limit');
-            const noTimeLimitCb = document.getElementById('no-time-limit-cb');
             const progressBarFill = document.getElementById('progress-bar-fill');
             const progressBarContainer = progressBarFill.parentElement;
 
-            if (!loadingOverlay || !timeLimitInput || !noTimeLimitCb || !progressBarFill || !progressBarContainer) return;
+            if (!loadingOverlay || !progressBarFill || !progressBarContainer) return;
 
+            // Show loading UI and switch to results tab
             loadingOverlay.style.display = 'flex';
-            loadingOverlay.querySelector('h3').textContent = 'Optimizing Layouts...';
-
-            if (progressInterval) clearInterval(progressInterval);
-
-            const useTimeLimit = !noTimeLimitCb.checked;
-            const timeLimit = parseFloat(timeLimitInput.value) * 1000;
-
-            if (useTimeLimit && timeLimit > 0) {
-                progressBarContainer.classList.remove('indeterminate');
-                progressBarFill.style.width = '0%';
-                const startTime = Date.now();
-
-                progressInterval = setInterval(() => {
-                    const elapsedTime = Date.now() - startTime;
-                    const progress = Math.min((elapsedTime / timeLimit) * 100, 100);
-                    progressBarFill.style.width = `${progress}%`;
-
-                    if (progress >= 100) {
-                        clearInterval(progressInterval);
-                    }
-                }, 100);
-            } else {
-                progressBarContainer.classList.add('indeterminate');
-                progressBarFill.style.width = '100%';
-            }
-
             document.querySelector('.tab-button[data-tab="results"]')?.click();
+            document.getElementById('results-container').innerHTML = ''; // Clear previous results
+
+            // Always use the standard progress bar now, regardless of time limit setting
+            progressBarContainer.classList.remove('indeterminate');
+            progressBarFill.style.width = '0%';
+
+            try {
+                // 1. Start the optimization task
+                const formData = new FormData(configForm);
+                const startResponse = await fetch('/start_optimization', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!startResponse.ok) {
+                    throw new Error('Failed to start optimization task.');
+                }
+                const { task_id } = await startResponse.json();
+
+                // 2. Listen for progress events
+                const eventSource = new EventSource(`/stream/${task_id}`);
+
+                eventSource.onmessage = (event) => {
+                    const progress = parseInt(event.data, 10);
+                    // This will now correctly update the standard progress bar in all cases
+                    progressBarFill.style.width = `${progress}%`;
+                };
+
+                eventSource.addEventListener('done', (event) => {
+                    const result = JSON.parse(event.data);
+                    currentState = result;
+                    stateHistory = []; // Reset history for new optimization
+                    renderResults(result);
+                    loadingOverlay.style.display = 'none';
+                    eventSource.close();
+                });
+
+                eventSource.onerror = (err) => {
+                    console.error("EventSource failed:", err);
+                    alert("An error occurred while streaming results. Please check the console.");
+                    loadingOverlay.style.display = 'none';
+                    eventSource.close();
+                };
+
+            } catch (error) {
+                console.error("Optimization failed:", error);
+                alert(`Error: ${error.message}`);
+                loadingOverlay.style.display = 'none';
+            }
         });
     }
 
