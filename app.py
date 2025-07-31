@@ -1,4 +1,4 @@
-from flask import Flask, request, render_template, flash
+from flask import Flask, request, render_template, flash, session, redirect, url_for
 import os
 import json
 import pandas as pd
@@ -97,7 +97,7 @@ def update_config_from_form(config, form_data):
 
     return config
 
-# --- Scoring Logic (omitted for brevity, no changes from previous step) ---
+# --- Scoring Logic ---
 def calculate_ideal_score(parts_to_cut, optional_stock_parts, offcut_df, config):
     ideal_part_list = parts_to_cut + optional_stock_parts
     if not ideal_part_list:
@@ -276,9 +276,10 @@ def standardize_layouts(layouts: list, initial_optional_parts: list, config: dic
 
 def prepare_results_for_render(layouts, remaining_parts, final_score, config, elapsed_time, ideal_score, score_percentage):
     if not layouts: return None
-    total_placed_area = sum(l['total_placed_area'] for l in layouts)
-    total_sheet_area = sum(l['sheet_info']['length'] * l['sheet_info']['width'] for l in layouts)
+    total_placed_area = sum(l['total_placed_area'] * l.get('quantity', 1) for l in layouts)
+    total_sheet_area = sum(l['sheet_info']['length'] * l['sheet_info']['width'] * l.get('quantity', 1) for l in layouts)
     overall_yield = (total_placed_area / total_sheet_area) * 100 if total_sheet_area > 0 else 0
+
     grouped_layouts = {}
     for layout in layouts:
         use_required_sig = config.get('standardize_stock_layouts', False)
@@ -286,7 +287,13 @@ def prepare_results_for_render(layouts, remaining_parts, final_score, config, el
         if signature not in grouped_layouts:
             sheet_info = layout['sheet_info']
             sheet_area = sheet_info['length'] * sheet_info['width']
+            
+            # Add a unique instance ID to each part for DOM manipulation
+            for i, part in enumerate(layout['placed_parts']):
+                part['part_instance_id'] = f"{signature}_{i}"
+
             grouped_layouts[signature] = {
+                'signature': signature,
                 'placed_parts': layout['placed_parts'],
                 'sheet_info': sheet_info,
                 'yield_percentage': (layout['total_placed_area'] / sheet_area) * 100 if sheet_area > 0 else 0,
@@ -295,12 +302,14 @@ def prepare_results_for_render(layouts, remaining_parts, final_score, config, el
             }
         else:
             grouped_layouts[signature]['quantity'] += 1
+            
     return {
         'layouts': list(grouped_layouts.values()), 'remaining_parts': remaining_parts,
         'final_score': final_score, 'ideal_score': ideal_score, 'score_percentage': score_percentage,
         'overall_yield': overall_yield, 'num_unique_layouts': len(grouped_layouts),
         'elapsed_time': elapsed_time
     }
+
 
 def get_initial_optional_parts(stock_inv_df, config):
     if not config['add_stock_parts'] or stock_inv_df is None: return []
@@ -319,9 +328,14 @@ def get_initial_optional_parts(stock_inv_df, config):
 @app.route('/', methods=['GET', 'POST'])
 def home():
     config = load_config()
-    optimization_result, hhos_file_contents, all_stock_parts_list, all_offcuts_list = None, [], [], []
-    
+    optimization_result = session.get('last_result', None)
+    hhos_file_contents, all_stock_parts_list, all_offcuts_list = [], [], []
+
     if request.method == 'POST':
+        # Clear previous results when a new optimization is run
+        session.pop('last_result', None)
+        optimization_result = None
+
         config = update_config_from_form(config, request.form)
         save_config(config)
         flash("Configuration saved successfully!", "success")
@@ -350,10 +364,7 @@ def home():
             content_item['error'] = "File not found."
         hhos_file_contents.append(content_item)
 
-    # --- CORRECTED LOGIC FOR DEFAULT SELECTION ---
     if request.method == 'GET' and all_hhos_part_ids:
-        # On a GET request, if the loaded config has no selections, default to all.
-        # This preserves saved selections and handles the true default case.
         if not config.get('selected_hhos_parts'):
             config['selected_hhos_parts'] = all_hhos_part_ids
 
@@ -404,6 +415,7 @@ def home():
             optimization_result = prepare_results_for_render(final_layouts, remaining_parts, final_score, config, opt_elapsed_time, ideal_score, score_percentage)
             
             if optimization_result:
+                session['last_result'] = optimization_result
                 flash("Optimization complete.", "success")
             elif not layouts:
                  flash("Optimization timed out before a valid solution could be found. Try increasing the search time.", "danger")
@@ -417,6 +429,69 @@ def home():
         hhos_file_contents=hhos_file_contents,
         all_offcuts=all_offcuts_list
     )
+
+@app.route('/remove-part', methods=['POST'])
+def remove_part_from_layout():
+    """Removes a single stock part from a layout stored in the session."""
+    layout_signature = request.form.get('layout_signature')
+    part_instance_id = request.form.get('part_instance_id')
+    result = session.get('last_result')
+
+    if not all([layout_signature, part_instance_id, result]):
+        flash("Could not remove part: session expired or invalid data.", "danger")
+        return redirect(url_for('home'))
+
+    # Find the layout and part
+    layout_found = None
+    part_to_remove = None
+    part_index = -1
+
+    for layout in result['layouts']:
+        if layout['signature'] == layout_signature:
+            layout_found = layout
+            for i, part in enumerate(layout['placed_parts']):
+                if part.get('part_instance_id') == part_instance_id:
+                    part_to_remove = part
+                    part_index = i
+                    break
+        if layout_found:
+            break
+            
+    if layout_found and part_to_remove:
+        # Remove the part
+        layout_found['placed_parts'].pop(part_index)
+
+        # Recalculate layout metrics
+        part_area = part_to_remove['length'] * part_to_remove['width']
+        sheet_info = layout_found['sheet_info']
+        sheet_area = sheet_info['length'] * sheet_info['width']
+        
+        # Simple recalculation of total placed area
+        new_placed_area = sum(p['length'] * p['width'] for p in layout_found['placed_parts'])
+        
+        # Add the removed part's space back to usable_offcuts for visualization
+        removed_part_rect = {
+            'x': part_to_remove['x'],
+            'y': part_to_remove['y'],
+            'length': part_to_remove['width'] if part_to_remove.get('rotated') else part_to_remove['length'],
+            'width': part_to_remove['length'] if part_to_remove.get('rotated') else part_to_remove['width'],
+        }
+        layout_found['usable_offcuts'].append(removed_part_rect)
+        layout_found['yield_percentage'] = (new_placed_area / sheet_area) * 100 if sheet_area > 0 else 0
+
+        # Recalculate overall metrics
+        total_placed_area = sum(l['yield_percentage']/100 * l['sheet_info']['length'] * l['sheet_info']['width'] * l.get('quantity', 1) for l in result['layouts'])
+        total_sheet_area = sum(l['sheet_info']['length'] * l['sheet_info']['width'] * l.get('quantity', 1) for l in result['layouts'])
+        result['overall_yield'] = (total_placed_area / total_sheet_area) * 100 if total_sheet_area > 0 else 0
+        
+        # Update session and redirect
+        session['last_result'] = result
+        flash(f"Removed stock part from layout.", "success")
+    else:
+        flash("Error: Part or layout not found.", "danger")
+
+    return redirect(url_for('home'))
+
 
 if __name__ == '__main__':
     app.run(debug=True, port=5001)

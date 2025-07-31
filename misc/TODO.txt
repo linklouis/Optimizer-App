@@ -13,14 +13,14 @@ FEATURES
         - ✓ Allow specific parts to be removed from a job
         - ✓ Page to display all available offcuts
         - ✓ Add description of scoring weight/all settings on hover
+        - ✓ Multiple parts list files
+        - ✓ Be able to click on stock parts and remove them from the sheet layout
 
         - Allow uploading a temp Offcut List that doesn't override the current one?
         - Save offcuts
         - Clear Offcut List File input space after optimization
         - Notes section for offcuts
-        - Multiple parts list files
         - Tell user when the files they're pointing to don't exist
-        - Be able to click on stock parts and remove them from the sheet layout
         - Allow the quantity of a given layout to be adjusted manually after optimization?
         - Way to automatically stop when the score is sufficient? Maybe calculate the 
         - Make time limiting a toggleable option
@@ -28,6 +28,7 @@ FEATURES
         - [ASK] Make a way to automatically pick all of the most needed stock parts for a stock-only job?
         - Add button to reset required stock part quantity?
         - Add reset weights button
+        - Removing stock parts from the sheet layouts replaces them with an offcut, but it should reevaluate where to up the offcut. Also should update metrics.
     
     Optimizer
         - ✓ ---> Only keep reusing a layout of stock parts until another layout is better because the number of the original stock parts needed has been filled.
@@ -43,7 +44,7 @@ FEATURES
         - ✓ Keep Configuration and Results tabs visible when you scroll down
         - ✓ Scaleable Manage Stock Parts section?
         - ✓ Needs to look good in greyscale
-        
+
         - Make the Loaded Parts List section look better
 
     Code

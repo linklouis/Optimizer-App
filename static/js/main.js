@@ -119,7 +119,10 @@ document.addEventListener('DOMContentLoaded', function() {
      * --- Activate Results Tab if Data Exists ---
      */
     if (document.body.dataset.hasResults === 'true') {
-        document.querySelector('.tab-button[data-tab="results"]')?.click();
+        const resultsTab = document.querySelector('.tab-button[data-tab="results"]');
+        if(resultsTab && !resultsTab.classList.contains('active')) {
+            resultsTab.click();
+        }
     }
     
     /**
@@ -177,6 +180,41 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (resultsTabButton && !resultsTabButton.classList.contains('active')) {
                     resultsTabButton.click();
                 }
+            }
+        });
+    }
+
+    /**
+     * --- Remove Stock Part from Results SVG ---
+     */
+    const resultsContainer = document.getElementById('results');
+    if (resultsContainer) {
+        resultsContainer.addEventListener('click', function(e) {
+            const removeButton = e.target.closest('.remove-stock-part-btn');
+            if (!removeButton) return;
+
+            const { layoutSignature, partInstanceId } = removeButton.dataset;
+
+            if (layoutSignature && partInstanceId) {
+                // Create a hidden form to submit the request
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = '/remove-part';
+                
+                const layoutInput = document.createElement('input');
+                layoutInput.type = 'hidden';
+                layoutInput.name = 'layout_signature';
+                layoutInput.value = layoutSignature;
+                form.appendChild(layoutInput);
+
+                const partInput = document.createElement('input');
+                partInput.type = 'hidden';
+                partInput.name = 'part_instance_id';
+                partInput.value = partInstanceId;
+                form.appendChild(partInput);
+
+                document.body.appendChild(form);
+                form.submit();
             }
         });
     }

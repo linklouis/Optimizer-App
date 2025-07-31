@@ -340,9 +340,7 @@
                                             <g class="part-group" transform="translate({{ part.x }}, {{ svg_y }})">
                                                 <rect class="{{ 'stock-part' if part.is_stock_part else 'job-part' }}" width="{{ p_width }}" height="{{ p_length }}"/>
                                                 
-                                                {# --- CONDITIONAL TEXT LOGIC --- #}
-                                                
-                                                {# 1. Main Label: Check aspect ratio to decide on rotation #}
+                                                {# --- Text & Button Logic --- #}
                                                 {% if p_length > p_width * 1.5 and p_width > 4 %}
                                                     <text class="part-label" text-anchor="middle" dominant-baseline="middle" transform="translate({{ p_width / 2 }}, {{ p_length / 2 }}) rotate(90)">
                                                         {% if part.is_stock_part %}STOCK{% else %}{{ part.label }}{% endif %}
@@ -353,7 +351,6 @@
                                                     </text>
                                                 {% endif %}
                                 
-                                                {# 2. Dimension Labels: Check individual dimensions for visibility #}
                                                 {% set text_padding = 1.5 %}
                                                 {% if p_width > 6 %}
                                                     <text class="inner-dim-text" text-anchor="middle" dominant-baseline="hanging" x="{{ p_width / 2 }}" y="{{ text_padding }}">{{ '%.2f' % p_width }}</text>
@@ -361,23 +358,26 @@
                                                 {% if p_length > 6 %}
                                                      <text class="inner-dim-text" text-anchor="middle" dominant-baseline="hanging" transform="translate({{ text_padding }}, {{ p_length / 2 }}) rotate(-90)">{{ '%.2f' % p_length }}</text>
                                                 {% endif %}
+
+                                                {# --- Remove Button for Stock Parts --- #}
+                                                {% if part.is_stock_part and p_width > 4 and p_length > 4 %}
+                                                <g class="remove-stock-part-btn" data-layout-signature="{{ layout.signature }}" data-part-instance-id="{{ part.part_instance_id }}">
+                                                    <title>Remove Stock Part</title>
+                                                    <circle cx="{{ p_width - 2.5 }}" cy="2.5" r="2"/>
+                                                    <text x="{{ p_width - 2.5 }}" y="2.5" dominant-baseline="central" text-anchor="middle">x</text>
+                                                </g>
+                                                {% endif %}
                                             </g>
                                         {% endfor %}
                                         {% for offcut in layout.usable_offcuts %}
                                             {% set svg_y = layout.sheet_info.length - offcut.y - offcut.length %}
                                             <g class="offcut-group" transform="translate({{ offcut.x }}, {{ svg_y }})">
                                                 <rect class="offcut" width="{{ offcut.width }}" height="{{ offcut.length }}"/>
-
-                                                {# --- CONDITIONAL TEXT LOGIC FOR OFFCUTS --- #}
-
-                                                {# 1. Main Label #}
                                                 {% if offcut.length > offcut.width * 1.5 and offcut.width > 4 %}
                                                     <text class="offcut-label" text-anchor="middle" dominant-baseline="middle" transform="translate({{ offcut.width / 2 }}, {{ offcut.length / 2 }}) rotate(90)">Offcut</text>
                                                 {% elif offcut.width > 8 and offcut.length > 4 %}
                                                     <text class="offcut-label" x="{{ offcut.width / 2 }}" y="{{ offcut.length / 2 }}" dominant-baseline="middle" text-anchor="middle">Offcut</text>
                                                 {% endif %}
-
-                                                {# 2. Dimension Labels #}
                                                 {% set text_padding = 1.5 %}
                                                 {% if offcut.width > 6 %}
                                                     <text class="inner-dim-text" text-anchor="middle" dominant-baseline="hanging" x="{{ offcut.width / 2 }}" y="{{ text_padding }}">{{ '%.2f' % offcut.width }}</text>
