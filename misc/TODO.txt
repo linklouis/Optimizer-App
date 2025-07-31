@@ -63,6 +63,7 @@ BUGS
     - Does the priority offcut bonus affect the ideal score?
     - Only clicking on the center of a closed dropdown opens it, not the bottom
     - Remove the parenthesies in the names of some of the columns in the Loaded Parts Lists.
+    - The dragging to resize cards isn't working?
 
 MISC
     - Change default branching factor to 2 or 3. Also update tooltip.

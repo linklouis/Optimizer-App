@@ -275,7 +275,7 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
     best_score = -float('inf')
 
     # --- Branch and Bound Loop ---
-    while pq and (time.time() - start_time) < time_limit:
+    while pq and (time_limit <= 0 or (time.time() - start_time) < time_limit):
         _, current_score, _, current_parts, used_layouts, used_signatures = heapq.heappop(pq)
 
         if -_calculate_bound(list(current_parts.values()), current_score, config, reference_area) < best_score:

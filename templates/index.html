@@ -14,6 +14,9 @@
     <script id="initial-results-data" type="application/json">
         {{ result | tojson | safe if result else 'null' }}
     </script>
+    <script id="default-weights-data" type="application/json">
+        {{ default_weights | tojson | safe }}
+    </script>
     
     <div id="loading-overlay" style="display: none;">
         <div class="loading-content">
@@ -145,10 +148,12 @@
                         <details class="collapsible-section animated-accordion">
                             <summary class="card-title"><i class="fa-solid fa-ruler-combined"></i> Manage Offcuts</summary>
                              <div class="collapsible-content">
-                                <div class="card-header"><div class="button-group">
-                                    <button type="button" class="btn-secondary" id="select-all-offcuts">Select All</button>
-                                    <button type="button" class="btn-secondary" id="deselect-all-offcuts">Deselect All</button>
-                                </div></div>
+                                <div class="card-header">
+                                    <div class="button-group">
+                                        <button type="button" class="btn-secondary" id="select-all-offcuts">Select All</button>
+                                        <button type="button" class="btn-secondary" id="deselect-all-offcuts">Deselect All</button>
+                                    </div>
+                                </div>
                                 <div class="stock-selector offcut-selector">
                                     {% for offcut in all_offcuts %}
                                     <div class="stock-item">
@@ -176,10 +181,13 @@
                         <details class="collapsible-section animated-accordion">
                             <summary class="card-title"><i class="fa-solid fa-boxes-stacked"></i>Manage Stock Parts</summary>
                             <div class="collapsible-content">
-                                <div class="card-header"><div class="button-group">
-                                    <button type="button" class="btn-secondary" id="select-all-stock">Select All</button>
-                                    <button type="button" class="btn-secondary" id="deselect-all-stock">Deselect All</button>
-                                </div></div>
+                                <div class="card-header">
+                                    <div class="button-group">
+                                        <button type="button" class="btn-secondary" id="select-all-stock">Select All</button>
+                                        <button type="button" class="btn-secondary" id="deselect-all-stock">Deselect All</button>
+                                    </div>
+                                    <button type="button" class="btn-secondary" id="reset-stock-qty">Reset Quantities</button>
+                                </div>
                                 <div class="stock-selector">
                                     {% for part in all_stock_parts %}
                                     <label class="stock-item" for="stock_{{ part.internal_ref }}">
@@ -212,7 +220,12 @@
                                 <div><label for="min_offcut_dim">Min. Usable Offcut Width</label><input type="number" step="any" id="min_offcut_dim" name="min_offcut_dim" value="{{ config.min_offcut_dim }}"></div>
                                 <div>
                                     <label for="search_time_limit">Search Time (s) <span class="tooltip" data-tooltip="Total time for the optimizer to run. Longer times allow for a more thorough search and better results.&#013;Note: Ideally, the algorithm will finish before the time runs out. If it doesn't, it will pick the best option it's found so far. If it hasn't found a viable option yet, an error will occur.">[?]</span></label>
-                                    <input type="number" step="any" id="search_time_limit" name="search_time_limit" value="{{ config.search_time_limit }}">
+                                    <div class="input-with-toggle">
+                                        <input type="number" step="any" id="search_time_limit" name="search_time_limit" value="{{ config.search_time_limit }}">
+                                        <label class="checkbox-group no-time-limit-toggle">
+                                            <input type="checkbox" id="no-time-limit-cb"> No Limit
+                                        </label>
+                                    </div>
                                 </div>
                                 <div>
                                     <label for="branching_factor">Branching Factor <span class="tooltip" data-tooltip="Number of random layouts to generate at each search step. Higher values explore more options but are slower.">[?]</span></label>
@@ -228,7 +241,10 @@
                         </section>
 
                         <section class="card">
-                            <h2 class="card-title"><i class="fa-solid fa-balance-scale"></i> Scoring Weights</h2>
+                            <h2 class="card-title">
+                                <i class="fa-solid fa-balance-scale"></i> Scoring Weights
+                                <button type="button" class="btn-secondary btn-header-action" id="reset-weights-btn">Reset to Default</button>
+                            </h2>
                             <div class="form-grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));">
                                 <div>
                                     <label for="w_waste">Waste Penalty <span class="tooltip" data-tooltip="Penalizes unusable scrap material.">[?]</span></label>

@@ -2,6 +2,70 @@ document.addEventListener('DOMContentLoaded', function() {
     let stateHistory = [];
     let currentState = null;
 
+        /** --- Configuration Page Actions --- */
+
+    // 1. Reset Stock Quantities Button
+    const resetStockBtn = document.getElementById('reset-stock-qty');
+    if (resetStockBtn) {
+        resetStockBtn.addEventListener('click', () => {
+            // Find all required quantity inputs within the "Manage Stock Parts" card and reset them.
+            const card = resetStockBtn.closest('.card');
+            if (card) {
+                card.querySelectorAll('.required-qty-input').forEach(input => {
+                    input.value = '';
+                });
+            }
+        });
+    }
+
+    // 2. Reset Scoring Weights Button
+    const resetWeightsBtn = document.getElementById('reset-weights-btn');
+    if (resetWeightsBtn) {
+        resetWeightsBtn.addEventListener('click', () => {
+            const weightsDataEl = document.getElementById('default-weights-data');
+            if (!weightsDataEl) return;
+            
+            const defaultWeights = JSON.parse(weightsDataEl.textContent);
+            for (const key in defaultWeights) {
+                const input = document.getElementById(key);
+                if (input) {
+                    input.value = defaultWeights[key];
+                }
+            }
+        });
+    }
+
+    // 3. Optional Time Limit Checkbox
+    const timeLimitInput = document.getElementById('search_time_limit');
+    const noTimeLimitCb = document.getElementById('no-time-limit-cb');
+    if (timeLimitInput && noTimeLimitCb) {
+        let previousTimeLimit = timeLimitInput.value;
+
+        // Set initial state on page load
+        if (parseFloat(timeLimitInput.value) <= 0) {
+            noTimeLimitCb.checked = true;
+            timeLimitInput.disabled = true;
+        }
+
+        noTimeLimitCb.addEventListener('change', () => {
+            if (noTimeLimitCb.checked) {
+                previousTimeLimit = timeLimitInput.value;
+                timeLimitInput.value = '0';
+                timeLimitInput.disabled = true;
+            } else {
+                timeLimitInput.value = previousTimeLimit > 0 ? previousTimeLimit : '5.0';
+                timeLimitInput.disabled = false;
+            }
+        });
+
+        timeLimitInput.addEventListener('input', () => {
+             if(!noTimeLimitCb.checked) {
+                previousTimeLimit = timeLimitInput.value;
+             }
+        });
+    }
+
+
     // --- State-dependent Functions ---
 
     async function handleUndo() {
@@ -304,13 +368,45 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
+    // Corrected Resizable Card Logic
     document.querySelectorAll('.resizable-card .resize-handle').forEach(handle => {
         const selectorList = handle.parentElement.querySelector('.stock-selector');
+        const collapsibleContent = handle.closest('.collapsible-content');
+
         handle.addEventListener('mousedown', function(e) {
             e.preventDefault();
-            const startY = e.clientY, startHeight = selectorList.offsetHeight;
-            const doDrag = (e) => selectorList.style.height = `${startHeight + e.clientY - startY}px`;
-            const stopDrag = () => document.documentElement.removeEventListener('mousemove', doDrag);
+
+            // The accordion must be open to resize
+            const accordion = handle.closest('details.animated-accordion');
+            if (!accordion || !accordion.open) return;
+
+            const startY = e.clientY;
+            const startHeight = selectorList.offsetHeight;
+
+            // Store the original transition and disable it for smooth dragging
+            const originalTransition = collapsibleContent.style.transition;
+            collapsibleContent.style.transition = 'none';
+            
+            const doDrag = (e) => {
+                // Ensure height doesn't go below a minimum (e.g., 50px)
+                const newHeight = Math.max(50, startHeight + e.clientY - startY);
+                selectorList.style.height = `${newHeight}px`;
+
+                // Update the parent accordion's max-height to allow it to grow
+                if (collapsibleContent) {
+                    collapsibleContent.style.maxHeight = `${collapsibleContent.scrollHeight}px`;
+                }
+            };
+
+            const stopDrag = () => {
+                // Restore the original transition when dragging stops
+                if (collapsibleContent) {
+                    collapsibleContent.style.transition = originalTransition;
+                }
+                document.documentElement.removeEventListener('mousemove', doDrag);
+                document.documentElement.removeEventListener('mouseup', stopDrag);
+            };
+
             document.documentElement.addEventListener('mousemove', doDrag);
             document.documentElement.addEventListener('mouseup', stopDrag, { once: true });
         });

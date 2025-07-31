@@ -152,6 +152,9 @@ details:not([open]) .collapsible-content {
     transform: rotate(180deg);
 }
 .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     margin-bottom: 1rem;
 }
 
@@ -185,6 +188,33 @@ input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 2px
 .submit-button:hover { background-color: #059669; }
 .submit-button:active { transform: translateY(1px); }
 .form-divider { border: 0; height: 1px; background-color: var(--border-color); margin: 1.5rem 0; }
+
+.btn-header-action {
+    margin-left: auto;
+    font-size: 0.8rem;
+    padding: 0.3rem 0.6rem;
+}
+
+.input-with-toggle {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.input-with-toggle input[type="number"] {
+    flex-grow: 1;
+}
+
+.input-with-toggle input[type="number"]:disabled {
+    background-color: var(--border-color);
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+.no-time-limit-toggle {
+    margin-bottom: 0; /* Override default label margin */
+    flex-shrink: 0;
+}
 
 /* Dynamic File Inputs */
 .dynamic-file-list { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 0.75rem; }

@@ -163,7 +163,8 @@ def update_config_from_form(config, form_data):
     config['default_width'] = form_data.get('default_width', type=float)
     config['kerf'] = form_data.get('kerf', type=float)
     config['min_offcut_dim'] = form_data.get('min_offcut_dim', type=float)
-    config['search_time_limit'] = form_data.get('search_time_limit', type=float)
+    time_limit_val = form_data.get('search_time_limit', type=float)
+    config['search_time_limit'] = time_limit_val if time_limit_val is not None else 0.0
     config['branching_factor'] = form_data.get('branching_factor', type=int)
     config['allow_rotation'] = form_data.get('allow_rotation') == 'true'
     config['use_offcuts'] = form_data.get('use_offcuts') == 'true'
@@ -520,7 +521,15 @@ def home():
     elif request.method == 'GET' and 'optimization_result' in session:
         optimization_result = session['optimization_result']
 
-    return render_template('index.html', config=config, result=optimization_result, all_stock_parts=all_stock_parts_list, hhos_file_contents=hhos_file_contents, all_offcuts=all_offcuts_list)
+    default_weights = {k: v for k, v in DEFAULT_CONFIG.items() if k.startswith('w_')}
+
+    return render_template('index.html',
+                           config=config,
+                           result=optimization_result,
+                           all_stock_parts=all_stock_parts_list,
+                           hhos_file_contents=hhos_file_contents,
+                           all_offcuts=all_offcuts_list,
+                           default_weights=default_weights)
 
 @app.route('/update_layout', methods=['POST'])
 def update_layout():
