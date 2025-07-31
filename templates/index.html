@@ -262,7 +262,11 @@
                 </form>
             </div>
 
-            <div id="results" class="tab-content">
+            <body class="{{ 'dark-mode' if config.dark_mode else '' }}">
+                <script id="initial-results-data" type="application/json">
+                    {{ result | tojson | safe if result else 'null' }}
+                </script>
+                
                 <div id="loading-overlay" style="display: none;">
                     <div class="loading-content">
                         <div class="spinner"></div>
@@ -270,8 +274,11 @@
                     </div>
                 </div>
 
-                <div id="results-container">
-                    </div>
+                <div class="container">
+                    <main>
+                        <div id="results" class="tab-content">
+                            <div id="results-container">
+                            </div>
 
                 <template id="layout-card-template">
                     <div class="layout-card card">

@@ -273,7 +273,6 @@ def recalculate_global_summary(result_obj, config):
     total_sheet_area = 0
     total_sheets = 0
     
-    # Check if this is a job that ONLY contains optional stock parts to begin with
     is_stock_only_job = all(
         all(p.get('is_optional_filler', False) for p in layout['placed_parts'])
         for layout in layouts
@@ -288,20 +287,13 @@ def recalculate_global_summary(result_obj, config):
         layout['yield_percentage'] = (layout['total_placed_area'] / layout_sheet_area) * 100 if layout_sheet_area > 0 else 0
         layout['usable_offcuts'] = [r for r in layout.get('offcuts', []) if r['length'] >= config['min_offcut_dim'] and r['width'] >= config['min_offcut_dim']]
         
-        # --- Start of fix ---
-        # Check for layouts that might now be invalid (e.g., only contain optional parts)
         is_now_stock_only = all(p.get('is_optional_filler', False) for p in layout['placed_parts'])
-
-        # The `is_stock_only_job` parameter tells the score function how to treat this layout
         layout_score = calculate_layout_score(layout, sheet_info, config, config['min_offcut_dim'], reference_area, is_stock_only_job or is_now_stock_only)
         
-        # Intercept -inf and replace it with a large negative number for safe JSON conversion
         if layout_score == -float('inf'):
             layout_score = -1e9 
-        # --- End of fix ---
         
         total_score_from_layouts += layout_score * quantity
-
         total_placed_area += layout['total_placed_area'] * quantity
         total_sheet_area += layout_sheet_area * quantity
         total_sheets += quantity
@@ -552,23 +544,16 @@ def update_layout():
         if item_index < 0 or item_index >= len(layout_to_modify['placed_parts']): 
             return jsonify({"error": "Part index out of bounds."}), 400
         
-        # Get the quantity of the entire layout group BEFORE modification
         quantity = layout_to_modify.get('quantity', 1)
-        
-        # Remove the part from the layout object
         part_to_remove = layout_to_modify['placed_parts'].pop(item_index)
 
-        # If it's a job part, add one part back for each sheet in the group
         if action == 'remove_job_part':
             parts_to_add_back = [part_to_remove.copy() for _ in range(quantity)]
             result.setdefault('remaining_parts', []).extend(parts_to_add_back)
 
-        # Check if that was the last part on the layout
         if not layout_to_modify['placed_parts']:
-            # If yes, remove the entire layout group from the results
             result['layouts'] = [lo for lo in result['layouts'] if lo.get('signature') != layout_sig]
         else:
-            # If no, update the existing layout group
             tiled_empty_space = find_all_empty_rectangles(layout_to_modify['sheet_info'], layout_to_modify['placed_parts'])
             new_offcuts = consolidate_empty_space(tiled_empty_space, config['kerf'])
             layout_to_modify['offcuts'] = new_offcuts
@@ -578,7 +563,6 @@ def update_layout():
             layout_to_modify['signature'] = new_signature
 
     elif action == 'remove_offcut':
-        # This logic remains unchanged
         usable_offcuts = [r for r in layout_to_modify.get('offcuts', []) if r['length'] >= config['min_offcut_dim'] and r['width'] >= config['min_offcut_dim']]
         
         if item_index < 0 or item_index >= len(usable_offcuts): 
@@ -594,11 +578,25 @@ def update_layout():
     else: 
         return jsonify({"error": "Invalid action."}), 400
     
-    # Recalculate all summary scores and update the result object
     updated_result = recalculate_global_summary(result, config)
-
     session['optimization_result'] = updated_result
     return jsonify(updated_result)
+
+@app.route('/restore_state', methods=['POST'])
+def restore_state():
+    """Restores the entire optimization result in the session from a client-provided state."""
+    if 'optimization_result' not in session:
+        return jsonify({"error": "No session to restore."}), 400
+    
+    new_state = request.get_json()
+    # Basic validation to ensure we're getting a plausible state object
+    if not new_state or 'layouts' not in new_state or 'final_score' not in new_state:
+        return jsonify({"error": "Invalid state data provided."}), 400
+        
+    session['optimization_result'] = new_state
+    session.modified = True # Ensure the session is saved
+    
+    return jsonify({"success": True})
 
 
 if __name__ == '__main__':

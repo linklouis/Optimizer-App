@@ -45,6 +45,7 @@ FEATURES
         - ✓ Needs to look good in greyscale
 
         - Make the Loaded Parts List section look better
+        - Actual progress bar for optimization? Maybe also a clock, and say when a viable layout has been found?
 
     Code
         - Start separating some of the big files (index, app)
