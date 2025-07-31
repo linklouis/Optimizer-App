@@ -143,7 +143,17 @@ async function handleLayoutClick(e) {
     const layoutCard = item.closest('.layout-card');
     const layoutSignature = layoutCard.dataset.layoutSignature;
     const itemIndex = parseInt(item.dataset.itemIndex, 10);
-    let action = item.dataset.itemType === 'stock_part' ? 'remove_stock_part' : (item.dataset.itemType === 'offcut' ? 'remove_offcut' : null);
+    const itemType = item.dataset.itemType;
+    let action = null;
+
+    if (itemType === 'stock_part') {
+        action = 'remove_stock_part';
+    } else if (itemType === 'job_part') {
+        action = 'remove_job_part';
+    } else if (itemType === 'offcut') {
+        action = 'remove_offcut';
+    }
+
     if (!action) return;
 
     const loadingOverlay = document.getElementById('loading-overlay');
@@ -203,17 +213,27 @@ function renderResults(result) {
         card.style.width = `${(layout.sheet_info.width / default_width) * max_card_width}px`;
         card.dataset.layoutSignature = layout.signature;
 
+        // Corrected logic for rendering parts
         const partsSvg = layout.placed_parts.map((part, index) => {
-            const p_len = part.rotated ? part.width : part.length, p_wid = part.rotated ? part.length : part.width;
+            const p_len = part.rotated ? part.width : part.length;
+            const p_wid = part.rotated ? part.length : part.width;
             const svg_y = layout.sheet_info.length - part.y - p_len;
+            const itemType = part.is_stock_part ? 'stock_part' : 'job_part';
             const p_class = part.is_stock_part ? 'stock-part' : 'job-part';
-            const interactive = part.is_stock_part ? 'interactive-item' : '';
-            return `<g class="part-group ${interactive}" transform="translate(${part.x},${svg_y})" data-item-index="${index}" data-item-type="stock_part"><rect class="${p_class}" width="${p_wid}" height="${p_len}"/><text class="part-label" x="${p_wid/2}" y="${p_len/2}" dominant-baseline="middle" text-anchor="middle">${part.is_stock_part ? 'STOCK' : (part.label || '')}</text></g>`;
+            const label = part.is_stock_part ? 'STOCK' : (part.label || '');
+            
+            return `<g class="part-group interactive-item" transform="translate(${part.x},${svg_y})" data-item-index="${index}" data-item-type="${itemType}">
+                        <rect class="${p_class}" width="${p_wid}" height="${p_len}"/>
+                        <text class="part-label" x="${p_wid/2}" y="${p_len/2}" dominant-baseline="middle" text-anchor="middle">${label}</text>
+                    </g>`;
         }).join('');
 
         const offcutsSvg = (layout.usable_offcuts || []).map((offcut, index) => {
             const svg_y = layout.sheet_info.length - offcut.y - offcut.length;
-            return `<g class="offcut-group interactive-item" transform="translate(${offcut.x},${svg_y})" data-item-index="${index}" data-item-type="offcut"><rect class="offcut" width="${offcut.width}" height="${offcut.length}"/><text class="offcut-label" x="${offcut.width/2}" y="${offcut.length/2}" dominant-baseline="middle" text-anchor="middle">Offcut</text></g>`;
+            return `<g class="offcut-group interactive-item" transform="translate(${offcut.x},${svg_y})" data-item-index="${index}" data-item-type="offcut">
+                        <rect class="offcut" width="${offcut.width}" height="${offcut.length}"/>
+                        <text class="offcut-label" x="${offcut.width/2}" y="${offcut.length/2}" dominant-baseline="middle" text-anchor="middle">Offcut</text>
+                    </g>`;
         }).join('');
         
         card.innerHTML = `

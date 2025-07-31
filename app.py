@@ -327,6 +327,7 @@ def recalculate_global_summary(result_obj, config):
     total_sheet_area = 0
     total_sheets = 0
     
+    # Check if this is a job that ONLY contains optional stock parts to begin with
     is_stock_only_job = all(
         all(p.get('is_optional_filler', False) for p in layout['placed_parts'])
         for layout in layouts
@@ -334,14 +335,25 @@ def recalculate_global_summary(result_obj, config):
 
     for layout in layouts:
         sheet_info = layout['sheet_info']
-        quantity = layout.get('quantity') or 1
+        quantity = layout.get('quantity', 1)
         layout_sheet_area = sheet_info['length'] * sheet_info['width']
         
         layout['total_placed_area'] = sum(p['length'] * p['width'] for p in layout['placed_parts'])
         layout['yield_percentage'] = (layout['total_placed_area'] / layout_sheet_area) * 100 if layout_sheet_area > 0 else 0
         layout['usable_offcuts'] = [r for r in layout.get('offcuts', []) if r['length'] >= config['min_offcut_dim'] and r['width'] >= config['min_offcut_dim']]
         
-        layout_score = calculate_layout_score(layout, sheet_info, config, config['min_offcut_dim'], reference_area, is_stock_only_job)
+        # --- Start of fix ---
+        # Check for layouts that might now be invalid (e.g., only contain optional parts)
+        is_now_stock_only = all(p.get('is_optional_filler', False) for p in layout['placed_parts'])
+
+        # The `is_stock_only_job` parameter tells the score function how to treat this layout
+        layout_score = calculate_layout_score(layout, sheet_info, config, config['min_offcut_dim'], reference_area, is_stock_only_job or is_now_stock_only)
+        
+        # Intercept -inf and replace it with a large negative number for safe JSON conversion
+        if layout_score == -float('inf'):
+            layout_score = -1e9 
+        # --- End of fix ---
+        
         total_score_from_layouts += layout_score * quantity
 
         total_placed_area += layout['total_placed_area'] * quantity
@@ -590,26 +602,37 @@ def update_layout():
     if not layout_to_modify: 
         return jsonify({"error": "Layout group not found."}), 404
 
-    if action == 'remove_stock_part':
+    if action in ['remove_stock_part', 'remove_job_part']:
         if item_index < 0 or item_index >= len(layout_to_modify['placed_parts']): 
             return jsonify({"error": "Part index out of bounds."}), 400
         
-        # Remove the part from the list
-        layout_to_modify['placed_parts'].pop(item_index)
+        # Get the quantity of the entire layout group BEFORE modification
+        quantity = layout_to_modify.get('quantity', 1)
         
-        # --- THIS IS THE NEW ROBUST PROCESS ---
-        # 1. Regenerate all empty space from scratch based on remaining parts.
-        #    This creates a "tiled" view of the empty space.
-        tiled_empty_space = find_all_empty_rectangles(layout_to_modify['sheet_info'], layout_to_modify['placed_parts'])
-        
-        # 2. Consolidate the tiled space into the largest possible empty rectangles.
-        new_offcuts = consolidate_empty_space(tiled_empty_space, config['kerf'])
-        
-        # 3. Update the layout with the new, correct offcut geometry.
-        layout_to_modify['offcuts'] = new_offcuts
-        # The old recalculate_offcuts_from_empty_space() is no longer needed here.
+        # Remove the part from the layout object
+        part_to_remove = layout_to_modify['placed_parts'].pop(item_index)
+
+        # If it's a job part, add one part back for each sheet in the group
+        if action == 'remove_job_part':
+            parts_to_add_back = [part_to_remove.copy() for _ in range(quantity)]
+            result.setdefault('remaining_parts', []).extend(parts_to_add_back)
+
+        # Check if that was the last part on the layout
+        if not layout_to_modify['placed_parts']:
+            # If yes, remove the entire layout group from the results
+            result['layouts'] = [lo for lo in result['layouts'] if lo.get('signature') != layout_sig]
+        else:
+            # If no, update the existing layout group
+            tiled_empty_space = find_all_empty_rectangles(layout_to_modify['sheet_info'], layout_to_modify['placed_parts'])
+            new_offcuts = consolidate_empty_space(tiled_empty_space, config['kerf'])
+            layout_to_modify['offcuts'] = new_offcuts
+            
+            use_req_sig = config.get('standardize_stock_layouts', False)
+            new_signature = get_layout_signature(layout_to_modify, required_only=use_req_sig)
+            layout_to_modify['signature'] = new_signature
 
     elif action == 'remove_offcut':
+        # This logic remains unchanged
         usable_offcuts = [r for r in layout_to_modify.get('offcuts', []) if r['length'] >= config['min_offcut_dim'] and r['width'] >= config['min_offcut_dim']]
         
         if item_index < 0 or item_index >= len(usable_offcuts): 
@@ -624,11 +647,8 @@ def update_layout():
                 break
     else: 
         return jsonify({"error": "Invalid action."}), 400
-
-    use_req_sig = config.get('standardize_stock_layouts', False)
-    new_signature = get_layout_signature(layout_to_modify, required_only=use_req_sig)
-    layout_to_modify['signature'] = new_signature
     
+    # Recalculate all summary scores and update the result object
     updated_result = recalculate_global_summary(result, config)
 
     session['optimization_result'] = updated_result
