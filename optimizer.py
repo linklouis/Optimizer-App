@@ -284,16 +284,19 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
         
         current_time = time.time()
         if progress_callback and (current_time - last_update_time > 0.1):
-            progress = 0
-            # Always prioritize part-based progress if possible
+            part_progress = 0
             if total_initial_parts > 0:
                 num_remaining_parts = len(current_parts)
-                progress = ((total_initial_parts - num_remaining_parts) / total_initial_parts) * 100
-            # Fallback to time-based if no parts were in the initial job
-            elif time_limit > 0:
-                progress = min(((current_time - start_time) / time_limit) * 100, 100)
+                part_progress = ((total_initial_parts - num_remaining_parts) / total_initial_parts) * 100
             
-            progress_callback(int(progress))
+            progress_callback({
+                "part_progress": int(part_progress),
+                "elapsed_time": current_time - start_time,
+                "time_limit": time_limit,
+                "nodes_explored": node_counter,
+                "current_best_score": best_score if best_score > -float('inf') else None,
+                "sheets_in_best_solution": len(best_solution[0]) if best_solution[0] else None
+            })
             last_update_time = current_time
 
         if -_calculate_bound(list(current_parts.values()), current_score, config, reference_area) < best_score:
@@ -333,7 +336,14 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
                         node_counter += 1
     
     if progress_callback:
-        progress_callback(100)
+        progress_callback({
+            "part_progress": 100,
+            "elapsed_time": time.time() - start_time,
+            "time_limit": time_limit,
+            "nodes_explored": node_counter,
+            "current_best_score": best_score if best_score > -float('inf') else None,
+            "sheets_in_best_solution": len(best_solution[0]) if best_solution[0] else None
+        })
 
     final_layouts, remaining_parts = best_solution
     return final_layouts, remaining_parts, best_score

@@ -40,12 +40,44 @@
             </div>
 
             <div id="loading-overlay" style="display: none;">
-                <div class="loading-text-container">
-                    <h3>Optimizing Layouts...</h3>
-                    <p>Please wait, this may take a few moments.</p>
-                </div>
-                <div class="progress-bar-container">
-                    <div id="progress-bar-fill" class="progress-bar-fill"></div>
+                <div class="loading-panel">
+                    <div class="loading-header">
+                        <i class="fa-solid fa-gears fa-spin"></i>
+                        <h2>Optimizing Layouts...</h2>
+                    </div>
+            
+                    <div class="main-progress">
+                        <div class="progress-label">
+                            <span>Part Placement Progress</span>
+                            <span id="part-progress-percent">0%</span>
+                        </div>
+                        <div class="progress-bar-container">
+                            <div id="progress-bar-fill" class="progress-bar-fill"></div>
+                        </div>
+                    </div>
+            
+                    <div class="live-stats-grid">
+                        <div class="stat-card">
+                            <span class="stat-label"><i class="fa-regular fa-clock"></i> Time</span>
+                            <span class="stat-value" id="time-tracker-value">00:00</span>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-label"><i class="fa-solid fa-sitemap"></i> Nodes Explored</span>
+                            <span class="stat-value" id="nodes-explored-value">0</span>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-label"><i class="fa-solid fa-star"></i> Best Score</span>
+                            <span class="stat-value" id="best-score-value">-</span>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-label"><i class="fa-solid fa-file-invoice"></i> Sheets in Solution</span>
+                            <span class="stat-value" id="sheets-used-value">-</span>
+                        </div>
+                    </div>
+                    
+                    <p class="loading-tip">
+                        <strong>Tip:</strong> Allowing more search time can improve material yield and reduce waste.
+                    </p>
                 </div>
             </div>
 

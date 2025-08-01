@@ -363,20 +363,30 @@ document.addEventListener('DOMContentLoaded', function() {
         configForm.addEventListener('submit', async (e) => {
             e.preventDefault(); // Prevent default form submission
 
+            // --- Get DOM elements for new loading panel ---
             const loadingOverlay = document.getElementById('loading-overlay');
             const progressBarFill = document.getElementById('progress-bar-fill');
-            const progressBarContainer = progressBarFill.parentElement;
+            const partProgressPercent = document.getElementById('part-progress-percent');
+            const timeTrackerValue = document.getElementById('time-tracker-value');
+            const nodesExploredValue = document.getElementById('nodes-explored-value');
+            const bestScoreValue = document.getElementById('best-score-value');
+            const sheetsUsedValue = document.getElementById('sheets-used-value');
 
-            if (!loadingOverlay || !progressBarFill || !progressBarContainer) return;
+            if (!loadingOverlay) return;
 
             // Show loading UI and switch to results tab
             loadingOverlay.style.display = 'flex';
             document.querySelector('.tab-button[data-tab="results"]')?.click();
-            document.getElementById('results-container').innerHTML = ''; // Clear previous results
+            document.getElementById('results-container').innerHTML = '';
 
-            // Always use the standard progress bar now, regardless of time limit setting
-            progressBarContainer.classList.remove('indeterminate');
+            // Reset loading panel to initial state
             progressBarFill.style.width = '0%';
+            partProgressPercent.textContent = '0%';
+            timeTrackerValue.textContent = '00:00';
+            nodesExploredValue.textContent = '0';
+            bestScoreValue.textContent = '-';
+            sheetsUsedValue.textContent = '-';
+
 
             try {
                 // 1. Start the optimization task
@@ -394,11 +404,40 @@ document.addEventListener('DOMContentLoaded', function() {
                 // 2. Listen for progress events
                 const eventSource = new EventSource(`/stream/${task_id}`);
 
-                eventSource.onmessage = (event) => {
-                    const progress = parseInt(event.data, 10);
-                    // This will now correctly update the standard progress bar in all cases
-                    progressBarFill.style.width = `${progress}%`;
-                };
+                eventSource.addEventListener('progress', (event) => {
+                    const data = JSON.parse(event.data);
+                    
+                    // Main progress bar
+                    if (data.part_progress !== undefined) {
+                        progressBarFill.style.width = `${data.part_progress}%`;
+                        partProgressPercent.textContent = `${data.part_progress}%`;
+                    }
+
+                    // Time tracker
+                    if (data.elapsed_time !== undefined) {
+                        const formatTime = (seconds) => {
+                            const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
+                            const secs = Math.floor(seconds % 60).toString().padStart(2, '0');
+                            return `${mins}:${secs}`;
+                        };
+                        let timeText = formatTime(data.elapsed_time);
+                        if (data.time_limit > 0) {
+                            timeText += ` / ${formatTime(data.time_limit)}`;
+                        }
+                        timeTrackerValue.textContent = timeText;
+                    }
+
+                    // Live Stats
+                    if (data.nodes_explored !== undefined) {
+                        nodesExploredValue.textContent = data.nodes_explored.toLocaleString();
+                    }
+                    if (data.current_best_score !== undefined && data.current_best_score !== null) {
+                        bestScoreValue.textContent = data.current_best_score.toFixed(2);
+                    }
+                    if (data.sheets_in_best_solution !== undefined && data.sheets_in_best_solution !== null) {
+                        sheetsUsedValue.textContent = data.sheets_in_best_solution;
+                    }
+                });
 
                 eventSource.addEventListener('done', (event) => {
                     const result = JSON.parse(event.data);

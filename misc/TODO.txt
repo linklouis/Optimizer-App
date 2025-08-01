@@ -47,6 +47,8 @@ FEATURES
         - Make the Loaded Parts List section look better
         - Actual progress bar for optimization? Maybe also a clock, and say when a viable layout has been found?
         - ADD SECOND PROGRESS BAR FOR WHEN THERE'S A TIME LIMIT
+        - Add line break before 'Note:' in search time tooltip
+        - Make dimensions text more readable on patterned backgrounds
 
     Code
         - Start separating some of the big files (index, app)
@@ -97,3 +99,9 @@ QUESTIONS
     
     - Always rotate labels to be on the widest axis, or just when they don't fit?
     - Should the top configurator sections be open or closed by default?
+
+
+
+
+
+Please make sure to only return either complete updated files or complete functions with clear instructions on how to implement them. This applies to all files except style.css, for which you should always respond with clear instructions for the update. Don't mention files that don't require updates. Your responses should be formatted for convenient copy-pasting. 

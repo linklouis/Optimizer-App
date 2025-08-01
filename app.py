@@ -420,10 +420,10 @@ def get_initial_optional_parts(stock_inv_df, config):
 def run_optimization_task(task_id, config):
     """The function that will run in a background thread."""
     try:
-        def progress_callback(progress):
+        def progress_callback(progress_data):
             with tasks_lock:
                 if task_id in tasks:
-                    tasks[task_id]['progress'] = progress
+                    tasks[task_id]['progress'] = progress_data
 
         opt_start_time = time.time()
         hhos_df, offcut_df, stock_inv_df = process_uploaded_files(config.get('hhos_files', []), config['offcut_path'], config['stock_inv_path'], config['default_length'], config['default_width'])
@@ -555,7 +555,7 @@ def start_optimization():
 
     task_id = str(uuid.uuid4())
     with tasks_lock:
-        tasks[task_id] = {'status': 'running', 'progress': 0, 'result': None}
+        tasks[task_id] = {'status': 'running', 'progress': {}, 'result': None}
     
     thread = threading.Thread(target=run_optimization_task, args=(task_id, config))
     thread.daemon = True
@@ -572,10 +572,12 @@ def stream(task_id):
                 if not task:
                     break
                 
-                progress = task['progress']
+                progress_data = task['progress']
                 status = task['status']
 
-            yield f"data: {progress}\n\n"
+            # Send a specific 'progress' event with JSON data
+            if progress_data:
+                yield f"event: progress\ndata: {json.dumps(progress_data)}\n\n"
             
             if status in ['complete', 'error']:
                 with tasks_lock:
