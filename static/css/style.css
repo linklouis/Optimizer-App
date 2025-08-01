@@ -92,10 +92,13 @@ header h1 { margin: 0; font-size: 1.75rem; font-weight: 700; display: flex; alig
 .settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 1.5rem; }
 
 /* --- Tabs --- */
-.tabs-container { 
-    border-bottom: 1px solid var(--border-color); 
-    margin-bottom: 1.5rem; 
-    padding-top: 0.9rem;
+.tabs-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 1.5rem;
+    padding: 0.2rem 0;
     position: sticky;
     top: 0;
     z-index: 10;

@@ -21,14 +21,6 @@
     <div class="container">
         <header>
             <h1><i class="fa-solid fa-cubes-stacked"></i> Automatic Saw Layout Optimizer</h1>
-            <div class="theme-switch-wrapper">
-                <i class="fa-solid fa-moon"></i>
-                <label class="theme-switch" for="darkmode-toggle">
-                    <input type="checkbox" id="darkmode-toggle" {% if config.dark_mode %}checked{% endif %}>
-                    <span class="slider round"></span>
-                </label>
-                <i class="fa-solid fa-sun"></i>
-            </div>
         </header>
 
         <main>
@@ -36,6 +28,14 @@
                 <div class="tabs">
                     <button class="tab-button active" data-tab="config"><i class="fa-solid fa-sliders"></i> Configuration</button>
                     <button class="tab-button" data-tab="results"><i class="fa-solid fa-chart-pie"></i> Results</button>
+                </div>
+                <div class="theme-switch-wrapper">
+                    <i class="fa-solid fa-moon"></i>
+                    <label class="theme-switch" for="darkmode-toggle">
+                        <input type="checkbox" id="darkmode-toggle" {% if config.dark_mode %}checked{% endif %}>
+                        <span class="slider round"></span>
+                    </label>
+                    <i class="fa-solid fa-sun"></i>
                 </div>
             </div>
 
@@ -340,6 +340,8 @@
             </div>
         </main>
     </div>
+    <script src="{{ url_for('static', filename='js/renderer.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/ui.js') }}"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>
 </html>

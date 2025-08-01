@@ -43,15 +43,17 @@ FEATURES
         - ✓ Keep Configuration and Results tabs visible when you scroll down
         - ✓ Scaleable Manage Stock Parts section?
         - ✓ Needs to look good in greyscale
+        - ✓ Actual progress bar for optimization? Maybe also a clock, and say when a viable layout has been found?
+        - ✓ ADD SECOND PROGRESS BAR FOR WHEN THERE'S A TIME LIMIT
 
         - Make the Loaded Parts List section look better
-        - Actual progress bar for optimization? Maybe also a clock, and say when a viable layout has been found?
-        - ADD SECOND PROGRESS BAR FOR WHEN THERE'S A TIME LIMIT
         - Add line break before 'Note:' in search time tooltip
         - Make dimensions text more readable on patterned backgrounds
 
-    Code
-        - Start separating some of the big files (index, app)
+CODE
+    - ✓ Start separating some of the big files (index, app)
+    
+    - Rename weights variables to be more intuitive
 
 BUGS
     - ✓ Allow part rotation check box not working?
@@ -67,9 +69,14 @@ BUGS
     - Adding a new HHOS file doesn't make it pop up in the Loaded Parts List until after optimization
     - Stock part standardizing doesn't affect final score.
     - Does the priority offcut bonus affect the ideal score?
+    - Select all & deselect all buttons don't work
+    - Removing parts on the results page causes the loading screen to pop up for a second
 
 MISC
     - Change default branching factor to 2 or 3. Also update tooltip.
+    - Change Stock Part Inv. Bonus tooltip to something like "Should usually be a larger number(i.e., 2-5), since setting it heigher doesn't negatively impact the effects of other weights, and we want to make sure that the more important stock is prioritized."
+    - Why are the absolute scores in the hundreds?
+    - Ask the AI to just make the ideal score predictor more sophisticated?
 
 IDEAS
     - X Try every combination of cut order for every sheet? 

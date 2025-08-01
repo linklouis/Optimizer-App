@@ -2,82 +2,12 @@ document.addEventListener('DOMContentLoaded', function() {
     let stateHistory = [];
     let currentState = null;
 
-        /** --- Configuration Page Actions --- */
-
-    // 1. Reset Stock Quantities Button
-    const resetStockBtn = document.getElementById('reset-stock-qty');
-    if (resetStockBtn) {
-        resetStockBtn.addEventListener('click', () => {
-            // Find all required quantity inputs within the "Manage Stock Parts" card and reset them.
-            const card = resetStockBtn.closest('.card');
-            if (card) {
-                card.querySelectorAll('.required-qty-input').forEach(input => {
-                    input.value = '';
-                });
-            }
-        });
-    }
-
-    // 2. Reset Scoring Weights Button
-    const resetWeightsBtn = document.getElementById('reset-weights-btn');
-    if (resetWeightsBtn) {
-        resetWeightsBtn.addEventListener('click', () => {
-            const weightsDataEl = document.getElementById('default-weights-data');
-            if (!weightsDataEl) return;
-            
-            const defaultWeights = JSON.parse(weightsDataEl.textContent);
-            for (const key in defaultWeights) {
-                const input = document.getElementById(key);
-                if (input) {
-                    input.value = defaultWeights[key];
-                }
-            }
-        });
-    }
-
-    // 3. Optional Time Limit Checkbox
-    const timeLimitInput = document.getElementById('search_time_limit');
-    const noTimeLimitCb = document.getElementById('no-time-limit-cb');
-    if (timeLimitInput && noTimeLimitCb) {
-        let previousTimeLimit = timeLimitInput.value;
-
-        // Set initial state on page load
-        if (parseFloat(timeLimitInput.value) <= 0) {
-            noTimeLimitCb.checked = true;
-            timeLimitInput.disabled = true;
-        }
-
-        noTimeLimitCb.addEventListener('change', () => {
-            if (noTimeLimitCb.checked) {
-                previousTimeLimit = timeLimitInput.value;
-                timeLimitInput.value = '0';
-                timeLimitInput.disabled = true;
-            } else {
-                timeLimitInput.value = previousTimeLimit > 0 ? previousTimeLimit : '5.0';
-                timeLimitInput.disabled = false;
-            }
-        });
-
-        timeLimitInput.addEventListener('input', () => {
-             if(!noTimeLimitCb.checked) {
-                previousTimeLimit = timeLimitInput.value;
-             }
-        });
-    }
-
-
-    // --- State-dependent Functions ---
-
+    // --- State-dependent Handlers ---
     async function handleUndo() {
         if (stateHistory.length === 0) return;
 
         const loadingOverlay = document.getElementById('loading-overlay');
-        let loadingTimer = setTimeout(() => {
-            if (loadingOverlay) {
-                loadingOverlay.style.display = 'flex';
-                loadingOverlay.querySelector('h3').textContent = 'Undoing...';
-            }
-        }, 250);
+        loadingOverlay.style.display = 'flex';
 
         const previousState = stateHistory.pop();
 
@@ -92,13 +22,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
             currentState = await response.json();
             renderResults(currentState);
+            document.getElementById('undo-button')?.addEventListener('click', handleUndo);
 
         } catch (error) {
             stateHistory.push(previousState); // Push state back on failure
             console.error('Error undoing action:', error);
             alert(`Failed to undo: ${error.message}`);
         } finally {
-            clearTimeout(loadingTimer);
             if (loadingOverlay) loadingOverlay.style.display = 'none';
         }
     }
@@ -120,17 +50,8 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!action) return;
 
         stateHistory.push(JSON.parse(JSON.stringify(currentState)));
-
         const loadingOverlay = document.getElementById('loading-overlay');
-        let loadingTimer = setTimeout(() => {
-            if (loadingOverlay) {
-                loadingOverlay.style.display = 'flex';
-                loadingOverlay.querySelector('h3').textContent = 'Updating Layout...';
-                 // For async updates, always use indeterminate
-                const progressBarContainer = document.querySelector('.progress-bar-container');
-                if (progressBarContainer) progressBarContainer.classList.add('indeterminate');
-            }
-        }, 250); // Flicker fix: only show overlay for actions taking > 250ms
+        loadingOverlay.style.display = 'flex';
 
         try {
             const response = await fetch('/update_layout', {
@@ -147,121 +68,19 @@ document.addEventListener('DOMContentLoaded', function() {
 
             currentState = await response.json();
             renderResults(currentState);
+            document.getElementById('undo-button')?.addEventListener('click', handleUndo);
         } catch (error) {
             stateHistory.pop();
             console.error('Error updating layout:', error);
             alert(`Failed to update layout: ${error.message}`);
         } finally {
-            clearTimeout(loadingTimer);
-            if (loadingOverlay) loadingOverlay.style.display = 'none';
-        }
-    }
-
-    function renderResults(result) {
-        const container = document.getElementById('results-container');
-        if (!container) return;
-        container.innerHTML = '';
-        if (!result || result.error || !result.layouts || result.layouts.length === 0) {
-            let message = "No Results to Display";
-            let subtext = "Run the optimizer to generate layouts.";
-            if (result && result.error) {
-                message = "Optimization Failed";
-                subtext = result.error;
-            }
-            container.innerHTML = `<div class="card placeholder"><h3>${message}</h3><p>${subtext}</p></div>`;
-            return;
-        }
-        const fragment = document.createDocumentFragment();
-        const summary = document.createElement('section');
-        summary.className = 'results-summary';
-        const totalSheets = result.layouts.reduce((sum, l) => sum + l.quantity, 0);
-        summary.innerHTML = `
-            <div class="summary-metric"><span class="value">${result.score_percentage.toFixed(1)}%</span><span class="label">Overall Score<span class="tooltip" data-tooltip="Actual: ${result.final_score.toFixed(2)} | Ideal: ${result.ideal_score.toFixed(2)}">[?]</span></span></div>
-            <div class="summary-metric"><span class="value">${totalSheets}</span><span class="label">Total Sheets Used</span></div>
-            <div class="summary-metric"><span class="value">${result.num_unique_layouts}</span><span class="label">Unique Layouts</span></div>
-            <div class="summary-metric"><span class="value">${result.overall_yield.toFixed(2)}%</span><span class="label">Overall Yield</span></div>
-            <div class="summary-metric"><span class="value">${result.elapsed_time.toFixed(2)}s</span><span class="label">Time Spent</span></div>
-            <div class="summary-metric ${result.remaining_parts.length > 0 ? 'is-alert' : ''}"><span class="value">${result.remaining_parts.length}</span><span class="label">Parts Not Placed</span></div>
-            <div class="summary-metric action-metric">
-                <button id="undo-button" class="btn-undo"><i class="fa-solid fa-rotate-left"></i> Undo</button>
-            </div>`;
-        fragment.appendChild(summary);
-        const grid = document.createElement('div');
-        grid.className = 'results-grid';
-        const cardTemplate = document.getElementById('layout-card-template');
-        const max_card_width = 450;
-        const default_width = result.config.default_width;
-        result.layouts.forEach(layout => {
-            const card = cardTemplate.content.cloneNode(true).querySelector('.layout-card');
-            const sheet = layout.sheet_info;
-            card.style.width = `${(sheet.width / default_width) * max_card_width}px`;
-            card.dataset.layoutSignature = layout.signature;
-            card.querySelector('.layout-title').innerHTML = `${sheet.type} ${sheet.length.toFixed(1)}x${sheet.width.toFixed(1)} | x<span>${layout.quantity}</span> | Yield: <span>${layout.yield_percentage.toFixed(2)}</span>%`;
-            const svg = card.querySelector('svg');
-            svg.setAttribute('viewBox', `-2 -2 ${sheet.width + 4} ${sheet.length + 4}`);
-            const sheetBg = svg.querySelector('.sheet-bg');
-            sheetBg.setAttribute('width', sheet.width);
-            sheetBg.setAttribute('height', sheet.length);
-            
-            let svgContent = '';
-
-            layout.placed_parts.forEach((part, index) => {
-                const p_len = part.rotated ? part.width : part.length;
-                const p_wid = part.rotated ? part.length : part.width;
-                const svg_y = sheet.length - part.y - p_len;
-                const itemType = part.is_stock_part ? 'stock_part' : 'job_part';
-                const p_class = part.is_stock_part ? 'stock-part' : 'job-part';
-                const label = part.is_stock_part ? 'STOCK' : (part.label || '');
-
-                let dimLabels = '';
-                if (p_wid > 8 && p_len > 8) {
-                    const textOffset = 1.5; // Using your preferred value
-                    dimLabels += `<text class="inner-dim-text" x="${p_wid/2}" y="${textOffset}" dominant-baseline="hanging" text-anchor="middle">${p_wid.toFixed(2)}</text>`;
-                    dimLabels += `<text class="inner-dim-text" x="${textOffset}" y="${p_len/2}" transform="rotate(-90, ${textOffset}, ${p_len/2})" dominant-baseline="middle" text-anchor="middle">${p_len.toFixed(2)}</text>`;
-                }
-
-                svgContent += `<g class="part-group interactive-item" transform="translate(${part.x},${svg_y})" data-item-index="${index}" data-item-type="${itemType}">
-                                <rect class="${p_class}" width="${p_wid}" height="${p_len}"/>
-                                <text class="part-label" x="${p_wid/2}" y="${p_len/2}" dominant-baseline="middle" text-anchor="middle">${label}</text>
-                                ${dimLabels}
-                            </g>`;
-            });
-
-            (layout.usable_offcuts || []).forEach((offcut, index) => {
-                const o_wid = offcut.width;
-                const o_len = offcut.length;
-                const svg_y = sheet.length - offcut.y - o_len;
-                
-                let dimLabels = '';
-                if (o_wid > 8 && o_len > 8) {
-                    const textOffset = 1.5; // Applying consistent positioning to offcuts
-                    dimLabels += `<text class="inner-dim-text" x="${o_wid/2}" y="${textOffset}" dominant-baseline="hanging" text-anchor="middle">${o_wid.toFixed(2)}</text>`;
-                    dimLabels += `<text class="inner-dim-text" x="${textOffset}" y="${o_len/2}" transform="rotate(-90, ${textOffset}, ${o_len/2})" dominant-baseline="middle" text-anchor="middle">${o_len.toFixed(2)}</text>`;
-                }
-
-                svgContent += `<g class="offcut-group interactive-item" transform="translate(${offcut.x},${svg_y})" data-item-index="${index}" data-item-type="offcut">
-                                <rect class="offcut" width="${o_wid}" height="${o_len}"/>
-                                <text class="offcut-label" x="${o_wid/2}" y="${o_len/2}" dominant-baseline="middle" text-anchor="middle">Offcut</text>
-                                ${dimLabels}
-                            </g>`;
-            });
-            
-            sheetBg.insertAdjacentHTML('afterend', svgContent);
-            grid.appendChild(card);
-        });
-        
-        fragment.appendChild(grid);
-        container.appendChild(fragment);
-        
-        const undoButton = document.getElementById('undo-button');
-        if (undoButton) {
-            undoButton.disabled = stateHistory.length === 0;
-            undoButton.addEventListener('click', handleUndo);
+            loadingOverlay.style.display = 'none';
         }
     }
         
     // --- Event Listeners and Initial Setup ---
-
+    
+    // Global keydown for Undo
     document.addEventListener('keydown', (event) => {
         if ((event.ctrlKey || event.metaKey) && event.key === 'z') {
             event.preventDefault();
@@ -269,101 +88,12 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    const tabsContainer = document.querySelector('.tabs');
-    if (tabsContainer) {
-        tabsContainer.addEventListener('click', (e) => {
-            const tabButton = e.target.closest('.tab-button');
-            if (!tabButton || tabButton.classList.contains('active')) return;
-            const currentActiveTab = tabsContainer.querySelector('.tab-button.active');
-            if (currentActiveTab) {
-                currentActiveTab.classList.remove('active');
-                document.getElementById(currentActiveTab.dataset.tab)?.classList.remove('active');
-            }
-            tabButton.classList.add('active');
-            document.getElementById(tabButton.dataset.tab)?.classList.add('active');
-        });
-    }
-
-    const themeToggle = document.getElementById('darkmode-toggle');
-    const darkModeInput = document.getElementById('dark_mode_state');
-    function setTheme(isDark) {
-        document.body.classList.toggle('dark-mode', isDark);
-        if(themeToggle) themeToggle.checked = isDark;
-        if(darkModeInput) darkModeInput.value = isDark ? 'on' : 'off';
-    }
-    const savedTheme = localStorage.getItem('theme');
-    if (savedTheme !== null) setTheme(savedTheme === 'dark');
-    else if(themeToggle) themeToggle.checked = document.body.classList.contains('dark-mode');
-    if (themeToggle) themeToggle.addEventListener('change', function() {
-        const isDark = this.checked;
-        setTheme(isDark);
-        localStorage.setItem('theme', isDark ? 'dark' : 'light');
-    });
-
-    function setupSelector(type) {
-        const selectAllBtn = document.getElementById(`select-all-${type}`);
-        const deselectAllBtn = document.getElementById(`deselect-all-${type}`);
-        const selector = document.querySelector(`.${type}-selector`);
-        if(selectAllBtn) selectAllBtn.addEventListener('click', () => selector.querySelectorAll(`input[name^="selected_"]`).forEach(cb => cb.checked = true));
-        if(deselectAllBtn) deselectAllBtn.addEventListener('click', () => selector.querySelectorAll(`input[name^="selected_"]`).forEach(cb => cb.checked = false));
-    }
-    setupSelector('stock');
-    setupSelector('offcut');
-    
-    const stockSelector = document.querySelector('.stock-selector:not(.offcut-selector)');
-    if (stockSelector) stockSelector.addEventListener('change', (e) => {
-        const cb = e.target.closest('input[name="selected_stock_parts"]');
-        if (cb) {
-            const qtyInput = cb.closest('.stock-item').querySelector('.required-qty-input');
-            if (qtyInput) {
-                qtyInput.disabled = !cb.checked;
-                if (!cb.checked) qtyInput.value = '';
-            }
-        }
-    });
-    
-    const loadedPartsAccordion = document.getElementById('loaded-parts-accordion');
-    if (loadedPartsAccordion) loadedPartsAccordion.addEventListener('change', e => {
-        const selectAllCheckbox = e.target.closest('.select-all-parts-in-file');
-        if (selectAllCheckbox) {
-            selectAllCheckbox.closest('table').querySelectorAll('tbody input[name="selected_hhos_parts"]').forEach(cb => {
-                cb.checked = selectAllCheckbox.checked;
-            });
-        }
-    });
-
-    const initialDataElement = document.getElementById('initial-results-data');
-    if (initialDataElement) {
-        const initialData = JSON.parse(initialDataElement.textContent);
-        if (initialData) {
-            currentState = initialData;
-            renderResults(currentState);
-            document.querySelector('.tab-button[data-tab="results"]')?.click();
-        }
-    }
-
-    const hhosList = document.getElementById('hhos-file-list');
-    if (hhosList) {
-        document.getElementById('add-hhos-file')?.addEventListener('click', () => {
-            const group = document.createElement('div');
-            group.className = 'file-input-group';
-            group.innerHTML = `<input type="text" name="hhos_paths" placeholder="Path to HHOS file..."><input type="number" name="hhos_multipliers" class="multiplier-input" value="1" min="1"><button type="button" class="btn-remove-file"><i class="fa-solid fa-trash"></i></button>`;
-            hhosList.appendChild(group);
-        });
-        hhosList.addEventListener('click', (e) => {
-            const removeBtn = e.target.closest('.btn-remove-file');
-            if (removeBtn && hhosList.querySelectorAll('.file-input-group').length > 1) {
-                removeBtn.parentElement.remove();
-            }
-        });
-    }
-
+    // Main optimization form submission
     const configForm = document.querySelector('.config-form');
     if (configForm) {
         configForm.addEventListener('submit', async (e) => {
-            e.preventDefault(); // Prevent default form submission
+            e.preventDefault();
 
-            // --- Get DOM elements for new loading panel ---
             const loadingOverlay = document.getElementById('loading-overlay');
             const progressBarFill = document.getElementById('progress-bar-fill');
             const partProgressPercent = document.getElementById('part-progress-percent');
@@ -374,12 +104,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
             if (!loadingOverlay) return;
 
-            // Show loading UI and switch to results tab
             loadingOverlay.style.display = 'flex';
             document.querySelector('.tab-button[data-tab="results"]')?.click();
             document.getElementById('results-container').innerHTML = '';
 
-            // Reset loading panel to initial state
             progressBarFill.style.width = '0%';
             partProgressPercent.textContent = '0%';
             timeTrackerValue.textContent = '00:00';
@@ -387,33 +115,26 @@ document.addEventListener('DOMContentLoaded', function() {
             bestScoreValue.textContent = '-';
             sheetsUsedValue.textContent = '-';
 
-
             try {
-                // 1. Start the optimization task
                 const formData = new FormData(configForm);
                 const startResponse = await fetch('/start_optimization', {
                     method: 'POST',
                     body: formData
                 });
 
-                if (!startResponse.ok) {
-                    throw new Error('Failed to start optimization task.');
-                }
+                if (!startResponse.ok) throw new Error('Failed to start optimization task.');
+                
                 const { task_id } = await startResponse.json();
-
-                // 2. Listen for progress events
                 const eventSource = new EventSource(`/stream/${task_id}`);
 
                 eventSource.addEventListener('progress', (event) => {
                     const data = JSON.parse(event.data);
                     
-                    // Main progress bar
                     if (data.part_progress !== undefined) {
                         progressBarFill.style.width = `${data.part_progress}%`;
                         partProgressPercent.textContent = `${data.part_progress}%`;
                     }
 
-                    // Time tracker
                     if (data.elapsed_time !== undefined) {
                         const formatTime = (seconds) => {
                             const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
@@ -427,23 +148,17 @@ document.addEventListener('DOMContentLoaded', function() {
                         timeTrackerValue.textContent = timeText;
                     }
 
-                    // Live Stats
-                    if (data.nodes_explored !== undefined) {
-                        nodesExploredValue.textContent = data.nodes_explored.toLocaleString();
-                    }
-                    if (data.current_best_score !== undefined && data.current_best_score !== null) {
-                        bestScoreValue.textContent = data.current_best_score.toFixed(2);
-                    }
-                    if (data.sheets_in_best_solution !== undefined && data.sheets_in_best_solution !== null) {
-                        sheetsUsedValue.textContent = data.sheets_in_best_solution;
-                    }
+                    if (data.nodes_explored !== undefined) nodesExploredValue.textContent = data.nodes_explored.toLocaleString();
+                    if (data.current_best_score !== undefined && data.current_best_score !== null) bestScoreValue.textContent = data.current_best_score.toFixed(2);
+                    if (data.sheets_in_best_solution !== undefined && data.sheets_in_best_solution !== null) sheetsUsedValue.textContent = data.sheets_in_best_solution;
                 });
 
                 eventSource.addEventListener('done', (event) => {
                     const result = JSON.parse(event.data);
                     currentState = result;
-                    stateHistory = []; // Reset history for new optimization
+                    stateHistory = [];
                     renderResults(result);
+                    document.getElementById('undo-button')?.addEventListener('click', handleUndo);
                     loadingOverlay.style.display = 'none';
                     eventSource.close();
                 });
@@ -463,60 +178,24 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    document.querySelectorAll('details.animated-accordion').forEach((accordion) => {
-        const content = accordion.querySelector('.collapsible-content');
-        if (accordion.open) content.style.maxHeight = content.scrollHeight + 'px';
-        accordion.addEventListener('toggle', () => {
-            content.style.maxHeight = accordion.open ? content.scrollHeight + 'px' : '0px';
-        });
-    });
+    // Attach listener for layout interaction
+    document.getElementById('results')?.addEventListener('click', handleLayoutClick);
+    
+    // Initial UI Setup
+    setupThemeToggle();
+    setupTabs();
+    setupFormControls();
+    setupCollapsibleSections();
 
-    // Corrected Resizable Card Logic
-    document.querySelectorAll('.resizable-card .resize-handle').forEach(handle => {
-        const selectorList = handle.parentElement.querySelector('.stock-selector');
-        const collapsibleContent = handle.closest('.collapsible-content');
-
-        handle.addEventListener('mousedown', function(e) {
-            e.preventDefault();
-
-            // The accordion must be open to resize
-            const accordion = handle.closest('details.animated-accordion');
-            if (!accordion || !accordion.open) return;
-
-            const startY = e.clientY;
-            const startHeight = selectorList.offsetHeight;
-
-            // Store the original transition and disable it for smooth dragging
-            const originalTransition = collapsibleContent.style.transition;
-            collapsibleContent.style.transition = 'none';
-            
-            const doDrag = (e) => {
-                // Ensure height doesn't go below a minimum (e.g., 50px)
-                const newHeight = Math.max(50, startHeight + e.clientY - startY);
-                selectorList.style.height = `${newHeight}px`;
-
-                // Update the parent accordion's max-height to allow it to grow
-                if (collapsibleContent) {
-                    collapsibleContent.style.maxHeight = `${collapsibleContent.scrollHeight}px`;
-                }
-            };
-
-            const stopDrag = () => {
-                // Restore the original transition when dragging stops
-                if (collapsibleContent) {
-                    collapsibleContent.style.transition = originalTransition;
-                }
-                document.documentElement.removeEventListener('mousemove', doDrag);
-                document.documentElement.removeEventListener('mouseup', stopDrag);
-            };
-
-            document.documentElement.addEventListener('mousemove', doDrag);
-            document.documentElement.addEventListener('mouseup', stopDrag, { once: true });
-        });
-    });
-
-    const resultsTab = document.getElementById('results');
-    if (resultsTab) {
-        resultsTab.addEventListener('click', handleLayoutClick);
+    // Render initial data if it exists
+    const initialDataElement = document.getElementById('initial-results-data');
+    if (initialDataElement) {
+        const initialData = JSON.parse(initialDataElement.textContent);
+        if (initialData) {
+            currentState = initialData;
+            renderResults(currentState);
+            document.getElementById('undo-button')?.addEventListener('click', handleUndo);
+            document.querySelector('.tab-button[data-tab="results"]')?.click();
+        }
     }
 });
