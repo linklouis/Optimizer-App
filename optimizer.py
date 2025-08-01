@@ -5,6 +5,11 @@ import math
 from typing import List, Dict, Any, Tuple, Optional
 from collections import Counter
 
+# --- NEW: Import Numba for JIT compilation and NumPy for efficient arrays ---
+import numba
+import numpy as np
+
+
 # A type alias for a part dictionary for clarity
 Part = Dict[str, Any]
 Rect = Dict[str, float]
@@ -38,17 +43,24 @@ def get_layout_signature(layout: Dict[str, Any], required_only: bool = False) ->
     return "|".join(sig_parts + sig_strings)
 
 
-def find_best_fit(part_length: float, part_width: float, empty_rects: List[Rect]) -> int:
+# --- OPTIMIZED: This function is now JIT-compiled by Numba for significant speedup ---
+# Note: It now accepts a NumPy array instead of a list of dicts for maximum performance.
+@numba.jit(nopython=True)
+def find_best_fit(part_length: float, part_width: float, empty_rects_np: np.ndarray) -> int:
     """
     Finds the best empty rectangle to place a part in using a shortest-side-fit heuristic.
+    This function is optimized with Numba.
     """
     best_fit_index = -1
     min_short_side_fit = float('inf')
 
-    for i, rect in enumerate(empty_rects):
-        if part_length <= rect['length'] and part_width <= rect['width']:
-            remaining_length = rect['length'] - part_length
-            remaining_width = rect['width'] - part_width
+    for i in range(empty_rects_np.shape[0]):
+        rect_length = empty_rects_np[i, 0]
+        rect_width = empty_rects_np[i, 1]
+        
+        if part_length <= rect_length and part_width <= rect_width:
+            remaining_length = rect_length - part_length
+            remaining_width = rect_width - part_width
             short_side_fit = min(remaining_length, remaining_width)
             if short_side_fit < min_short_side_fit:
                 min_short_side_fit = short_side_fit
@@ -135,12 +147,17 @@ def calculate_layout_score(layout: Dict[str, Any], sheet_info: Dict[str, Any], c
     return score
 
 
-def _get_split_penalty(rect1: Rect, rect2: Rect) -> float:
-    """Calculates a penalty for splitting a rectangle."""
+# --- OPTIMIZED: This function is now JIT-compiled by Numba for a small speedup ---
+@numba.jit(nopython=True)
+def _get_split_penalty(rect1_len: float, rect1_wid: float, rect2_len: float, rect2_wid: float) -> float:
+    """Calculates a penalty for splitting a rectangle. Optimized with Numba."""
+    
+    # Inner function for ratio penalty calculation
     def get_ratio_penalty(r_len: float, r_wid: float) -> float:
         min_dim = min(r_len, r_wid)
-        return max(r_len, r_wid) / min_dim if min_dim > 0 else 0
-    return get_ratio_penalty(rect1['length'], rect1['width']) + get_ratio_penalty(rect2['length'], rect2['width'])
+        return max(r_len, r_wid) / min_dim if min_dim > 0 else 0.0
+        
+    return get_ratio_penalty(rect1_len, rect1_wid) + get_ratio_penalty(rect2_len, rect2_wid)
 
 
 # --- Core Placement Logic ---
@@ -157,8 +174,15 @@ def _place_parts_in_rects(parts_to_place: List[Part], initial_rects: List[Rect],
             orientations.append((part['width'], part['length'], True))
 
         best_fit = {'rect_index': -1, 'orientation': None}
+        
+        # --- MODIFIED: Convert list of dicts to NumPy array for the JIT-compiled function ---
+        if not empty_rects:
+            continue
+        empty_rects_np = np.array([[r['length'], r['width']] for r in empty_rects], dtype=np.float64)
+
         for part_l, part_w, rotated in orientations:
-            rect_index = find_best_fit(part_l, part_w, empty_rects)
+            # --- MODIFIED: Call the optimized find_best_fit function ---
+            rect_index = find_best_fit(part_l, part_w, empty_rects_np)
             if rect_index != -1:
                 best_fit['rect_index'] = rect_index
                 best_fit['orientation'] = (part_l, part_w, rotated)
@@ -169,6 +193,8 @@ def _place_parts_in_rects(parts_to_place: List[Part], initial_rects: List[Rect],
             
             rect_idx = best_fit['rect_index']
             rect = empty_rects[rect_idx]
+            
+            # --- MODIFIED: More efficient swap and pop for list removal ---
             empty_rects[rect_idx] = empty_rects[-1]
             empty_rects.pop()
 
@@ -181,7 +207,11 @@ def _place_parts_in_rects(parts_to_place: List[Part], initial_rects: List[Rect],
             rect_right = {'x': rect['x'] + part_w + kerf, 'y': rect['y'], 'length': rect['length'], 'width': rect['width'] - part_w - kerf}
             rect_above_part = {'x': rect['x'], 'y': rect['y'] + part_l + kerf, 'length': rect['length'] - part_l - kerf, 'width': part_w}
             
-            if _get_split_penalty(rect_above, rect_right_of_part) <= _get_split_penalty(rect_right, rect_above_part):
+            # --- MODIFIED: Call the optimized _get_split_penalty function ---
+            penalty1 = _get_split_penalty(rect_above['length'], rect_above['width'], rect_right_of_part['length'], rect_right_of_part['width'])
+            penalty2 = _get_split_penalty(rect_right['length'], rect_right['width'], rect_above_part['length'], rect_above_part['width'])
+
+            if penalty1 <= penalty2:
                 if rect_above['length'] > 0 and rect_above['width'] > 0: empty_rects.append(rect_above)
                 if rect_right_of_part['length'] > 0 and rect_right_of_part['width'] > 0: empty_rects.append(rect_right_of_part)
             else:

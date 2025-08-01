@@ -31,16 +31,19 @@ FEATURES
         - Allow the quantity of a given layout to be adjusted manually after optimization?
         - Be aware of whether the parts in an HHOS file are labeled as stock for checking if a sheet is only stock parts
         - [ASK] Make a way to automatically pick all of the most needed stock parts for a stock-only job?
-        - Cancle optimization button on Optimizing Layouts... loading card
-        - Add an "accept early" button to the Optimizing Layouts... loading card?
+        - -----> Cancle optimization button on Optimizing Layouts... loading card
+        - -----> Add an "accept early" button to the Optimizing Layouts... loading card?
+        - Allow the user to apply Stock Part Layout standardization post-opimization?
     
     Optimizer
-        - ✓ ---> Only keep reusing a layout of stock parts until another layout is better because the number of the original stock parts needed has been filled.
+        - ✓ Only keep reusing a layout of stock parts until another layout is better because the number of the original stock parts needed has been filled.
         - X Rerun the optimizor on the remaining parts after a set of sheet layouts have been standardized?
-        - ✓ ---> Add number of layouts penalty
+        - ✓ Add number of layouts penalty
 
         - Needs to be smarter about handling jobs with high quantities
         - Penalize higher numbers of unique default sheet layouts more than offcut sheets?
+        - -----> Improve calculate_bound function for speedup
+        - -----> Fix ideal score calculation
 
     Visual
         - ✓ Add measurements to layout display
@@ -63,6 +66,8 @@ CODE
 
     - Rename weights variables to be more intuitive
     - Add header comments in helper files
+    - ---> Remove print & tracking functions from Optimizer
+    - -> Can/should we combine the code in geometry_utils.py with some of the stuff in opitimizer.py?
 
 BUGS
     - ✓ Allow part rotation check box not working?
@@ -91,12 +96,13 @@ BUGS
 Here are the next bugs/updates to address, as well as the current versions of the files.
     - The calculated ideal score is several orders of magnitude smaller than the true score.
     - The stock part standardization doesn't seem to affect the final score.
-    - Changing the multiplier in File Paths doesn't update the values for each part in Loaded Parts Lists.
+    - THIS-------------------> Changing the multiplier in File Paths doesn't update the values for each part in Loaded Parts Lists.
     
     - Stock part standardizing should affect the final score.
 
 MISC
-    - Change default branching factor to 2 or 3.
+    - X Change default branching factor to 2 or 3.
+
     - Change Stock Part Inv. Bonus tooltip to something like "Should usually be a larger number(i.e., 2-5), since setting it heigher doesn't negatively impact the effects of other weights, and we want to make sure that the more important stock is prioritized."
     - Why are the absolute scores in the hundreds?
     - Ask the AI to just make the ideal score predictor more sophisticated?
@@ -129,6 +135,7 @@ QUESTIONS
     
     - Always rotate labels to be on the widest axis, or just when they don't fit?
     - Should the top configurator sections be open or closed by default?
+    - ---> Prefer layouts that are used multiple/more times?
 
 
 
