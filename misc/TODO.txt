@@ -1,3 +1,15 @@
+Future Louis,
+I'm leaving the algorithm in a pretty poor spot, I think. Since normalizing the score components,
+I haven't gotten layouts that I'm as happy with, though you should check what DJ thinks of them before making any changes, since I haven't yet.
+I think the issue might be that it's either trying too hard to use fewer sheets, not trying hard enough to use sheets we have a lot of,
+or not penalizing the number of unique sheet layouts right, since the value of that component is always the same, according to the console.
+Keep in mind that the final score probably doesn't reflect any of the changes made by Standardize Stock Layouts.
+The branching factor doesn't seem to be very helpful anymore, and you should confirm that the new _calculate_bound function is actually better than before.
+There was a past version, which can still be found in the first branch of this chat (I think) https://g.co/gemini/share/faf3f56ce3bb that actually found a result and kept going, which I liked.
+Make sure you check out the SS on the desktop.
+- Past Louis
+
+
 FEATURES
     Features
         - ✓ Probably have it remember the latest file paths?
@@ -34,6 +46,7 @@ FEATURES
         - -----> Cancle optimization button on Optimizing Layouts... loading card
         - -----> Add an "accept early" button to the Optimizing Layouts... loading card?
         - Allow the user to apply Stock Part Layout standardization post-opimization?
+        - Be able to click to make an area an offcut
     
     Optimizer
         - ✓ Only keep reusing a layout of stock parts until another layout is better because the number of the original stock parts needed has been filled.
@@ -60,6 +73,8 @@ FEATURES
         - Make more loading screen tips, or have the time limit one only appear when there is a time limit?
         - Also have a thinner progress bar for the time under the Part Placement Progress bar, so you can tell which will happen first?
         - The symbols on the theme switcher aren't perfectly vertically alligned with the switch.
+        - Sort sheet layouts by size
+        - Parts on the Results tab should always be displayed at the same size
 
 CODE
     - ✓ Start separating some of the big files (index, app)

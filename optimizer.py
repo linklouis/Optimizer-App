@@ -276,16 +276,63 @@ def run_single_sheet_optimization(sheet_info: Dict, required_parts: List[Part], 
     return best_layout
 
 def _calculate_bound(remaining_parts: list, current_score: float, config: dict, reference_area: float) -> float:
-    """Calculates a lower bound on the final score for a partial solution."""
+    """
+    Calculates a more sophisticated upper bound on the final score for a partial solution.
+    This bound is optimistic, assuming the best possible outcome for the remaining parts.
+    """
     if not remaining_parts:
         return current_score
-    
+
     remaining_area = sum(p['length'] * p['width'] for p in remaining_parts)
+    
+    # --- Lower Bound on Additional Sheets ---
+    # Calculates the absolute minimum number of sheets required to fit the remaining area.
     min_additional_sheets = math.ceil(remaining_area / reference_area) if reference_area > 0 else float('inf')
     
-    future_penalty = min_additional_sheets * config.get('w_sheets', 1.0)
+    # --- Future Score Calculation (Optimistic) ---
+    # This section estimates the best possible score from future placements.
     
-    return current_score - future_penalty
+    # 1. Area-based Score: Assume zero waste and zero offcuts for the remaining parts.
+    # The best possible area-based score is 0 (no penalties).
+    optimistic_area_score = 0
+    
+    # 2. Stock Fill Bonus: Assume all remaining stock parts are placed.
+    optimistic_stock_fill_bonus = 0
+    w_stock_fill = config.get('w_stock_fill', 1.0)
+    for part in remaining_parts:
+        if part.get('is_stock_part', False):
+            deficit = part.get('target_stock', 1) - part.get('current_stock', 0)
+            if part.get('target_stock', 0) > 0 and deficit > 0:
+                part_area = part['length'] * part['width']
+                # Assume all needed stock parts will be placed perfectly.
+                optimistic_stock_fill_bonus += (deficit / part['target_stock']) * (part_area / reference_area) * w_stock_fill
+
+    # 3. Cuts Penalty: Assume the minimum number of cuts.
+    # The penalty is for the number of parts, so we calculate the penalty for all remaining parts.
+    expected_max_cuts = config.get('expected_max_cuts_per_sheet', 20.0)
+    w_cuts = config.get('w_cuts', 0.2)
+    # This estimates the total cuts penalty across the minimum additional sheets.
+    future_cuts_penalty = (len(remaining_parts) / expected_max_cuts) * w_cuts * min_additional_sheets if expected_max_cuts > 0 else 0
+
+    # 4. Final Solution Penalties: These are applied at the very end.
+    # We estimate the penalty for adding the minimum number of new sheets.
+    w_sheets = config.get('w_sheets', 1.0)
+    total_parts = config.get('total_initial_parts', len(remaining_parts)) # Use total parts for normalization if available
+    # The penalty is normalized by the total number of parts in the job.
+    future_sheets_penalty = (min_additional_sheets / total_parts) * w_sheets if total_parts > 0 else 0
+    
+    # --- Combine Scores to Form the Upper Bound ---
+    # The bound is the current score plus the best possible future score minus future penalties.
+    upper_bound = (
+        current_score 
+        + optimistic_area_score 
+        + optimistic_stock_fill_bonus 
+        - future_cuts_penalty
+        - future_sheets_penalty
+    )
+    
+    return upper_bound
+
 
 def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict], config: Dict, 
                              optional_stock_parts: Optional[List[Part]] = None, 
@@ -325,6 +372,7 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
             part_id_counter += 1
 
     total_initial_parts = len(initial_parts_dict)
+    config['total_initial_parts'] = total_initial_parts # Store for bound calculation
 
     optional_parts_list = []
     if not is_stock_only_job and optional_stock_parts:
@@ -336,9 +384,12 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
                 optional_parts_list.append(p_copy)
                 part_id_counter += 1
 
+    # The initial bound is an optimistic estimate of the best possible score.
+    # We use the negative because heapq is a min-heap.
     initial_bound = -_calculate_bound(list(initial_parts_dict.values()), 0, config, reference_area)
     
     node_counter = 0
+    # Priority queue stores: (-bound, current_score, node_id, remaining_parts, used_layouts, used_signatures)
     pq = [ (initial_bound, 0.0, node_counter, initial_parts_dict, [], frozenset()) ]
     node_counter += 1
     
@@ -359,8 +410,10 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
                 "sheets_in_best_solution": len(best_solution[0]) if best_solution[0] else None
             })
             last_update_time = current_time
-
-        if -_calculate_bound(list(current_parts.values()), current_score, config, reference_area) < best_score:
+        
+        # Pruning Step: If the optimistic bound of the current path is worse than the best solution found so far, prune it.
+        # We check `_calculate_bound(...) < best_score` because the function returns an optimistic upper bound.
+        if _calculate_bound(list(current_parts.values()), current_score, config, reference_area) < best_score:
             continue
 
         remaining_primary_parts = list(current_parts.values())
@@ -385,7 +438,8 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
                 layout_score = calculate_layout_score(layout_attempt, sheet_tpl, config, config['min_offcut_dim'], reference_area, max_offcut_quantity, is_stock_only_job, tracker=score_component_tracker)
                 child_score = current_score + layout_score
                 
-                if not child_parts:
+                if not child_parts: # This is a complete solution
+                    # --- Final Score Calculation for a Complete Solution ---
                     # Normalize against the number of parts to make the penalty scale-invariant
                     normalized_sheets_penalty = len(child_layouts) / total_initial_parts if total_initial_parts > 0 else 0
                     # Normalize against the number of sheets to penalize complexity relative to solution size
@@ -401,9 +455,10 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
                     if final_score > best_score:
                         best_score = final_score
                         best_solution = (child_layouts, [])
-                else:
+                else: # This is a partial solution, calculate its bound and add to the queue
                     child_bound = _calculate_bound(list(child_parts.values()), child_score, config, reference_area)
-                    if -child_bound > best_score:
+                    if child_bound > best_score: # Only add promising nodes to the queue
+                        # We push the negative of the bound because heapq is a min-heap
                         heapq.heappush(pq, (-child_bound, child_score, node_counter, child_parts, child_layouts, child_signatures))
                         node_counter += 1
     
