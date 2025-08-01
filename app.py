@@ -100,6 +100,13 @@ def run_optimization_task(task_id, config):
         is_stock_only_job = not parts_to_cut and optional_stock_parts
         stock_sheets = [{'id': 'default_sheet', 'length': config['default_length'], 'width': config['default_width'], 'quantity': float('inf'), 'type': 'Default'}]
         
+        # --- FIX: CALCULATE MAX OFFCUT QUANTITY FOR NORMALIZATION ---
+        max_offcut_quantity = 1.0
+        if offcut_df is not None and not offcut_df.empty and 'quantity' in offcut_df.columns:
+            max_val = offcut_df['quantity'].max()
+            if pd.notna(max_val):
+                max_offcut_quantity = float(max_val)
+
         if config.get('use_offcuts') and offcut_df is not None and not offcut_df.empty:
             selected_ids = [int(i) for i in config.get('selected_offcuts', [])]
             filtered_offcuts = offcut_df.loc[offcut_df.index.isin(selected_ids)] if selected_ids else offcut_df
@@ -110,7 +117,8 @@ def run_optimization_task(task_id, config):
                 stock_sheets.extend(offcuts_with_id.to_dict('records'))
 
         layouts, remaining, score = optimize_multiple_sheets(
-            parts_to_cut, stock_sheets, config, optional_stock_parts, is_stock_only_job, progress_callback
+            parts_to_cut, stock_sheets, config, optional_stock_parts, is_stock_only_job, progress_callback,
+            max_offcut_quantity=max_offcut_quantity
         )
         opt_elapsed_time = time.time() - opt_start_time
         

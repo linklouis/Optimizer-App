@@ -32,6 +32,7 @@ FEATURES
         - Be aware of whether the parts in an HHOS file are labeled as stock for checking if a sheet is only stock parts
         - [ASK] Make a way to automatically pick all of the most needed stock parts for a stock-only job?
         - Cancle optimization button on Optimizing Layouts... loading card
+        - Add an "accept early" button to the Optimizing Layouts... loading card?
     
     Optimizer
         - ✓ ---> Only keep reusing a layout of stock parts until another layout is better because the number of the original stock parts needed has been filled.

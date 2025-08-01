@@ -9,7 +9,7 @@ DEFAULT_CONFIG = {
     'min_offcut_dim': 4.0, 'use_offcuts': True, 'add_stock_parts': False,
     'search_time_limit': 5.0,
     'branching_factor': 1,
-    'expected_max_cuts_per_sheet': 20.0,
+    'expected_max_cuts_per_sheet': 10.0,
     'selected_stock_parts': [],
     'required_stock_quantities': {},
     'dark_mode': False,
