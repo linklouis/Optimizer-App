@@ -79,14 +79,14 @@ BUGS
     - ✓ Newly added HHOS files should have all of their parts selected in the Loaded Parts list by default.
     - ✓ Adding or removing an HHOS file in the File Paths section doesn't update the Loaded Parts List until after optimization.
     - ✓ The Optimization Progress card shouldn't stay on screen when you move to the Configuration tab.
+    - ✓ It's not including any of the required parts in the optimization, even if they are selected.
 
 Here are the next bugs/updates to address, as well as the current versions of the files.
+    - Leaving the Results tab and then coming back makes the progress card disappear.
     - The Select/Deselect All buttons don't work on the Manage Offcuts list.
-    - It's now not including any of the required parts in the optimization, even if they are selected.
+    - Part labels should rotate on slightly wider parts/offcuts than they do now.
     - The calculated ideal score is several orders of magnitude smaller than the true score.
-
     - The stock part standardization doesn't seem to affect the final score.
-    - Part labels should rotate on slightly wider parts than they do now.
     
     - Stock part standardizing should affect the final score.
     - Stock text doesn't go sidways

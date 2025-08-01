@@ -33,7 +33,6 @@ def calculate_ideal_score(parts_to_cut, optional_stock_parts, offcut_df, config)
                 if remaining_area_to_place <= 0: break
                 if offcut['area'] <= 0: continue
 
-                # Figure out how many of this offcut are consumed
                 consumed_count = 0
                 for _ in range(int(offcut.get('quantity', 1))):
                     if remaining_area_to_place > 0:
@@ -42,35 +41,34 @@ def calculate_ideal_score(parts_to_cut, optional_stock_parts, offcut_df, config)
                     else:
                         break
                 
-                # If we consumed any, apply the one-time bonuses for this type
                 if consumed_count > 0:
-                    # The quantity bonus is based on the inventory size of the offcut type
                     ideal_quantity_bonus += offcut.get('quantity', 1) * config.get('w_quantity', 0.1)
-                    # The priority bonus is a flat value for using a prioritized type
                     if str(offcut['id']) in prioritized_ids:
                         ideal_priority_bonus += config.get('w_priority_offcut', 15.0)
                     num_used_offcuts += consumed_count
 
             if num_used_offcuts > 0:
                 ideal_sheets_penalty += num_used_offcuts * config.get('w_sheets', 1.0)
-                num_unique_layouts += 1 # Simplified assumption
+                num_unique_layouts += 1
 
-    reference_area = config.get('default_length', 96) * config.get('default_width', 48)
-    if reference_area > 0 and remaining_area_to_place > 0:
-        min_default_sheets = math.ceil(remaining_area_to_place / reference_area)
-        ideal_sheets_penalty += min_default_sheets * config.get('w_sheets', 1.0)
-        unavoidable_waste_area = (min_default_sheets * reference_area) - remaining_area_to_place
-        if min_default_sheets > 0:
-            num_unique_layouts += 1
+    # This check is crucial: only calculate default sheet usage if area is still remaining
+    if remaining_area_to_place > 0:
+        reference_area = config.get('default_length', 96) * config.get('default_width', 48)
+        if reference_area > 0:
+            min_default_sheets = math.ceil(remaining_area_to_place / reference_area)
+            ideal_sheets_penalty += min_default_sheets * config.get('w_sheets', 1.0)
+            unavoidable_waste_area = (min_default_sheets * reference_area) - remaining_area_to_place
+            if min_default_sheets > 0:
+                num_unique_layouts += 1
             
-    ideal_waste_penalty = (unavoidable_waste_area / reference_area) * config.get('w_waste', 1.0) if reference_area > 0 else 0
+    ideal_waste_penalty = (unavoidable_waste_area / reference_area) * config.get('w_waste', 1.0) if 'reference_area' in locals() and reference_area > 0 else 0
     ideal_offcut_penalty = 0.0
     ideal_cuts_penalty = total_ideal_part_count * config.get('w_cuts', 0.2)
     ideal_unique_layouts_penalty = num_unique_layouts * config.get('w_unique_layouts', 0.5)
     total_ideal_penalty = ideal_waste_penalty + ideal_offcut_penalty + ideal_cuts_penalty + ideal_sheets_penalty + ideal_unique_layouts_penalty
 
     ideal_stock_fill_bonus = 0.0
-    if reference_area > 0:
+    if 'reference_area' in locals() and reference_area > 0:
         for part in ideal_part_list:
             if part.get('is_stock_part'):
                 deficit = part.get('target_stock', 1) - part.get('current_stock', 0)

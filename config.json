@@ -19,7 +19,7 @@
     "use_offcuts": true,
     "add_stock_parts": true,
     "search_time_limit": 0.0,
-    "branching_factor": 30,
+    "branching_factor": 5,
     "selected_stock_parts": [
         "OSB-15-126126",
         "OSB-15-140126",
@@ -65,7 +65,7 @@
     "w_sheets": 1.0,
     "w_stock_fill": 5.0,
     "w_unique_layouts": 0.5,
-    "standardize_stock_layouts": true,
+    "standardize_stock_layouts": false,
     "selected_offcuts": [
         "0",
         "1",

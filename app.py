@@ -44,16 +44,38 @@ def run_optimization_task(task_id, config):
                     tasks[task_id]['progress'] = progress_data
 
         opt_start_time = time.time()
-        hhos_df, offcut_df, stock_inv_df = process_uploaded_files(config.get('hhos_files', []), config['offcut_path'], config['stock_inv_path'], config['default_length'], config['default_width'])
         
-        if hhos_df is not None and not hhos_df.empty:
+        # --- Corrected HHOS Data Processing ---
+        # Process HHOS files here to ensure unique_ids are generated correctly before filtering
+        all_hhos_parts_df = []
+        DELIMITER = ':::'
+        for hhos_file in config.get('hhos_files', []):
+            path = hhos_file.get('path')
+            if path and os.path.exists(path):
+                try:
+                    temp_df = extract_hhos_data(pd.read_csv(path, header=None))
+                    temp_df['quantity'] *= hhos_file.get('multiplier', 1)
+                    temp_df['unique_id'] = [f"{path}{DELIMITER}{i}" for i in range(len(temp_df))]
+                    all_hhos_parts_df.append(temp_df)
+                except Exception:
+                    # Silently ignore files that fail to load in the backend
+                    continue
+        
+        hhos_df = pd.concat(all_hhos_parts_df, ignore_index=True) if all_hhos_parts_df else pd.DataFrame()
+
+        # Process other files
+        _, offcut_df, stock_inv_df = process_uploaded_files([], config['offcut_path'], config['stock_inv_path'], config['default_length'], config['default_width'])
+        
+        if not hhos_df.empty:
             part_quantities = config.get('part_quantities', {})
             if part_quantities:
                 hhos_df['quantity'] = hhos_df.apply(lambda r: part_quantities.get(r['unique_id'], r['quantity']), axis=1)
+            
+            # This filter now works correctly because unique_id exists
             selected_hhos_ids = config.get('selected_hhos_parts', [])
             hhos_df = hhos_df[hhos_df['unique_id'].isin(selected_hhos_ids)]
 
-        hhos_parts = hhos_df.to_dict('records') if hhos_df is not None and not hhos_df.empty else []
+        hhos_parts = hhos_df.to_dict('records') if not hhos_df.empty else []
         for part in hhos_parts: part['is_optional_filler'] = False
 
         required_stock_parts, optional_stock_parts = [], []
@@ -97,15 +119,12 @@ def run_optimization_task(task_id, config):
         
         ideal_score = calculate_ideal_score(parts_to_cut, initial_optional_parts, offcut_df, config)
 
-        # Build a temporary result object to pass to the recalculation function
         temp_result_obj = { 'layouts': final_layouts, 'ideal_score': ideal_score }
         
-        # Recalculate the summary and get the updated final score
         updated_result_obj = recalculate_global_summary(temp_result_obj, config)
-        final_score = updated_result_obj.get('final_score', score) # Use the new score, fallback to old one
+        final_score = updated_result_obj.get('final_score', score)
         score_percentage = updated_result_obj.get('score_percentage', 0.0)
 
-        # Now prepare for rendering with the updated values
         optimization_result = prepare_results_for_render(
             final_layouts, remaining, final_score, config, opt_elapsed_time, ideal_score, score_percentage
         )

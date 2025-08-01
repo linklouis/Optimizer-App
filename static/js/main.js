@@ -233,7 +233,7 @@ document.addEventListener('DOMContentLoaded', function() {
     setupTabs();
     setupFormControls();
     setupCollapsibleSections();
-    restoreAccordionStates();
+    restoreAccordionStates(); // This was the missing call
 
     // Render initial data if it exists
     const initialDataElement = document.getElementById('initial-results-data');
