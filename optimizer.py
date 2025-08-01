@@ -84,9 +84,11 @@ def calculate_layout_score(layout: Dict[str, Any], sheet_info: Dict[str, Any], w
 
         if part.get('is_stock_part', False):
             deficit = part.get('target_stock', 1) - part.get('current_stock', 0)
-            if part.get('target_stock', 0) > 0 and deficit > 0:
+            target_stock = part.get('target_stock', 0)
+            if target_stock > 0 and deficit > 0:
                 part_area = part['length'] * part['width']
-                stock_fill_bonus += (deficit / part['target_stock']) * (part_area / sheet_area) * weights.get('w_stock_fill', 1.0)
+                # The bonus is for the marginal value of producing one part.
+                stock_fill_bonus += (1 / target_stock) * (part_area / reference_area) * weights.get('w_stock_fill', 1.0)
     
     if not has_required_parts and has_optional_parts and not is_stock_only_job:
         return -float('inf')

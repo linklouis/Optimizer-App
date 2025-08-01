@@ -56,7 +56,7 @@ function renderResults(result) {
             
             let labelTransform = '';
             // If part is too narrow for horizontal text, rotate the label. Tuned to be more aggressive.
-            if (p_wid < (label.length * 2.5) && p_len > p_wid) { // 2.5 is an estimate for char width ratio
+            if (p_wid < (label.length * 3.0) && p_len > p_wid) { // 3.0 is an estimate for char width ratio
                 labelTransform = `transform="rotate(-90, ${p_wid / 2}, ${p_len / 2})"`;
             }
 
@@ -78,6 +78,11 @@ function renderResults(result) {
             const o_wid = offcut.width;
             const o_len = offcut.length;
             const svg_y = sheet.length - offcut.y - o_len;
+            const label = "Offcut";
+            let labelTransform = '';
+             if (o_wid < (label.length * 3.0) && o_len > o_wid) {
+                labelTransform = `transform="rotate(-90, ${o_wid / 2}, ${o_len / 2})"`;
+            }
             
             let dimLabels = '';
             if (o_wid > 8 && o_len > 8) {
@@ -88,7 +93,7 @@ function renderResults(result) {
 
             svgContent += `<g class="offcut-group interactive-item" transform="translate(${offcut.x},${svg_y})" data-item-index="${index}" data-item-type="offcut">
                             <rect class="offcut" width="${o_wid}" height="${o_len}"/>
-                            <text class="offcut-label" x="${o_wid/2}" y="${o_len/2}" dominant-baseline="middle" text-anchor="middle">Offcut</text>
+                            <text class="offcut-label" x="${o_wid/2}" y="${o_len/2}" dominant-baseline="middle" text-anchor="middle" ${labelTransform}>${label}</text>
                             ${dimLabels}
                         </g>`;
         });

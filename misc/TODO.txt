@@ -31,6 +31,7 @@ FEATURES
         - Allow the quantity of a given layout to be adjusted manually after optimization?
         - Be aware of whether the parts in an HHOS file are labeled as stock for checking if a sheet is only stock parts
         - [ASK] Make a way to automatically pick all of the most needed stock parts for a stock-only job?
+        - Cancle optimization function?
     
     Optimizer
         - ✓ ---> Only keep reusing a layout of stock parts until another layout is better because the number of the original stock parts needed has been filled.
@@ -54,6 +55,7 @@ FEATURES
         - Make dimensions text more readable on patterned backgrounds
         - Make more loading screen tips, or have the time limit one only appear when there is a time limit?
         - Also have a thinner progress bar for the time under the Part Placement Progress bar, so you can tell which will happen first?
+        - The symbols on the theme switcher aren't perfectly vertically alligned with the switch.
 
 CODE
     - ✓ Start separating some of the big files (index, app)
@@ -80,17 +82,16 @@ BUGS
     - ✓ Adding or removing an HHOS file in the File Paths section doesn't update the Loaded Parts List until after optimization.
     - ✓ The Optimization Progress card shouldn't stay on screen when you move to the Configuration tab.
     - ✓ It's not including any of the required parts in the optimization, even if they are selected.
+    - ✓ Part label text doesn't go sidways
+    - ✓ Select All & Deselect All buttons don't work on the Manage Stock Parts and Manage Offcuts lists.
+    - ✓ The optimizing progress card should not display in the Configuration tab.
 
 Here are the next bugs/updates to address, as well as the current versions of the files.
-    - Leaving the Results tab and then coming back makes the progress card disappear.
-    - The Select/Deselect All buttons don't work on the Manage Offcuts list.
-    - Part labels should rotate on slightly wider parts/offcuts than they do now.
     - The calculated ideal score is several orders of magnitude smaller than the true score.
     - The stock part standardization doesn't seem to affect the final score.
+    - Optimization suddenly taking multiple minutes rather than 10s of seconds??
     
     - Stock part standardizing should affect the final score.
-    - Stock text doesn't go sidways
-    - Select All & Deselect All buttons don't work on the Manage Stock Parts and Manage Offcuts lists.
 
 MISC
     - Change default branching factor to 2 or 3.
@@ -131,4 +132,4 @@ QUESTIONS
 
 
 
-Please make sure to only return either complete updated files or complete functions with clear instructions on how to implement them. This applies to all files except style.css, for which you should always respond with clear instructions for the update. Don't mention files that don't require updates. Your responses should be formatted for convenient copy-pasting. 
+Please make sure to only return either complete, updated files, or complete functions with clear instructions on how to implement them. This applies to all files except style.css, for which you should always respond with clear instructions for the update. Don't mention files that don't require updates. Your responses should be formatted for convenient copy-pasting. 

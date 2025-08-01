@@ -3,6 +3,14 @@ from collections import Counter
 from optimizer import calculate_layout_score, get_layout_signature
 
 def calculate_ideal_score(parts_to_cut, optional_stock_parts, offcut_df, config):
+    """
+    Calculates the theoretical maximum possible score for a given set of parts and settings.
+    This provides a benchmark against which the actual optimized score can be compared.
+    """
+    # FIX: Define reference_area at the top to ensure it's always available for normalization.
+    # This prevents the score from being incorrectly calculated when only offcuts are used.
+    reference_area = config.get('default_length', 96) * config.get('default_width', 48)
+
     ideal_part_list = parts_to_cut + optional_stock_parts
     if not ideal_part_list:
         return 0.0
@@ -42,18 +50,16 @@ def calculate_ideal_score(parts_to_cut, optional_stock_parts, offcut_df, config)
                         break
                 
                 if consumed_count > 0:
-                    ideal_quantity_bonus += offcut.get('quantity', 1) * config.get('w_quantity', 0.1)
+                    ideal_quantity_bonus += consumed_count * config.get('w_quantity', 0.1)
                     if str(offcut['id']) in prioritized_ids:
-                        ideal_priority_bonus += config.get('w_priority_offcut', 15.0)
+                        ideal_priority_bonus += consumed_count * config.get('w_priority_offcut', 15.0)
                     num_used_offcuts += consumed_count
 
             if num_used_offcuts > 0:
                 ideal_sheets_penalty += num_used_offcuts * config.get('w_sheets', 1.0)
                 num_unique_layouts += 1
 
-    # This check is crucial: only calculate default sheet usage if area is still remaining
     if remaining_area_to_place > 0:
-        reference_area = config.get('default_length', 96) * config.get('default_width', 48)
         if reference_area > 0:
             min_default_sheets = math.ceil(remaining_area_to_place / reference_area)
             ideal_sheets_penalty += min_default_sheets * config.get('w_sheets', 1.0)
@@ -61,14 +67,14 @@ def calculate_ideal_score(parts_to_cut, optional_stock_parts, offcut_df, config)
             if min_default_sheets > 0:
                 num_unique_layouts += 1
             
-    ideal_waste_penalty = (unavoidable_waste_area / reference_area) * config.get('w_waste', 1.0) if 'reference_area' in locals() and reference_area > 0 else 0
+    ideal_waste_penalty = (unavoidable_waste_area / reference_area) * config.get('w_waste', 1.0) if reference_area > 0 else 0
     ideal_offcut_penalty = 0.0
     ideal_cuts_penalty = total_ideal_part_count * config.get('w_cuts', 0.2)
     ideal_unique_layouts_penalty = num_unique_layouts * config.get('w_unique_layouts', 0.5)
     total_ideal_penalty = ideal_waste_penalty + ideal_offcut_penalty + ideal_cuts_penalty + ideal_sheets_penalty + ideal_unique_layouts_penalty
 
     ideal_stock_fill_bonus = 0.0
-    if 'reference_area' in locals() and reference_area > 0:
+    if reference_area > 0:
         for part in ideal_part_list:
             if part.get('is_stock_part'):
                 deficit = part.get('target_stock', 1) - part.get('current_stock', 0)
@@ -137,16 +143,31 @@ def recalculate_global_summary(result_obj, config):
     return result_obj
 
 def _calculate_live_stock_bonus(layout: dict, live_deficit_tracker: Counter, config: dict) -> float:
+    """
+    Calculates the stock fill bonus for a layout variation during standardization.
+    This ensures the best variation is chosen based on its ability to fill needed stock parts.
+    """
     stock_fill_bonus = 0.0
-    sheet_area = layout['sheet_info']['length'] * layout['sheet_info']['width']
-    if sheet_area == 0: return 0.0
+    # FIX: Use the consistent reference_area for normalization, not the variable sheet_area.
+    reference_area = config.get('default_length', 96) * config.get('default_width', 48)
+    if reference_area == 0: return 0.0
+    
     w_stock_fill = config.get('w_stock_fill', 1.0)
+
     for part in layout.get('placed_parts', []):
+        # Only grant a bonus if the part is a needed stock part
         if part.get('is_stock_part') and live_deficit_tracker.get(part.get('internal_ref'), 0) > 0:
             part_area = part.get('length', 0) * part.get('width', 0)
-            initial_deficit = part.get('target_stock', 1) - part.get('current_stock', 0)
-            if initial_deficit > 0:
-                stock_fill_bonus += (1 / initial_deficit) * (part_area / sheet_area) * w_stock_fill
+            target_stock = part.get('target_stock', 1)
+            
+            # FIX: The bonus formula now correctly mirrors the main scoring function.
+            # It rewards filling a portion of the total required deficit for that part.
+            if target_stock > 0:
+                # This part will reduce the deficit by 1. The reward is proportional to its contribution
+                # to the total needed quantity (target_stock).
+                bonus = (1 / target_stock) * (part_area / reference_area) * w_stock_fill
+                stock_fill_bonus += bonus
+
     return stock_fill_bonus
 
 def standardize_layouts(layouts: list, initial_optional_parts: list, config: dict) -> list:
@@ -163,22 +184,44 @@ def standardize_layouts(layouts: list, initial_optional_parts: list, config: dic
             continue
         unique_variations = {get_layout_signature(l): l for l in group}.values()
         scored_variations = []
+        # Pre-calculate the base score for each unique layout variation
         for v in unique_variations:
             is_stock_only_job = not any(not p.get('is_optional_filler', False) for p in v['placed_parts'])
-            base_score = calculate_layout_score(v, v['sheet_info'], config, config['min_offcut_dim'], config['default_length'] * config['default_width'], is_stock_only_job)
-            stock_bonus_to_remove = _calculate_live_stock_bonus(v, live_deficit_tracker, config)
+            reference_area = config['default_length'] * config['default_width']
+            base_score = calculate_layout_score(v, v['sheet_info'], config, config['min_offcut_dim'], reference_area, is_stock_only_job)
+            
+            # The stock bonus in the base score is based on the initial state, which is not what we want for dynamic selection.
+            # We subtract the original bonus and will add a "live" bonus in the selection loop.
+            stock_bonus_to_remove = 0.0
+            if reference_area > 0:
+                for p in v.get('placed_parts', []):
+                    if p.get('is_stock_part'):
+                        deficit = p.get('target_stock', 1) - p.get('current_stock', 0)
+                        target_stock = p.get('target_stock', 0)
+                        if target_stock > 0 and deficit > 0:
+                            part_area = p['length'] * p['width']
+                            stock_bonus_to_remove += (1 / target_stock) * (part_area / reference_area) * config.get('w_stock_fill', 1.0)
+
             scored_variations.append({'base_score': base_score - stock_bonus_to_remove, 'layout': v})
+        
         standardized_group = []
         for _ in range(len(group)):
+            # In each step, find the best variation to add now, considering the current stock deficits
             best_choice = max(scored_variations, key=lambda item: item['base_score'] + _calculate_live_stock_bonus(item['layout'], live_deficit_tracker, config))
             chosen_layout = best_choice['layout']
             standardized_group.append(chosen_layout)
+            
+            # Decrement the live deficit for the parts in the chosen layout
             for part in chosen_layout.get('placed_parts', []):
                 if part.get('is_stock_part'):
                     ref = part.get('internal_ref')
-                    if live_deficit_tracker[ref] > 0: live_deficit_tracker[ref] -= 1
+                    if live_deficit_tracker[ref] > 0: 
+                        live_deficit_tracker[ref] -= 1
+
+        # Assign the new standardized layouts back to their original slots
         for original_layout, standardized_layout in zip(group, standardized_group):
             final_layouts[original_layout['original_index']] = standardized_layout
+            
     return final_layouts
 
 def prepare_results_for_render(layouts, remaining_parts, final_score, config, elapsed_time, ideal_score, score_percentage):

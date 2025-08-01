@@ -31,12 +31,6 @@ function setupTabs() {
             const tabButton = e.target.closest('.tab-button');
             if (!tabButton || tabButton.classList.contains('active')) return;
             
-            // If switching to config tab, hide loading overlay
-            if (tabButton.dataset.tab === 'config') {
-                const loadingOverlay = document.getElementById('loading-overlay');
-                if(loadingOverlay) loadingOverlay.style.display = 'none';
-            }
-
             const currentActiveTab = tabsContainer.querySelector('.tab-button.active');
             if (currentActiveTab) {
                 currentActiveTab.classList.remove('active');
@@ -106,18 +100,18 @@ function setupFormControls() {
 
     // Selector buttons (Select/Deselect All)
     function setupSelector(type) {
-        const selectAllBtn = document.getElementById(`select-all-${type}`);
-        const deselectAllBtn = document.getElementById(`deselect-all-${type}`);
+        const idSuffix = type === 'offcut' ? 'offcuts' : type;
+        const selectAllBtn = document.getElementById(`select-all-${idSuffix}`);
+        const deselectAllBtn = document.getElementById(`deselect-all-${idSuffix}`);
         
         const containerSelector = (type === 'stock') 
             ? '.stock-selector:not(.offcut-selector)' 
-            : `.${type}-selector`;
+            : '.stock-selector.offcut-selector';
         
         const selectorContainer = document.querySelector(containerSelector);
 
         if (!selectAllBtn || !deselectAllBtn || !selectorContainer) return;
         
-        // This selector is now highly specific to prevent incorrect targeting.
         const checkboxSelector = `input[name="selected_${type === 'stock' ? 'stock_parts' : 'offcuts'}"]`;
 
         selectAllBtn.addEventListener('click', () => {
