@@ -44,7 +44,9 @@ def calculate_ideal_score(parts_to_cut, optional_stock_parts, offcut_df, config)
                 
                 # If we consumed any, apply the one-time bonuses for this type
                 if consumed_count > 0:
+                    # The quantity bonus is based on the inventory size of the offcut type
                     ideal_quantity_bonus += offcut.get('quantity', 1) * config.get('w_quantity', 0.1)
+                    # The priority bonus is a flat value for using a prioritized type
                     if str(offcut['id']) in prioritized_ids:
                         ideal_priority_bonus += config.get('w_priority_offcut', 15.0)
                     num_used_offcuts += consumed_count

@@ -55,8 +55,8 @@ function renderResults(result) {
             const label = part.is_stock_part ? 'STOCK' : (part.label || '');
             
             let labelTransform = '';
-            // If part is too narrow for horizontal text, rotate the label
-            if (p_wid < (label.length * 2.2) && p_len > p_wid) { // 2.2 is an estimate for char width ratio
+            // If part is too narrow for horizontal text, rotate the label. Tuned to be more aggressive.
+            if (p_wid < (label.length * 2.5) && p_len > p_wid) { // 2.5 is an estimate for char width ratio
                 labelTransform = `transform="rotate(-90, ${p_wid / 2}, ${p_len / 2})"`;
             }
 

@@ -137,13 +137,16 @@ def home():
     hhos_file_contents, all_stock_parts_list, all_offcuts_list = [], [], []
 
     all_hhos_part_ids = []
+    # Use a more robust delimiter for unique IDs
+    DELIMITER = ':::'
     for hhos_file in config.get('hhos_files', []):
         path, content_item = hhos_file.get('path'), {'path': hhos_file.get('path'), 'parts': [], 'error': None}
+        content_item['multiplier'] = hhos_file.get('multiplier', 1) # Add multiplier for display
         if path and os.path.exists(path):
             try:
                 temp_df = extract_hhos_data(pd.read_csv(path, header=None))
                 temp_df['quantity'] *= hhos_file.get('multiplier', 1)
-                temp_df['unique_id'] = [f"{path}_{i}" for i in range(len(temp_df))]
+                temp_df['unique_id'] = [f"{path}{DELIMITER}{i}" for i in range(len(temp_df))]
                 all_hhos_part_ids.extend(temp_df['unique_id'].tolist())
                 part_quantities = config.get('part_quantities', {})
                 if part_quantities: temp_df['quantity'] = temp_df.apply(lambda r: part_quantities.get(r['unique_id'], r['quantity']), axis=1)
@@ -152,8 +155,21 @@ def home():
         else: content_item['error'] = "File not found."
         hhos_file_contents.append(content_item)
 
-    if not config.get('selected_hhos_parts') and all_hhos_part_ids:
-        config['selected_hhos_parts'] = all_hhos_part_ids
+    # Auto-select parts from newly added files
+    if config.get('hhos_files'):
+        paths_with_selected_parts = set()
+        for part_id in config.get('selected_hhos_parts', []):
+            if DELIMITER in part_id:
+                paths_with_selected_parts.add(part_id.split(DELIMITER)[0])
+        
+        current_paths = {f.get('path') for f in config.get('hhos_files', [])}
+        new_paths = current_paths - paths_with_selected_parts
+        
+        if new_paths:
+            newly_selected_parts = [
+                pid for pid in all_hhos_part_ids if DELIMITER in pid and pid.split(DELIMITER)[0] in new_paths
+            ]
+            config['selected_hhos_parts'].extend(newly_selected_parts)
 
     try:
         _, offcut_df, stock_inv_df = process_uploaded_files(config.get('hhos_files', []), config['offcut_path'], config['stock_inv_path'], config['default_length'], config['default_width'])

@@ -143,6 +143,7 @@
                                     <details class="accordion-item">
                                         <summary class="accordion-header">
                                             <span class="accordion-title">{{ file_content.path.split('/')[-1].split('\\')[-1] }}</span>
+                                            <span class="status-badge">x{{ file_content.multiplier }}</span>
                                             {% if file_content.error %}
                                                 <span class="status-badge error">Error: {{ file_content.error }}</span>
                                             {% else %}
@@ -155,7 +156,7 @@
                                                 <table>
                                                     <thead>
                                                         <tr>
-                                                            <th><input type="checkbox" class="select-all-parts-in-file" title="Select/Deselect All in this File"></th>
+                                                            <th><input type="checkbox" class="select-all-parts-in-file" title="Select/Deselect All in this File" checked></th>
                                                             <th>Material</th><th>Length</th><th>Width</th><th>Qty</th>
                                                             <th>Crate (Part Name)</th><th>Ref (Label)</th>
                                                         </tr>
@@ -192,6 +193,7 @@
                                         <button type="button" class="btn-secondary" id="select-all-offcuts">Select All</button>
                                         <button type="button" class="btn-secondary" id="deselect-all-offcuts">Deselect All</button>
                                     </div>
+                                    <button type="button" class="btn-secondary" id="unprioritize-all-offcuts">Unprioritize All</button>
                                 </div>
                                 <div class="stock-selector offcut-selector">
                                     {% for offcut in all_offcuts %}

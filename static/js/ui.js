@@ -31,6 +31,12 @@ function setupTabs() {
             const tabButton = e.target.closest('.tab-button');
             if (!tabButton || tabButton.classList.contains('active')) return;
             
+            // If switching to config tab, hide loading overlay
+            if (tabButton.dataset.tab === 'config') {
+                const loadingOverlay = document.getElementById('loading-overlay');
+                if(loadingOverlay) loadingOverlay.style.display = 'none';
+            }
+
             const currentActiveTab = tabsContainer.querySelector('.tab-button.active');
             if (currentActiveTab) {
                 currentActiveTab.classList.remove('active');
@@ -48,6 +54,13 @@ function setupFormControls() {
         const card = document.getElementById('reset-stock-qty').closest('.card');
         card?.querySelectorAll('.required-qty-input').forEach(input => {
             input.value = '';
+        });
+    });
+    
+    // Unprioritize All Offcuts Button
+    document.getElementById('unprioritize-all-offcuts')?.addEventListener('click', () => {
+        document.querySelectorAll('.offcut-selector input[name="prioritized_offcuts"]').forEach(cb => {
+            cb.checked = false;
         });
     });
 

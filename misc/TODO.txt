@@ -20,6 +20,8 @@ FEATURES
         - ✓ Add button to reset required stock part quantity?
         - ✓ Add reset weights button
         - ✓ Hitting enter while in a field in File Paths should automatically Load/Refresh Files
+        - ✓ Add Unprioritize All button to Manage Offcuts in the same place as Reset Quantities on the Manage Stock Parts card
+        - ✓ HHOS file multiplier should be displayed on the file's header in Loaded Parts List like the number of parts is.
 
         - Allow uploading a temp Offcut List that doesn't override the current one?
         - Save offcuts
@@ -29,9 +31,6 @@ FEATURES
         - Allow the quantity of a given layout to be adjusted manually after optimization?
         - Be aware of whether the parts in an HHOS file are labeled as stock for checking if a sheet is only stock parts
         - [ASK] Make a way to automatically pick all of the most needed stock parts for a stock-only job?
-
-        - Add Unprioritize All button to Manage Offcuts in the same place as Reset Quantities on the Manage Stock Parts card
-        - HHOS file multiplier should be displayed on the file's header in Loaded Parts List like the number of parts is.
     
     Optimizer
         - ✓ ---> Only keep reusing a layout of stock parts until another layout is better because the number of the original stock parts needed has been filled.
@@ -76,20 +75,21 @@ BUGS
     - ✓ Removing parts on the results page causes the loading screen to pop up for a second
     - ✓ "Nothing to show" panel was removed from Results tab before optimization is done
     - ✓ Hitting the trash button to remove a file from the File Paths card should automatically update the Loaded Part Lists
+    - ✓ Hitting Load/Refresh Files reloads the page, collapsing any collapsable sections you had open. It should not do this.
+    - ✓ Newly added HHOS files should have all of their parts selected in the Loaded Parts list by default.
+    - ✓ Adding or removing an HHOS file in the File Paths section doesn't update the Loaded Parts List until after optimization.
+    - ✓ The Optimization Progress card shouldn't stay on screen when you move to the Configuration tab.
 
-    - Add Unprioritize All button to Manage Offcuts in the same place as Reset Quantities on the Manage Stock Parts card
+Here are the next bugs/updates to address, as well as the current versions of the files.
     - The Select/Deselect All buttons don't work on the Manage Offcuts list.
-    - HHOS file multiplier should be displayed on the file's header in Loaded Parts List like the number of parts is.
-    - Hitting Load/Refresh Files reloads the page, collapsing any collapsable sections you had open. It should not do this.
-    - Newly added HHOS files should have all of their parts selected in the Loaded Parts list by default.
-    - The Optimization Progress card shouldn't stay on screen when you move to the Configuration tab.
-    - The stock part standardization doesn't seem to affect the final score.
+    - It's now not including any of the required parts in the optimization, even if they are selected.
     - The calculated ideal score is several orders of magnitude smaller than the true score.
-    - Part labels should rotate on slightly wider parts than they do now.
 
+    - The stock part standardization doesn't seem to affect the final score.
+    - Part labels should rotate on slightly wider parts than they do now.
+    
     - Stock part standardizing should affect the final score.
     - Stock text doesn't go sidways
-    - Adding or removing an HHOS file in the File Paths section doesn't update the Loaded Parts List until after optimization.
     - Select All & Deselect All buttons don't work on the Manage Stock Parts and Manage Offcuts lists.
 
 MISC

@@ -88,6 +88,16 @@ document.addEventListener('DOMContentLoaded', function() {
         
     // --- Event Listeners and Initial Setup ---
     
+    function restoreAccordionStates() {
+        document.querySelectorAll('details.collapsible-section').forEach(details => {
+            const key = details.querySelector('.card-title')?.textContent.trim();
+            const wasOpen = localStorage.getItem(`accordion-${key}`);
+            if (key && wasOpen === 'true') {
+                details.open = true;
+            }
+        });
+    }
+
     // Global keydown for Undo
     document.addEventListener('keydown', (event) => {
         if ((event.ctrlKey || event.metaKey) && event.key === 'z') {
@@ -223,8 +233,9 @@ document.addEventListener('DOMContentLoaded', function() {
     setupTabs();
     setupFormControls();
     setupCollapsibleSections();
+    restoreAccordionStates();
 
-    // Restore UI state and render initial data
+    // Render initial data if it exists
     const initialDataElement = document.getElementById('initial-results-data');
     if (initialDataElement) {
         const initialData = JSON.parse(initialDataElement.textContent);
