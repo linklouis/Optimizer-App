@@ -31,17 +31,25 @@ def calculate_ideal_score(parts_to_cut, optional_stock_parts, offcut_df, config)
             num_used_offcuts = 0
             for offcut in offcuts:
                 if remaining_area_to_place <= 0: break
-                for _ in range(int(offcut.get('quantity', 1))):
-                    if remaining_area_to_place <= 0: break
-                    remaining_area_to_place -= offcut['area']
-                    num_used_offcuts += 1
+                
+                # Check if we use this type of offcut at all
+                if offcut['area'] > 0 and remaining_area_to_place > 0:
+                    # Apply type-based bonuses ONCE if this offcut type is used
                     ideal_quantity_bonus += offcut.get('quantity', 1) * config.get('w_quantity', 0.1)
                     if str(offcut['id']) in prioritized_ids:
                         ideal_priority_bonus += config.get('w_priority_offcut', 15.0)
+
+                    # Figure out how many of this offcut are consumed
+                    for _ in range(int(offcut.get('quantity', 1))):
+                        if remaining_area_to_place > 0:
+                            remaining_area_to_place -= offcut['area']
+                            num_used_offcuts += 1
+                        else:
+                            break
             
             if num_used_offcuts > 0:
                 ideal_sheets_penalty += num_used_offcuts * config.get('w_sheets', 1.0)
-                num_unique_layouts += 1 
+                num_unique_layouts += 1 # Simplified assumption
 
     reference_area = config.get('default_length', 96) * config.get('default_width', 48)
     if reference_area > 0 and remaining_area_to_place > 0:

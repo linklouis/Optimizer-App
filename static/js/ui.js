@@ -96,7 +96,6 @@ function setupFormControls() {
         const selectAllBtn = document.getElementById(`select-all-${type}`);
         const deselectAllBtn = document.getElementById(`deselect-all-${type}`);
         
-        // Use a more specific selector to distinguish between stock and offcut lists
         const containerSelector = (type === 'stock') 
             ? '.stock-selector:not(.offcut-selector)' 
             : `.${type}-selector`;
@@ -104,14 +103,17 @@ function setupFormControls() {
         const selectorContainer = document.querySelector(containerSelector);
 
         if (!selectAllBtn || !deselectAllBtn || !selectorContainer) return;
+        
+        // Use a specific attribute selector to target only the main selection checkboxes
+        const checkboxSelector = `input[name^="selected_"]`;
 
         selectAllBtn.addEventListener('click', () => {
-            selectorContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+            selectorContainer.querySelectorAll(checkboxSelector).forEach(cb => {
                 if (!cb.disabled) cb.checked = true;
             });
         });
         deselectAllBtn.addEventListener('click', () => {
-            selectorContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+            selectorContainer.querySelectorAll(checkboxSelector).forEach(cb => {
                 if (!cb.disabled) cb.checked = false;
             });
         });

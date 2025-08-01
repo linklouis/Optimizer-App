@@ -19,6 +19,7 @@ FEATURES
         - ✓ Make time limiting a toggleable option
         - ✓ Add button to reset required stock part quantity?
         - ✓ Add reset weights button
+        - ✓ Hitting enter while in a field in File Paths should automatically Load/Refresh Files
 
         - Allow uploading a temp Offcut List that doesn't override the current one?
         - Save offcuts
@@ -53,6 +54,7 @@ FEATURES
         - Add line break before 'Note:' in search time tooltip
         - Make dimensions text more readable on patterned backgrounds
         - Make more loading screen tips, or have the time limit one only appear when there is a time limit?
+        - Also have a thinner progress bar for the time under the Part Placement Progress bar, so you can tell which will happen first?
 
 CODE
     - ✓ Start separating some of the big files (index, app)
@@ -72,16 +74,17 @@ BUGS
     - ✓ Hitting enter while in a text field in Configuration should only start the optimization if it's in the General Settings or Scoring Weights card.
     - ✓ Does the priority offcut bonus affect the ideal score?
     - ✓ Removing parts on the results page causes the loading screen to pop up for a second
+    - ✓ "Nothing to show" panel was removed from Results tab before optimization is done
 
-    - Does stock part standardizing affect final score?
-    - "Nothing to show" panel was removed from Results tab before optimization is done
-    - Part labels should rotate on slightly wider parts than they do now
-    - Select/Deselect All buttons work on Manage Stock parts now, but not Manage Offcuts.
+    - The stock parts standardization should affect the files on the backend too, not just the way they are displayed, so it should update the final score too.
+    - Hitting the trash button to remove a file from the File Paths card should automatically update the Loaded Part Lists
     - Hitting Load/Refresh Files re-colapses any collapsable sections you had open.
-    - Hitting enter while in a field in File Paths should automatically Load/Refresh Files
-    - Ideal score is now way too high, is it assuming the priority offcut bonus is being applied to every sheet?
-    - Adding a new HHOS file should make all of its parts selected in the Loaded Parts list by default.
+    - Newly added HHOS files should have all of their parts selected in the Loaded Parts list by default.
+    - The ideal score is now several orders of magnitude smaller than the true score.
+    - The Select/Deselect All buttons work on the Manage Stock parts list, but not the Manage Offcuts list.
+    - Part labels should rotate on slightly wider parts than they do now.
 
+    - Stock part standardizing should affect the final score.
     - Stock text doesn't go sidways
     - Adding or removing an HHOS file in the File Paths section doesn't update the Loaded Parts List until after optimization.
     - Select All & Deselect All buttons don't work on the Manage Stock Parts and Manage Offcuts lists.

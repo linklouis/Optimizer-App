@@ -23,7 +23,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
             currentState = await response.json();
             renderResults(currentState);
-            document.getElementById('undo-button')?.addEventListener('click', handleUndo);
+            if(currentState && !currentState.error) {
+                document.getElementById('undo-button')?.addEventListener('click', handleUndo);
+            }
 
         } catch (error) {
             stateHistory.push(previousState); // Push state back on failure
@@ -71,7 +73,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
             currentState = await response.json();
             renderResults(currentState);
-            document.getElementById('undo-button')?.addEventListener('click', handleUndo);
+             if(currentState && !currentState.error) {
+                document.getElementById('undo-button')?.addEventListener('click', handleUndo);
+            }
         } catch (error) {
             stateHistory.pop();
             console.error('Error updating layout:', error);
@@ -88,7 +92,10 @@ document.addEventListener('DOMContentLoaded', function() {
     document.addEventListener('keydown', (event) => {
         if ((event.ctrlKey || event.metaKey) && event.key === 'z') {
             event.preventDefault();
-            handleUndo();
+            const undoButton = document.getElementById('undo-button');
+            if(undoButton && !undoButton.disabled) {
+                handleUndo();
+            }
         }
     });
 
@@ -101,25 +108,31 @@ document.addEventListener('DOMContentLoaded', function() {
                 const parentCard = e.target.closest('.card');
                 const cardTitle = parentCard?.querySelector('.card-title')?.textContent || '';
                 
-                // Allow enter to submit only from settings/weights cards
                 if (cardTitle.includes('General Settings') || cardTitle.includes('Scoring Weights')) {
-                    // Do nothing, allow submission to bubble up
+                    // Do nothing, allow submission to bubble up to the form
+                } else if (cardTitle.includes('File Paths')) {
+                    e.preventDefault(); // Prevent default form submit
+                    document.querySelector('button[value="refresh_files"]')?.click();
                 } else {
-                    // Prevent submission from other cards (e.g., File Paths, Manage Parts)
-                    e.preventDefault();
+                    e.preventDefault(); // Prevent submission from other cards
                 }
             }
         });
 
         configForm.addEventListener('submit', async (e) => {
-            // Differentiate between 'refresh' and 'optimize' actions
             const action = e.submitter?.name === 'action' ? e.submitter.value : 'optimize';
             
             if (action === 'refresh_files') {
-                return; // Allow default form submission for refresh
+                document.querySelectorAll('details.collapsible-section').forEach(details => {
+                    const key = details.querySelector('.card-title')?.textContent.trim();
+                    if (key) {
+                        localStorage.setItem(`accordion-${key}`, details.open);
+                    }
+                });
+                return; 
             }
 
-            e.preventDefault(); // Prevent default for optimization
+            e.preventDefault();
 
             const loadingOverlay = document.getElementById('loading-overlay');
             const progressBarFill = document.getElementById('progress-bar-fill');
@@ -156,12 +169,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 eventSource.addEventListener('progress', (event) => {
                     const data = JSON.parse(event.data);
-                    
                     if (data.part_progress !== undefined) {
                         progressBarFill.style.width = `${data.part_progress}%`;
                         partProgressPercent.textContent = `${data.part_progress}%`;
                     }
-
                     if (data.elapsed_time !== undefined) {
                         const formatTime = (seconds) => {
                             const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
@@ -169,12 +180,9 @@ document.addEventListener('DOMContentLoaded', function() {
                             return `${mins}:${secs}`;
                         };
                         let timeText = formatTime(data.elapsed_time);
-                        if (data.time_limit > 0) {
-                            timeText += ` / ${formatTime(data.time_limit)}`;
-                        }
+                        if (data.time_limit > 0) timeText += ` / ${formatTime(data.time_limit)}`;
                         timeTrackerValue.textContent = timeText;
                     }
-
                     if (data.nodes_explored !== undefined) nodesExploredValue.textContent = data.nodes_explored.toLocaleString();
                     if (data.current_best_score !== undefined && data.current_best_score !== null) bestScoreValue.textContent = data.current_best_score.toFixed(2);
                     if (data.sheets_in_best_solution !== undefined && data.sheets_in_best_solution !== null) sheetsUsedValue.textContent = data.sheets_in_best_solution;
@@ -185,7 +193,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     currentState = result;
                     stateHistory = [];
                     renderResults(result);
-                    document.getElementById('undo-button')?.addEventListener('click', handleUndo);
+                    if(result && !result.error) {
+                        document.getElementById('undo-button')?.addEventListener('click', handleUndo);
+                    }
                     loadingOverlay.style.display = 'none';
                     eventSource.close();
                 });
@@ -214,14 +224,16 @@ document.addEventListener('DOMContentLoaded', function() {
     setupFormControls();
     setupCollapsibleSections();
 
-    // Render initial data if it exists
+    // Restore UI state and render initial data
     const initialDataElement = document.getElementById('initial-results-data');
     if (initialDataElement) {
         const initialData = JSON.parse(initialDataElement.textContent);
-        if (initialData) {
-            currentState = initialData;
-            renderResults(currentState);
+        currentState = initialData;
+        renderResults(currentState); // Always render, even if data is null
+        
+        if (currentState && !currentState.error) {
             document.getElementById('undo-button')?.addEventListener('click', handleUndo);
+            // Only switch to results tab if there's actual data
             document.querySelector('.tab-button[data-tab="results"]')?.click();
         }
     }

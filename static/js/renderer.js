@@ -24,7 +24,7 @@ function renderResults(result) {
         <div class="summary-metric"><span class="value">${result.elapsed_time.toFixed(2)}s</span><span class="label">Time Spent</span></div>
         <div class="summary-metric ${result.remaining_parts.length > 0 ? 'is-alert' : ''}"><span class="value">${result.remaining_parts.length}</span><span class="label">Parts Not Placed</span></div>
         <div class="summary-metric action-metric">
-            <button id="undo-button" class="btn-undo"><i class="fa-solid fa-rotate-left"></i> Undo</button>
+            <button id="undo-button" class="btn-undo" disabled><i class="fa-solid fa-rotate-left"></i> Undo</button>
         </div>`;
     fragment.appendChild(summary);
     const grid = document.createElement('div');
@@ -56,7 +56,7 @@ function renderResults(result) {
             
             let labelTransform = '';
             // If part is too narrow for horizontal text, rotate the label
-            if (p_wid < (label.length * 1.8) && p_len > p_wid) { // 1.8 is an estimate for character width
+            if (p_wid < (label.length * 2.2) && p_len > p_wid) { // 2.2 is an estimate for char width ratio
                 labelTransform = `transform="rotate(-90, ${p_wid / 2}, ${p_len / 2})"`;
             }
 
@@ -99,4 +99,9 @@ function renderResults(result) {
     
     fragment.appendChild(grid);
     container.appendChild(fragment);
+
+    const undoButton = document.getElementById('undo-button');
+    if (undoButton) {
+        undoButton.disabled = false;
+    }
 }
