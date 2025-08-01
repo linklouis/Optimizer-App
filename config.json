@@ -4,11 +4,11 @@
     "hhos_files": [
         {
             "path": "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv",
-            "multiplier": 2
+            "multiplier": 10
         },
         {
             "path": "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv",
-            "multiplier": 1
+            "multiplier": 5
         }
     ],
     "offcut_path": "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\Offcut list.xlsx",
@@ -20,6 +20,7 @@
     "add_stock_parts": true,
     "search_time_limit": 0.0,
     "branching_factor": 1,
+    "expected_max_cuts_per_sheet": 10.0,
     "selected_stock_parts": [
         "OSB-15-126126",
         "OSB-15-140126",
@@ -62,10 +63,10 @@
     "w_offcut": 0.5,
     "w_cuts": 0.2,
     "w_quantity": 0.1,
-    "w_sheets": 0.02,
+    "w_sheets": 1.0,
     "w_stock_fill": 3.0,
-    "w_unique_layouts": 0.1,
-    "standardize_stock_layouts": false,
+    "w_unique_layouts": 0.5,
+    "standardize_stock_layouts": true,
     "selected_offcuts": [
         "0",
         "1",

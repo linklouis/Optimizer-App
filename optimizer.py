@@ -57,9 +57,20 @@ def find_best_fit(part_length: float, part_width: float, empty_rects: List[Rect]
     return best_fit_index
 
 
-def calculate_layout_score(layout: Dict[str, Any], sheet_info: Dict[str, Any], weights: Dict[str, float], 
-                           min_offcut_dim: float, reference_area: float, is_stock_only_job: bool = False) -> float:
+def calculate_layout_score(layout: Dict[str, Any], sheet_info: Dict[str, Any], config: Dict[str, Any], 
+                           min_offcut_dim: float, reference_area: float, max_offcut_quantity: float, 
+                           is_stock_only_job: bool = False, tracker: Optional[Dict] = None) -> float:
     """Calculates a score for a given layout. Higher is better."""
+    
+    def _update_tracker(component_name: str, value: float):
+        """Helper to update the statistics for a score component."""
+        if tracker is not None:
+            stats = tracker.setdefault(component_name, {'min': float('inf'), 'max': -float('inf'), 'sum': 0, 'count': 0})
+            stats['min'] = min(stats['min'], value)
+            stats['max'] = max(stats['max'], value)
+            stats['sum'] += value
+            stats['count'] += 1
+
     sheet_area = sheet_info['length'] * sheet_info['width']
     if sheet_area == 0 or reference_area == 0:
         return -float('inf')
@@ -68,42 +79,60 @@ def calculate_layout_score(layout: Dict[str, Any], sheet_info: Dict[str, Any], w
     usable_offcuts = [o for o in layout['offcuts'] if o['length'] >= min_offcut_dim and o['width'] >= min_offcut_dim]
     offcut_area = sum(o['length'] * o['width'] for o in usable_offcuts)
     
-    waste_penalty = ((sheet_area - used_area - offcut_area) / reference_area) * weights.get('w_waste', 1.0)
-    offcut_penalty = (offcut_area / reference_area) * weights.get('w_offcut', 0.5)
+    # --- Area-Based Components (already normalized by reference_area) ---
+    unweighted_waste = (sheet_area - used_area - offcut_area) / reference_area if reference_area > 0 else 0
+    unweighted_offcut = offcut_area / reference_area if reference_area > 0 else 0
+    _update_tracker('waste_penalty', unweighted_waste)
+    _update_tracker('offcut_penalty', unweighted_offcut)
+
+    waste_penalty = unweighted_waste * config.get('w_waste', 1.0)
+    offcut_penalty = unweighted_offcut * config.get('w_offcut', 0.5)
     area_based_score = -(waste_penalty + offcut_penalty)
+    _update_tracker('area_based_score', -(unweighted_waste + unweighted_offcut))
 
-    stock_fill_bonus = 0
-    has_required_parts = False
-    has_optional_parts = False
-
+    # --- Stock Fill Bonus (already normalized by area) ---
+    unweighted_stock_fill = 0
     for part in layout['placed_parts']:
-        if part.get('is_optional_filler', False):
-            has_optional_parts = True
-        else:
-            has_required_parts = True
-
         if part.get('is_stock_part', False):
             deficit = part.get('target_stock', 1) - part.get('current_stock', 0)
             if part.get('target_stock', 0) > 0 and deficit > 0:
                 part_area = part['length'] * part['width']
-                # FIX: Use reference_area instead of sheet_area for consistent scoring
-                stock_fill_bonus += (deficit / part['target_stock']) * (part_area / reference_area) * weights.get('w_stock_fill', 1.0)
+                unweighted_stock_fill += (deficit / part['target_stock']) * (part_area / reference_area)
+
+    _update_tracker('stock_fill_bonus', unweighted_stock_fill)
+    stock_fill_bonus = unweighted_stock_fill * config.get('w_stock_fill', 1.0)
     
+    has_required_parts = any(not p.get('is_optional_filler', False) for p in layout['placed_parts'])
+    has_optional_parts = any(p.get('is_optional_filler', False) for p in layout['placed_parts'])
     if not has_required_parts and has_optional_parts and not is_stock_only_job:
         return -float('inf')
 
-    quantity_bonus = (sheet_info.get('quantity', 1) * weights.get('w_quantity', 0.1)) if sheet_info.get('type') != 'Default' else 0
-    cuts_penalty = len(layout['placed_parts']) * weights.get('w_cuts', 0.2)
+    # --- Quantity Bonus (normalized by max quantity) ---
+    unweighted_quantity = float(sheet_info.get('quantity', 1)) if sheet_info.get('type') != 'Default' else 0.0
+    normalized_quantity = unweighted_quantity / max_offcut_quantity if max_offcut_quantity > 0 else 0.0
+    _update_tracker('quantity_bonus', normalized_quantity)
+    quantity_bonus = normalized_quantity * config.get('w_quantity', 0.1)
 
-    # --- NEW: Add bonus for prioritized offcuts ---
-    priority_bonus = 0.0
+    # --- Cuts Penalty (normalized by expected max cuts) ---
+    unweighted_cuts = float(len(layout['placed_parts']))
+    expected_max_cuts = config.get('expected_max_cuts_per_sheet', 20.0)
+    normalized_cuts = unweighted_cuts / expected_max_cuts if expected_max_cuts > 0 else 0.0
+    _update_tracker('cuts_penalty', normalized_cuts)
+    cuts_penalty = normalized_cuts * config.get('w_cuts', 0.2)
+
+    # --- Priority Bonus (already normalized as 0 or 1) ---
+    unweighted_priority = 0.0
     if sheet_info.get('type') == 'Offcut':
         offcut_id_str = str(sheet_info.get('id', '')).replace('offcut_', '')
-        if offcut_id_str in weights.get('prioritized_offcuts', []):
-            priority_bonus = weights.get('w_priority_offcut', 10.0)
-
-    print(f'area_based_score: {area_based_score}, stock_fill_bonus: {stock_fill_bonus}, quantity_bonus: {quantity_bonus}, cuts_penalty: {cuts_penalty}, priority_bonus: {priority_bonus}')
-    return area_based_score + stock_fill_bonus + quantity_bonus - cuts_penalty + priority_bonus
+        if offcut_id_str in config.get('prioritized_offcuts', []):
+            unweighted_priority = 1.0
+    _update_tracker('priority_bonus', unweighted_priority)
+    priority_bonus = unweighted_priority * config.get('w_priority_offcut', 10.0)
+    
+    score = area_based_score + stock_fill_bonus + quantity_bonus - cuts_penalty + priority_bonus
+    _update_tracker('total_layout_score', score)
+    
+    return score
 
 
 def _get_split_penalty(rect1: Rect, rect2: Rect) -> float:
@@ -163,15 +192,14 @@ def _place_parts_in_rects(parts_to_place: List[Part], initial_rects: List[Rect],
 
 
 def run_single_sheet_optimization(sheet_info: Dict, required_parts: List[Part], config: Dict, 
-                                  reference_area: float, optional_stock_parts: Optional[List[Part]] = None) -> Dict:
+                                  reference_area: float, max_offcut_quantity: float, 
+                                  optional_stock_parts: Optional[List[Part]] = None,
+                                  tracker: Optional[Dict] = None) -> Dict:
     """
     Finds the best layout for a single sheet.
-    NOTE: In Branch & Bound, this is used to generate one good candidate branch.
-    The time limit is reduced to ensure it's fast.
     """
     kerf = config['kerf']
     allow_rotation = config['allow_rotation']
-    # Use a very short time limit as this is now just one part of a larger search
     time_limit = 0.1 
     is_stock_only_job = not required_parts and optional_stock_parts
 
@@ -185,7 +213,7 @@ def run_single_sheet_optimization(sheet_info: Dict, required_parts: List[Part], 
         "sheet_info": sheet_info,
         "total_placed_area": sum(p['length'] * p['width'] for p in placed_job_parts)
     }
-    best_score = calculate_layout_score(best_layout, sheet_info, config, config['min_offcut_dim'], reference_area, is_stock_only_job)
+    best_score = calculate_layout_score(best_layout, sheet_info, config, config['min_offcut_dim'], reference_area, max_offcut_quantity, is_stock_only_job, tracker)
 
     if optional_stock_parts and remaining_rects_after_job:
         sorted_stock_parts = sorted(optional_stock_parts, key=lambda p: p.get('target_stock', 1) - p.get('current_stock', 0), reverse=True)
@@ -208,7 +236,7 @@ def run_single_sheet_optimization(sheet_info: Dict, required_parts: List[Part], 
                 "sheet_info": sheet_info,
                 "total_placed_area": sum(p['length'] * p['width'] for p in candidate_placed_parts)
             }
-            candidate_score = calculate_layout_score(candidate_layout, sheet_info, config, config['min_offcut_dim'], reference_area, is_stock_only_job)
+            candidate_score = calculate_layout_score(candidate_layout, sheet_info, config, config['min_offcut_dim'], reference_area, max_offcut_quantity, is_stock_only_job, tracker)
 
             if candidate_score > best_score:
                 best_score = candidate_score
@@ -223,11 +251,8 @@ def _calculate_bound(remaining_parts: list, current_score: float, config: dict, 
         return current_score
     
     remaining_area = sum(p['length'] * p['width'] for p in remaining_parts)
-    # Estimate minimum additional sheets needed based on area
-    min_additional_sheets = math.ceil(remaining_area / reference_area)
+    min_additional_sheets = math.ceil(remaining_area / reference_area) if reference_area > 0 else float('inf')
     
-    # Cost is the negative of the score, so we subtract penalties.
-    # This is a simple bound; a more complex one could be more accurate.
     future_penalty = min_additional_sheets * config.get('w_sheets', 1.0)
     
     return current_score - future_penalty
@@ -235,7 +260,8 @@ def _calculate_bound(remaining_parts: list, current_score: float, config: dict, 
 def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict], config: Dict, 
                              optional_stock_parts: Optional[List[Part]] = None, 
                              is_stock_only_job: bool = False,
-                             progress_callback=None) -> Tuple[List[Dict], List[Part], float]:
+                             progress_callback=None,
+                             max_offcut_quantity: float = 1.0) -> Tuple[List[Dict], List[Part], float]:
     """
     Optimizes cutting stock using a time-limited Branch and Bound search.
     """
@@ -244,6 +270,16 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
     branching_factor = config.get('branching_factor', 1)
     reference_area = config.get('default_length', 96) * config.get('default_width', 48)
     last_update_time = start_time
+    
+    score_component_tracker = {}
+
+    def _track_final_penalty(component_name: str, value: float):
+        """Helper to update stats for final score components."""
+        stats = score_component_tracker.setdefault(component_name, {'min': float('inf'), 'max': -float('inf'), 'sum': 0, 'count': 0})
+        stats['min'] = min(stats['min'], value)
+        stats['max'] = max(stats['max'], value)
+        stats['sum'] += value
+        stats['count'] += 1
 
     # --- Initial State Setup ---
     part_id_counter = 0
@@ -273,7 +309,6 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
     initial_bound = -_calculate_bound(list(initial_parts_dict.values()), 0, config, reference_area)
     
     node_counter = 0
-    # Node: (priority, score, counter, parts_dict, layouts, signatures_set)
     pq = [ (initial_bound, 0.0, node_counter, initial_parts_dict, [], frozenset()) ]
     node_counter += 1
     
@@ -286,16 +321,10 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
         
         current_time = time.time()
         if progress_callback and (current_time - last_update_time > 0.1):
-            part_progress = 0
-            if total_initial_parts > 0:
-                num_remaining_parts = len(current_parts)
-                part_progress = ((total_initial_parts - num_remaining_parts) / total_initial_parts) * 100
-            
+            part_progress = ((total_initial_parts - len(current_parts)) / total_initial_parts) * 100 if total_initial_parts > 0 else 100
             progress_callback({
-                "part_progress": int(part_progress),
-                "elapsed_time": current_time - start_time,
-                "time_limit": time_limit,
-                "nodes_explored": node_counter,
+                "part_progress": int(part_progress), "elapsed_time": current_time - start_time,
+                "time_limit": time_limit, "nodes_explored": node_counter,
                 "current_best_score": best_score if best_score > -float('inf') else None,
                 "sheets_in_best_solution": len(best_solution[0]) if best_solution[0] else None
             })
@@ -310,7 +339,7 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
         for sheet_tpl in unique_sheets:
             for _ in range(branching_factor):
                 layout_attempt = run_single_sheet_optimization(
-                    sheet_tpl, remaining_primary_parts, config, reference_area, optional_parts_list
+                    sheet_tpl, remaining_primary_parts, config, reference_area, max_offcut_quantity, optional_parts_list, tracker=score_component_tracker
                 )
                 
                 placed_part_ids = {p['part_id'] for p in layout_attempt['placed_parts'] if p.get('part_id') in current_parts}
@@ -323,12 +352,22 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
                 layout_sig = get_layout_signature(layout_attempt, required_only=False)
                 child_signatures = used_signatures.union({layout_sig})
 
-                layout_score = calculate_layout_score(layout_attempt, sheet_tpl, config, config['min_offcut_dim'], reference_area, is_stock_only_job)
+                layout_score = calculate_layout_score(layout_attempt, sheet_tpl, config, config['min_offcut_dim'], reference_area, max_offcut_quantity, is_stock_only_job, tracker=score_component_tracker)
                 child_score = current_score + layout_score
                 
                 if not child_parts:
-                    print(f'n_sheets: {(config.get('w_sheets', 1.0) * len(child_layouts))}, n_layouts: {(config.get('w_unique_layouts', 0.5) * len(child_signatures))}')
-                    final_score = child_score - (config.get('w_sheets', 1.0) * len(child_layouts)) - (config.get('w_unique_layouts', 0.5) * len(child_signatures))
+                    # Normalize against the number of parts to make the penalty scale-invariant
+                    normalized_sheets_penalty = len(child_layouts) / total_initial_parts if total_initial_parts > 0 else 0
+                    # Normalize against the number of sheets to penalize complexity relative to solution size
+                    normalized_layouts_penalty = len(child_signatures) / len(child_layouts) if len(child_layouts) > 0 else 0
+
+                    sheets_penalty_val = config.get('w_sheets', 1.0) * normalized_sheets_penalty
+                    layouts_penalty_val = config.get('w_unique_layouts', 0.5) * normalized_layouts_penalty
+                    
+                    _track_final_penalty('sheets_penalty', normalized_sheets_penalty)
+                    _track_final_penalty('layouts_penalty', normalized_layouts_penalty)
+
+                    final_score = child_score - sheets_penalty_val - layouts_penalty_val
                     if final_score > best_score:
                         best_score = final_score
                         best_solution = (child_layouts, [])
@@ -340,13 +379,24 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
     
     if progress_callback:
         progress_callback({
-            "part_progress": 100,
-            "elapsed_time": time.time() - start_time,
-            "time_limit": time_limit,
-            "nodes_explored": node_counter,
+            "part_progress": 100, "elapsed_time": time.time() - start_time,
+            "time_limit": time_limit, "nodes_explored": node_counter,
             "current_best_score": best_score if best_score > -float('inf') else None,
             "sheets_in_best_solution": len(best_solution[0]) if best_solution[0] else None
         })
+
+    # --- Print the analysis of score components ---
+    print("\n--- Optimization Score Component Analysis ---")
+    if not score_component_tracker:
+        print("No scoring data was collected.")
+    else:
+        for component, stats in sorted(score_component_tracker.items()):
+            if stats['count'] > 0:
+                average = stats['sum'] / stats['count']
+                print(f"Component: {component:<20} | Min: {stats['min']:>10.4f} | Max: {stats['max']:>10.4f} | Avg: {average:>10.4f}")
+            else:
+                print(f"Component: {component:<20} | No data collected.")
+    print("-------------------------------------------\n")
 
     final_layouts, remaining_parts = best_solution
     return final_layouts, remaining_parts, best_score

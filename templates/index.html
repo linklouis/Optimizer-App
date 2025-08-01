@@ -230,6 +230,10 @@
                                     <label for="branching_factor">Branching Factor <span class="tooltip" data-tooltip="Number of random layouts to generate at each search step. Higher values explore more options but are slower.">[?]</span></label>
                                     <input type="number" step="1" min="1" id="branching_factor" name="branching_factor" value="{{ config.branching_factor }}">
                                 </div>
+                                <div>
+                                    <label for="expected_max_cuts_per_sheet">Expected Max Cuts <span class="tooltip" data-tooltip="The expected number of parts on a typical sheet. Used to normalize the '# of Cuts' penalty to a value between 0-1.">[?]</span></label>
+                                    <input type="number" step="any" min="1" id="expected_max_cuts_per_sheet" name="expected_max_cuts_per_sheet" value="{{ config.expected_max_cuts_per_sheet }}">
+                                </div>
                             </div>
                             <div class="checkbox-grid">
                                 <label class="checkbox-group" for="allow_rotation"><input type="checkbox" id="allow_rotation" name="allow_rotation" value="true" {% if config.allow_rotation %}checked{% endif %}>Allow Rotation</label>

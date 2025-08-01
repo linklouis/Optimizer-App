@@ -9,11 +9,14 @@ DEFAULT_CONFIG = {
     'min_offcut_dim': 4.0, 'use_offcuts': True, 'add_stock_parts': False,
     'search_time_limit': 5.0,
     'branching_factor': 1,
+    'expected_max_cuts_per_sheet': 20.0,
     'selected_stock_parts': [],
     'required_stock_quantities': {},
     'dark_mode': False,
     'w_waste': 1.0, 'w_offcut': 0.5, 'w_cuts': 0.2, 'w_quantity': 0.1,
-    'w_sheets': 0.02, 'w_stock_fill': 3.0,'w_unique_layouts': 0.1,
+    'w_sheets': 2.0,
+    'w_stock_fill': 3.0,
+    'w_unique_layouts': 0.5,
     'standardize_stock_layouts': True,
     'selected_offcuts': [],
     'prioritized_offcuts': [],
@@ -55,6 +58,7 @@ def update_config_from_form(config, form_data):
     config['search_time_limit'] = time_limit_val if time_limit_val is not None else 0.0
     
     if 'branching_factor' in form_data: config['branching_factor'] = form_data.get('branching_factor', type=int)
+    if 'expected_max_cuts_per_sheet' in form_data: config['expected_max_cuts_per_sheet'] = form_data.get('expected_max_cuts_per_sheet', type=float)
     
     config['allow_rotation'] = form_data.get('allow_rotation') in ['true', 'on']
     config['use_offcuts'] = form_data.get('use_offcuts') in ['true', 'on']
