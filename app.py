@@ -96,14 +96,18 @@ def run_optimization_task(task_id, config):
         final_layouts = standardize_layouts(layouts, initial_optional_parts, config) if config.get('standardize_stock_layouts', False) and layouts else layouts
         
         ideal_score = calculate_ideal_score(parts_to_cut, initial_optional_parts, offcut_df, config)
-        score_percentage = 0.0
-        if score >= ideal_score: score_percentage = 100.0
-        elif ideal_score > 0: score_percentage = max(0.0, (score / ideal_score) * 100.0)
-        elif ideal_score < 0: score_percentage = (ideal_score / score) * 100.0 if score != 0 else 0.0
-        score_percentage = max(0.0, min(score_percentage, 100.0))
+
+        # Build a temporary result object to pass to the recalculation function
+        temp_result_obj = { 'layouts': final_layouts, 'ideal_score': ideal_score }
         
+        # Recalculate the summary and get the updated final score
+        updated_result_obj = recalculate_global_summary(temp_result_obj, config)
+        final_score = updated_result_obj.get('final_score', score) # Use the new score, fallback to old one
+        score_percentage = updated_result_obj.get('score_percentage', 0.0)
+
+        # Now prepare for rendering with the updated values
         optimization_result = prepare_results_for_render(
-            final_layouts, remaining, score, config, opt_elapsed_time, ideal_score, score_percentage
+            final_layouts, remaining, final_score, config, opt_elapsed_time, ideal_score, score_percentage
         )
         
         with tasks_lock:

@@ -75,13 +75,16 @@ BUGS
     - ✓ Does the priority offcut bonus affect the ideal score?
     - ✓ Removing parts on the results page causes the loading screen to pop up for a second
     - ✓ "Nothing to show" panel was removed from Results tab before optimization is done
+    - ✓ Hitting the trash button to remove a file from the File Paths card should automatically update the Loaded Part Lists
 
-    - The stock parts standardization should affect the files on the backend too, not just the way they are displayed, so it should update the final score too.
-    - Hitting the trash button to remove a file from the File Paths card should automatically update the Loaded Part Lists
-    - Hitting Load/Refresh Files re-colapses any collapsable sections you had open.
+    - Add Unprioritize All button to Manage Offcuts in the same place as Reset Quantities on the Manage Stock Parts card
+    - The Select/Deselect All buttons don't work on the Manage Offcuts list.
+    - HHOS file multiplier should be displayed on the file's header in Loaded Parts List like the number of parts is.
+    - Hitting Load/Refresh Files reloads the page, collapsing any collapsable sections you had open. It should not do this.
     - Newly added HHOS files should have all of their parts selected in the Loaded Parts list by default.
-    - The ideal score is now several orders of magnitude smaller than the true score.
-    - The Select/Deselect All buttons work on the Manage Stock parts list, but not the Manage Offcuts list.
+    - The Optimization Progress card shouldn't stay on screen when you move to the Configuration tab.
+    - The stock part standardization doesn't seem to affect the final score.
+    - The calculated ideal score is several orders of magnitude smaller than the true score.
     - Part labels should rotate on slightly wider parts than they do now.
 
     - Stock part standardizing should affect the final score.

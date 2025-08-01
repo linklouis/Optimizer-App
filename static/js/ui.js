@@ -104,8 +104,8 @@ function setupFormControls() {
 
         if (!selectAllBtn || !deselectAllBtn || !selectorContainer) return;
         
-        // Use a specific attribute selector to target only the main selection checkboxes
-        const checkboxSelector = `input[name^="selected_"]`;
+        // Use a more specific attribute selector to target only the main selection checkboxes
+        const checkboxSelector = `input[name="selected_${type === 'stock' ? 'stock_parts' : 'offcuts'}"]`;
 
         selectAllBtn.addEventListener('click', () => {
             selectorContainer.querySelectorAll(checkboxSelector).forEach(cb => {
@@ -154,8 +154,11 @@ function setupFormControls() {
         });
         hhosList.addEventListener('click', (e) => {
             const removeBtn = e.target.closest('.btn-remove-file');
-            if (removeBtn && hhosList.querySelectorAll('.file-input-group').length > 1) {
+            if (removeBtn) {
+                 // Remove the file input group from the DOM
                 removeBtn.parentElement.remove();
+                // Then, trigger the refresh action to update the server and UI
+                document.querySelector('button[value="refresh_files"]')?.click();
             }
         });
     }
