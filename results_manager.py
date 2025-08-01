@@ -1,92 +1,192 @@
 import math
 from collections import Counter
+
+# NOTE: The dependency on optimizer.calculate_layout_score for standardization is maintained.
 from optimizer import calculate_layout_score, get_layout_signature
 
-def calculate_ideal_score(parts_to_cut, optional_stock_parts, offcut_df, config):
-    """
-    Calculates the theoretical maximum possible score for a given set of parts and settings.
-    This provides a benchmark against which the actual optimized score can be compared.
-    """
-    # FIX: Define reference_area at the top to ensure it's always available for normalization.
-    # This prevents the score from being incorrectly calculated when only offcuts are used.
-    reference_area = config.get('default_length', 96) * config.get('default_width', 48)
+# --- NEW HELPERS FOR IDEAL SCORE CALCULATION ---
 
-    ideal_part_list = parts_to_cut + optional_stock_parts
-    if not ideal_part_list:
-        return 0.0
+def _find_best_fit_for_ideal(part_length: float, part_width: float, empty_rects: list) -> int:
+    """Finds the best empty rectangle for a part using a shortest-side-fit heuristic."""
+    best_fit_index = -1
+    min_short_side_fit = float('inf')
 
-    total_ideal_part_area = sum(p['length'] * p['width'] * p.get('quantity', 1) for p in ideal_part_list)
-    total_ideal_part_count = sum(p.get('quantity', 1) for p in ideal_part_list)
-
-    ideal_sheets_penalty = 0.0
-    ideal_quantity_bonus = 0.0
-    ideal_priority_bonus = 0.0
-    remaining_area_to_place = total_ideal_part_area
-    num_unique_layouts = 0
-    unavoidable_waste_area = 0.0
+    for i, rect in enumerate(empty_rects):
+        if part_length <= rect['length'] and part_width <= rect['width']:
+            remaining_length = rect['length'] - part_length
+            remaining_width = rect['width'] - part_width
+            short_side_fit = min(remaining_length, remaining_width)
+            if short_side_fit < min_short_side_fit:
+                min_short_side_fit = short_side_fit
+                best_fit_index = i
     
+    return best_fit_index
+
+def _greedy_packer(sheet: dict, parts: list, kerf: float, allow_rotation: bool) -> list:
+    """
+    A simple, single-pass greedy packer to simulate an ideal layout.
+    It places parts from the provided list (assumed sorted largest to smallest)
+    into the first available space that fits.
+    """
+    placed_parts = []
+    # Start with one empty rectangle representing the whole sheet
+    empty_rects = [{'x': 0, 'y': 0, 'length': sheet['length'], 'width': sheet['width']}]
+    
+    # Get a set of IDs already placed to avoid trying to place them again
+    placed_ids = set()
+
+    for part in parts:
+        if part.get('part_id') in placed_ids:
+            continue
+
+        orientations = [(part['length'], part['width'], False)]
+        if allow_rotation and part['length'] != part['width']:
+            orientations.append((part['width'], part['length'], True))
+
+        best_fit_index = -1
+        best_orientation = None
+
+        for part_l, part_w, rotated in orientations:
+            rect_index = _find_best_fit_for_ideal(part_l, part_w, empty_rects)
+            if rect_index != -1:
+                best_fit_index = rect_index
+                best_orientation = (part_l, part_w, rotated)
+                break
+        
+        if best_fit_index != -1:
+            part_l, part_w, rotated = best_orientation
+            rect = empty_rects.pop(best_fit_index)
+            
+            # Add the part to our list of placed parts for this sheet
+            placed_part = part.copy()
+            placed_part.update({'rotated': rotated, 'x': rect['x'], 'y': rect['y']})
+            placed_parts.append(placed_part)
+            placed_ids.add(part['part_id'])
+
+            # Split the remaining empty space into two new rectangles
+            rect_above = {'x': rect['x'], 'y': rect['y'] + part_l, 'length': rect['length'] - part_l, 'width': rect['width']}
+            rect_right = {'x': rect['x'] + part_w, 'y': rect['y'], 'length': rect['length'], 'width': rect['width'] - part_w}
+            
+            if rect_above['length'] > kerf and rect_above['width'] > kerf:
+                empty_rects.append(rect_above)
+            if rect_right['length'] > kerf and rect_right['width'] > kerf:
+                empty_rects.append(rect_right)
+
+    return placed_parts
+
+# --- REBUILT IDEAL SCORE CALCULATION ---
+
+def calculate_ideal_score(parts_to_cut: list, optional_stock_parts: list, offcut_df: 'pd.DataFrame', config: dict) -> float:
+    """
+    Calculates a more realistic ideal score by simulating a greedy packing strategy.
+    """
+    kerf = config.get('kerf', 0.125)
+    allow_rotation = config.get('allow_rotation', True)
+    reference_area = config.get('default_length', 96) * config.get('default_width', 48)
+    if reference_area <= 0: return 0.0
+
+    # 1. Prepare a master list of every individual part that needs to be cut
+    all_parts = parts_to_cut + optional_stock_parts
+    expanded_parts = []
+    part_id_counter = 0
+    for part in all_parts:
+        for _ in range(int(part.get('quantity', 1))):
+            p_copy = part.copy()
+            p_copy['part_id'] = part_id_counter
+            expanded_parts.append(p_copy)
+            part_id_counter += 1
+    
+    # Sort parts by area (descending). This is a crucial heuristic for the greedy packer.
+    expanded_parts.sort(key=lambda p: p['length'] * p['width'], reverse=True)
+    
+    parts_to_place_ids = {p['part_id'] for p in expanded_parts}
+    placed_part_details = {} # Store details of where each part was placed
+
+    total_score = 0.0
+    num_unique_layouts = 0
+    
+    def get_parts_to_place():
+        """Returns a list of part dicts for parts that still need to be placed."""
+        return [p for p in expanded_parts if p['part_id'] in parts_to_place_ids]
+
+    # 2. Simulate placing parts on available offcuts first
     if config.get('use_offcuts') and offcut_df is not None and not offcut_df.empty:
         selected_ids = [int(i) for i in config.get('selected_offcuts', [])]
         prioritized_ids = config.get('prioritized_offcuts', [])
-        available_offcuts = offcut_df.loc[offcut_df.index.isin(selected_ids)]
+        available_offcuts = offcut_df.loc[offcut_df.index.isin(selected_ids)].copy()
         
         if not available_offcuts.empty:
-            offcuts = available_offcuts.copy()
-            offcuts['area'] = offcuts['length'] * offcuts['width']
-            offcuts['id'] = offcuts.index
-            offcuts = offcuts.sort_values(by='area', ascending=False).to_dict('records')
-            
-            num_used_offcuts = 0
-            for offcut in offcuts:
-                if remaining_area_to_place <= 0: break
-                if offcut['area'] <= 0: continue
+            available_offcuts['area'] = available_offcuts['length'] * available_offcuts['width']
+            available_offcuts['id'] = available_offcuts.index
+            # Use largest offcuts first
+            sorted_offcuts = available_offcuts.sort_values(by='area', ascending=False).to_dict('records')
 
-                consumed_count = 0
+            for offcut in sorted_offcuts:
                 for _ in range(int(offcut.get('quantity', 1))):
-                    if remaining_area_to_place > 0:
-                        remaining_area_to_place -= offcut['area']
-                        consumed_count += 1
-                    else:
-                        break
-                
-                if consumed_count > 0:
-                    ideal_quantity_bonus += consumed_count * config.get('w_quantity', 0.1)
-                    if str(offcut['id']) in prioritized_ids:
-                        ideal_priority_bonus += consumed_count * config.get('w_priority_offcut', 15.0)
-                    num_used_offcuts += consumed_count
+                    if not parts_to_place_ids: break
+                    
+                    placed_on_this_offcut = _greedy_packer(offcut, get_parts_to_place(), kerf, allow_rotation)
+                    
+                    if placed_on_this_offcut:
+                        num_unique_layouts += 1
+                        sheet_area = offcut['length'] * offcut['width']
+                        placed_area = sum(p['length'] * p['width'] for p in placed_on_this_offcut)
+                        
+                        waste_penalty = ((sheet_area - placed_area) / reference_area) * config.get('w_waste', 1.0)
+                        cuts_penalty = len(placed_on_this_offcut) * config.get('w_cuts', 0.2)
+                        
+                        stock_fill_bonus = 0.0
+                        for p in placed_on_this_offcut:
+                            if p.get('is_stock_part'):
+                                deficit = p.get('target_stock', 1) - p.get('current_stock', 0)
+                                target = p.get('target_stock', 0)
+                                if target > 0 and deficit > 0:
+                                    stock_fill_bonus += (1 / target) * ((p['length'] * p['width']) / reference_area) * config.get('w_stock_fill', 1.0)
+                            
+                            parts_to_place_ids.remove(p['part_id'])
 
-            if num_used_offcuts > 0:
-                ideal_sheets_penalty += num_used_offcuts * config.get('w_sheets', 1.0)
-                num_unique_layouts += 1
+                        quantity_bonus = config.get('w_quantity', 0.1)
+                        priority_bonus = config.get('w_priority_offcut', 15.0) if str(offcut['id']) in prioritized_ids else 0.0
+                        
+                        sheets_penalty = config.get('w_sheets', 1.0)
+                        total_score += (stock_fill_bonus + quantity_bonus + priority_bonus) - (waste_penalty + cuts_penalty + sheets_penalty)
 
-    if remaining_area_to_place > 0:
-        if reference_area > 0:
-            min_default_sheets = math.ceil(remaining_area_to_place / reference_area)
-            ideal_sheets_penalty += min_default_sheets * config.get('w_sheets', 1.0)
-            unavoidable_waste_area = (min_default_sheets * reference_area) - remaining_area_to_place
-            if min_default_sheets > 0:
-                num_unique_layouts += 1
-            
-    ideal_waste_penalty = (unavoidable_waste_area / reference_area) * config.get('w_waste', 1.0) if reference_area > 0 else 0
-    ideal_offcut_penalty = 0.0
-    ideal_cuts_penalty = total_ideal_part_count * config.get('w_cuts', 0.2)
-    ideal_unique_layouts_penalty = num_unique_layouts * config.get('w_unique_layouts', 0.5)
-    total_ideal_penalty = ideal_waste_penalty + ideal_offcut_penalty + ideal_cuts_penalty + ideal_sheets_penalty + ideal_unique_layouts_penalty
+    # 3. Simulate placing remaining parts on default sheets
+    default_sheet = {'length': config['default_length'], 'width': config['default_width']}
+    while parts_to_place_ids:
+        num_unique_layouts += 1
+        placed_on_this_sheet = _greedy_packer(default_sheet, get_parts_to_place(), kerf, allow_rotation)
+        
+        if not placed_on_this_sheet:
+            # If no parts can be placed on a fresh sheet, they are unplaceable.
+            break
 
-    ideal_stock_fill_bonus = 0.0
-    if reference_area > 0:
-        for part in ideal_part_list:
-            if part.get('is_stock_part'):
-                deficit = part.get('target_stock', 1) - part.get('current_stock', 0)
-                target = part.get('target_stock', 0)
+        sheet_area = default_sheet['length'] * default_sheet['width']
+        placed_area = sum(p['length'] * p['width'] for p in placed_on_this_sheet)
+        
+        waste_penalty = ((sheet_area - placed_area) / reference_area) * config.get('w_waste', 1.0)
+        cuts_penalty = len(placed_on_this_sheet) * config.get('w_cuts', 0.2)
+        
+        stock_fill_bonus = 0.0
+        for p in placed_on_this_sheet:
+            if p.get('is_stock_part'):
+                deficit = p.get('target_stock', 1) - p.get('current_stock', 0)
+                target = p.get('target_stock', 0)
                 if target > 0 and deficit > 0:
-                    part_area = part['length'] * part['width']
-                    bonus_per_item = (deficit / target) * (part_area / reference_area) * config.get('w_stock_fill', 1.0)
-                    ideal_stock_fill_bonus += bonus_per_item * part.get('quantity', 1)
+                    stock_fill_bonus += (1 / target) * ((p['length'] * p['width']) / reference_area) * config.get('w_stock_fill', 1.0)
+            
+            parts_to_place_ids.remove(p['part_id'])
+            
+        sheets_penalty = config.get('w_sheets', 1.0)
+        total_score += stock_fill_bonus - (waste_penalty + cuts_penalty + sheets_penalty)
 
-    total_ideal_bonus = ideal_stock_fill_bonus + ideal_quantity_bonus + ideal_priority_bonus
+    # 4. Apply final global penalties
+    total_score -= num_unique_layouts * config.get('w_unique_layouts', 0.5)
     
-    return total_ideal_bonus - total_ideal_penalty
+    return total_score
+
+
+# --- EXISTING FUNCTIONS (UNCHANGED) ---
 
 def recalculate_global_summary(result_obj, config):
     if not result_obj or not result_obj.get('layouts'):
@@ -148,23 +248,17 @@ def _calculate_live_stock_bonus(layout: dict, live_deficit_tracker: Counter, con
     This ensures the best variation is chosen based on its ability to fill needed stock parts.
     """
     stock_fill_bonus = 0.0
-    # FIX: Use the consistent reference_area for normalization, not the variable sheet_area.
     reference_area = config.get('default_length', 96) * config.get('default_width', 48)
     if reference_area == 0: return 0.0
     
     w_stock_fill = config.get('w_stock_fill', 1.0)
 
     for part in layout.get('placed_parts', []):
-        # Only grant a bonus if the part is a needed stock part
         if part.get('is_stock_part') and live_deficit_tracker.get(part.get('internal_ref'), 0) > 0:
             part_area = part.get('length', 0) * part.get('width', 0)
             target_stock = part.get('target_stock', 1)
             
-            # FIX: The bonus formula now correctly mirrors the main scoring function.
-            # It rewards filling a portion of the total required deficit for that part.
             if target_stock > 0:
-                # This part will reduce the deficit by 1. The reward is proportional to its contribution
-                # to the total needed quantity (target_stock).
                 bonus = (1 / target_stock) * (part_area / reference_area) * w_stock_fill
                 stock_fill_bonus += bonus
 
@@ -184,14 +278,11 @@ def standardize_layouts(layouts: list, initial_optional_parts: list, config: dic
             continue
         unique_variations = {get_layout_signature(l): l for l in group}.values()
         scored_variations = []
-        # Pre-calculate the base score for each unique layout variation
         for v in unique_variations:
             is_stock_only_job = not any(not p.get('is_optional_filler', False) for p in v['placed_parts'])
             reference_area = config['default_length'] * config['default_width']
             base_score = calculate_layout_score(v, v['sheet_info'], config, config['min_offcut_dim'], reference_area, is_stock_only_job)
             
-            # The stock bonus in the base score is based on the initial state, which is not what we want for dynamic selection.
-            # We subtract the original bonus and will add a "live" bonus in the selection loop.
             stock_bonus_to_remove = 0.0
             if reference_area > 0:
                 for p in v.get('placed_parts', []):
@@ -206,19 +297,16 @@ def standardize_layouts(layouts: list, initial_optional_parts: list, config: dic
         
         standardized_group = []
         for _ in range(len(group)):
-            # In each step, find the best variation to add now, considering the current stock deficits
             best_choice = max(scored_variations, key=lambda item: item['base_score'] + _calculate_live_stock_bonus(item['layout'], live_deficit_tracker, config))
             chosen_layout = best_choice['layout']
             standardized_group.append(chosen_layout)
             
-            # Decrement the live deficit for the parts in the chosen layout
             for part in chosen_layout.get('placed_parts', []):
                 if part.get('is_stock_part'):
                     ref = part.get('internal_ref')
                     if live_deficit_tracker[ref] > 0: 
                         live_deficit_tracker[ref] -= 1
 
-        # Assign the new standardized layouts back to their original slots
         for original_layout, standardized_layout in zip(group, standardized_group):
             final_layouts[original_layout['original_index']] = standardized_layout
             

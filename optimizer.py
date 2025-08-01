@@ -84,11 +84,10 @@ def calculate_layout_score(layout: Dict[str, Any], sheet_info: Dict[str, Any], w
 
         if part.get('is_stock_part', False):
             deficit = part.get('target_stock', 1) - part.get('current_stock', 0)
-            target_stock = part.get('target_stock', 0)
-            if target_stock > 0 and deficit > 0:
+            if part.get('target_stock', 0) > 0 and deficit > 0:
                 part_area = part['length'] * part['width']
-                # The bonus is for the marginal value of producing one part.
-                stock_fill_bonus += (1 / target_stock) * (part_area / reference_area) * weights.get('w_stock_fill', 1.0)
+                # FIX: Use reference_area instead of sheet_area for consistent scoring
+                stock_fill_bonus += (deficit / part['target_stock']) * (part_area / reference_area) * weights.get('w_stock_fill', 1.0)
     
     if not has_required_parts and has_optional_parts and not is_stock_only_job:
         return -float('inf')
@@ -103,6 +102,7 @@ def calculate_layout_score(layout: Dict[str, Any], sheet_info: Dict[str, Any], w
         if offcut_id_str in weights.get('prioritized_offcuts', []):
             priority_bonus = weights.get('w_priority_offcut', 10.0)
 
+    print(f'area_based_score: {area_based_score}, stock_fill_bonus: {stock_fill_bonus}, quantity_bonus: {quantity_bonus}, cuts_penalty: {cuts_penalty}, priority_bonus: {priority_bonus}')
     return area_based_score + stock_fill_bonus + quantity_bonus - cuts_penalty + priority_bonus
 
 
@@ -327,6 +327,7 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
                 child_score = current_score + layout_score
                 
                 if not child_parts:
+                    print(f'n_sheets: {(config.get('w_sheets', 1.0) * len(child_layouts))}, n_layouts: {(config.get('w_unique_layouts', 0.5) * len(child_signatures))}')
                     final_score = child_score - (config.get('w_sheets', 1.0) * len(child_layouts)) - (config.get('w_unique_layouts', 0.5) * len(child_signatures))
                     if final_score > best_score:
                         best_score = final_score
