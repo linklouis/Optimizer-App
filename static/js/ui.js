@@ -95,9 +95,26 @@ function setupFormControls() {
     function setupSelector(type) {
         const selectAllBtn = document.getElementById(`select-all-${type}`);
         const deselectAllBtn = document.getElementById(`deselect-all-${type}`);
-        const selector = document.querySelector(`.${type}-selector`);
-        selectAllBtn?.addEventListener('click', () => selector.querySelectorAll(`input[name^="selected_"]`).forEach(cb => cb.checked = true));
-        deselectAllBtn?.addEventListener('click', () => selector.querySelectorAll(`input[name^="selected_"]`).forEach(cb => cb.checked = false));
+        
+        // Use a more specific selector to distinguish between stock and offcut lists
+        const containerSelector = (type === 'stock') 
+            ? '.stock-selector:not(.offcut-selector)' 
+            : `.${type}-selector`;
+        
+        const selectorContainer = document.querySelector(containerSelector);
+
+        if (!selectAllBtn || !deselectAllBtn || !selectorContainer) return;
+
+        selectAllBtn.addEventListener('click', () => {
+            selectorContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+                if (!cb.disabled) cb.checked = true;
+            });
+        });
+        deselectAllBtn.addEventListener('click', () => {
+            selectorContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+                if (!cb.disabled) cb.checked = false;
+            });
+        });
     }
     setupSelector('stock');
     setupSelector('offcut');

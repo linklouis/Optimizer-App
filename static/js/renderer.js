@@ -53,17 +53,23 @@ function renderResults(result) {
             const itemType = part.is_stock_part ? 'stock_part' : 'job_part';
             const p_class = part.is_stock_part ? 'stock-part' : 'job-part';
             const label = part.is_stock_part ? 'STOCK' : (part.label || '');
+            
+            let labelTransform = '';
+            // If part is too narrow for horizontal text, rotate the label
+            if (p_wid < (label.length * 1.8) && p_len > p_wid) { // 1.8 is an estimate for character width
+                labelTransform = `transform="rotate(-90, ${p_wid / 2}, ${p_len / 2})"`;
+            }
 
             let dimLabels = '';
             if (p_wid > 8 && p_len > 8) {
-                const textOffset = 1.5; // Using your preferred value
+                const textOffset = 1.5;
                 dimLabels += `<text class="inner-dim-text" x="${p_wid/2}" y="${textOffset}" dominant-baseline="hanging" text-anchor="middle">${p_wid.toFixed(2)}</text>`;
                 dimLabels += `<text class="inner-dim-text" x="${textOffset}" y="${p_len/2}" transform="rotate(-90, ${textOffset}, ${p_len/2})" dominant-baseline="middle" text-anchor="middle">${p_len.toFixed(2)}</text>`;
             }
 
             svgContent += `<g class="part-group interactive-item" transform="translate(${part.x},${svg_y})" data-item-index="${index}" data-item-type="${itemType}">
                             <rect class="${p_class}" width="${p_wid}" height="${p_len}"/>
-                            <text class="part-label" x="${p_wid/2}" y="${p_len/2}" dominant-baseline="middle" text-anchor="middle">${label}</text>
+                            <text class="part-label" x="${p_wid/2}" y="${p_len/2}" dominant-baseline="middle" text-anchor="middle" ${labelTransform}>${label}</text>
                             ${dimLabels}
                         </g>`;
         });
@@ -75,7 +81,7 @@ function renderResults(result) {
             
             let dimLabels = '';
             if (o_wid > 8 && o_len > 8) {
-                const textOffset = 1.5; // Applying consistent positioning to offcuts
+                const textOffset = 1.5;
                 dimLabels += `<text class="inner-dim-text" x="${o_wid/2}" y="${textOffset}" dominant-baseline="hanging" text-anchor="middle">${o_wid.toFixed(2)}</text>`;
                 dimLabels += `<text class="inner-dim-text" x="${textOffset}" y="${o_len/2}" transform="rotate(-90, ${textOffset}, ${o_len/2})" dominant-baseline="middle" text-anchor="middle">${o_len.toFixed(2)}</text>`;
             }

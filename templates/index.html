@@ -82,7 +82,7 @@
             </div>
 
             <div id="config" class="tab-content active">
-                <form method="post" class="config-form">
+                <form method="post" action="/" class="config-form">
                     <input type="hidden" name="dark_mode_state" id="dark_mode_state" value="{{ 'on' if config.dark_mode else 'off' }}">
                     
                     {% with messages = get_flashed_messages(with_categories=true) %}
@@ -125,6 +125,10 @@
                                     <div><label for="stock_inv_path">Stock Part Inventory</label><input type="text" id="stock_inv_path" name="stock_inv_path" value="{{ config.stock_inv_path }}"></div>
                                     <div><label for="offcut_path">Offcut List (Optional)</label><input type="text" id="offcut_path" name="offcut_path" value="{{ config.offcut_path }}"></div>
                                 </div>
+                                
+                                <hr class="form-divider">
+                                <button type="submit" name="action" value="refresh_files" class="btn-secondary" style="width: 100%; padding: 0.6rem;"><i class="fa-solid fa-arrows-rotate"></i> Load / Refresh Files</button>
+
                             </div>
                         </details>
                     </section>
@@ -317,7 +321,7 @@
                         </section>
                     </div>
 
-                    <button type="submit" class="submit-button"><i class="fa-solid fa-gears"></i> Save & Optimize</button>
+                    <button type="submit" name="action" value="optimize" class="submit-button"><i class="fa-solid fa-gears"></i> Save & Optimize</button>
                 </form>
             </div>
 

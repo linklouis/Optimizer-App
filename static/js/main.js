@@ -7,7 +7,8 @@ document.addEventListener('DOMContentLoaded', function() {
         if (stateHistory.length === 0) return;
 
         const loadingOverlay = document.getElementById('loading-overlay');
-        loadingOverlay.style.display = 'flex';
+        // Prevent loading flicker on fast actions
+        let timer = setTimeout(() => loadingOverlay.style.display = 'flex', 200);
 
         const previousState = stateHistory.pop();
 
@@ -29,6 +30,7 @@ document.addEventListener('DOMContentLoaded', function() {
             console.error('Error undoing action:', error);
             alert(`Failed to undo: ${error.message}`);
         } finally {
+            clearTimeout(timer);
             if (loadingOverlay) loadingOverlay.style.display = 'none';
         }
     }
@@ -51,7 +53,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
         stateHistory.push(JSON.parse(JSON.stringify(currentState)));
         const loadingOverlay = document.getElementById('loading-overlay');
-        loadingOverlay.style.display = 'flex';
+        // Prevent loading flicker on fast actions
+        let timer = setTimeout(() => loadingOverlay.style.display = 'flex', 200);
 
         try {
             const response = await fetch('/update_layout', {
@@ -74,6 +77,7 @@ document.addEventListener('DOMContentLoaded', function() {
             console.error('Error updating layout:', error);
             alert(`Failed to update layout: ${error.message}`);
         } finally {
+            clearTimeout(timer);
             loadingOverlay.style.display = 'none';
         }
     }
@@ -91,8 +95,31 @@ document.addEventListener('DOMContentLoaded', function() {
     // Main optimization form submission
     const configForm = document.querySelector('.config-form');
     if (configForm) {
+        // Control form submission via Enter key
+        configForm.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && (e.target.type === 'text' || e.target.type === 'number')) {
+                const parentCard = e.target.closest('.card');
+                const cardTitle = parentCard?.querySelector('.card-title')?.textContent || '';
+                
+                // Allow enter to submit only from settings/weights cards
+                if (cardTitle.includes('General Settings') || cardTitle.includes('Scoring Weights')) {
+                    // Do nothing, allow submission to bubble up
+                } else {
+                    // Prevent submission from other cards (e.g., File Paths, Manage Parts)
+                    e.preventDefault();
+                }
+            }
+        });
+
         configForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
+            // Differentiate between 'refresh' and 'optimize' actions
+            const action = e.submitter?.name === 'action' ? e.submitter.value : 'optimize';
+            
+            if (action === 'refresh_files') {
+                return; // Allow default form submission for refresh
+            }
+
+            e.preventDefault(); // Prevent default for optimization
 
             const loadingOverlay = document.getElementById('loading-overlay');
             const progressBarFill = document.getElementById('progress-bar-fill');

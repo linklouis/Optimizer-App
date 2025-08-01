@@ -1,4 +1,4 @@
-from flask import Flask, request, render_template, flash, session, jsonify, Response
+from flask import Flask, request, render_template, flash, session, jsonify, Response, redirect, url_for
 import os
 import json
 import pandas as pd
@@ -118,8 +118,17 @@ def run_optimization_task(task_id, config):
                 tasks[task_id]['status'] = 'error'
                 tasks[task_id]['result'] = {"error": f"An error occurred: {e}"}
 
-@app.route('/')
+@app.route('/', methods=['GET', 'POST'])
 def home():
+    if request.method == 'POST':
+        # This branch handles the "Load / Refresh Files" submission
+        config = load_config()
+        config = update_config_from_form(config, request.form)
+        save_config(config)
+        # Redirect to the GET route to show the updated page
+        return redirect(url_for('home'))
+
+    # This is the existing GET request logic
     config = load_config()
     hhos_file_contents, all_stock_parts_list, all_offcuts_list = [], [], []
 

@@ -12,17 +12,20 @@ def calculate_ideal_score(parts_to_cut, optional_stock_parts, offcut_df, config)
 
     ideal_sheets_penalty = 0.0
     ideal_quantity_bonus = 0.0
+    ideal_priority_bonus = 0.0
     remaining_area_to_place = total_ideal_part_area
     num_unique_layouts = 0
     unavoidable_waste_area = 0.0
     
     if config.get('use_offcuts') and offcut_df is not None and not offcut_df.empty:
         selected_ids = [int(i) for i in config.get('selected_offcuts', [])]
+        prioritized_ids = config.get('prioritized_offcuts', [])
         available_offcuts = offcut_df.loc[offcut_df.index.isin(selected_ids)]
         
         if not available_offcuts.empty:
             offcuts = available_offcuts.copy()
             offcuts['area'] = offcuts['length'] * offcuts['width']
+            offcuts['id'] = offcuts.index
             offcuts = offcuts.sort_values(by='area', ascending=False).to_dict('records')
             
             num_used_offcuts = 0
@@ -33,6 +36,8 @@ def calculate_ideal_score(parts_to_cut, optional_stock_parts, offcut_df, config)
                     remaining_area_to_place -= offcut['area']
                     num_used_offcuts += 1
                     ideal_quantity_bonus += offcut.get('quantity', 1) * config.get('w_quantity', 0.1)
+                    if str(offcut['id']) in prioritized_ids:
+                        ideal_priority_bonus += config.get('w_priority_offcut', 15.0)
             
             if num_used_offcuts > 0:
                 ideal_sheets_penalty += num_used_offcuts * config.get('w_sheets', 1.0)
@@ -63,7 +68,7 @@ def calculate_ideal_score(parts_to_cut, optional_stock_parts, offcut_df, config)
                     bonus_per_item = (deficit / target) * (part_area / reference_area) * config.get('w_stock_fill', 1.0)
                     ideal_stock_fill_bonus += bonus_per_item * part.get('quantity', 1)
 
-    total_ideal_bonus = ideal_stock_fill_bonus + ideal_quantity_bonus
+    total_ideal_bonus = ideal_stock_fill_bonus + ideal_quantity_bonus + ideal_priority_bonus
     
     return total_ideal_bonus - total_ideal_penalty
 
