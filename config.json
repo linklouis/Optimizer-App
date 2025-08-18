@@ -19,7 +19,7 @@
     "use_offcuts": true,
     "add_stock_parts": true,
     "search_time_limit": 0.0,
-    "branching_factor": 1,
+    "branching_factor": 3,
     "expected_max_cuts_per_sheet": 10.0,
     "selected_stock_parts": [
         "OSB-15-126126",
@@ -62,10 +62,10 @@
     "w_waste": 1.0,
     "w_offcut": 0.5,
     "w_cuts": 0.2,
-    "w_quantity": 3.0,
-    "w_sheets": 0.1,
-    "w_stock_fill": 5.0,
-    "w_unique_layouts": 0.8,
+    "w_quantity": 0.3,
+    "w_sheets": 0.5,
+    "w_stock_fill": 3.0,
+    "w_unique_layouts": 5.0,
     "standardize_stock_layouts": true,
     "selected_offcuts": [
         "0",

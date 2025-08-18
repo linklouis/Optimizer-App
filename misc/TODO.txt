@@ -75,6 +75,7 @@ FEATURES
         - The symbols on the theme switcher aren't perfectly vertically alligned with the switch.
         - Sort sheet layouts by size
         - Parts on the Results tab should always be displayed at the same size
+        - Hovering over a part should highlight it in red, so it's obvious clicking will delete it.
 
 CODE
     - ✓ Start separating some of the big files (index, app)
@@ -111,6 +112,8 @@ BUGS
 Here are the next bugs/updates to address, as well as the current versions of the files.
     - The calculated ideal score is several orders of magnitude smaller than the true score.
     - The stock part standardization doesn't seem to affect the final score.
+    - Hitting optimize again while in the middle of an optimization doesn't cancle the previous one, so it's still running in the background.
+    - Reset to defaults button only works once, and then you have to reload the page if you want to use it again?
     - THIS-------------------> Changing the multiplier in File Paths doesn't update the values for each part in Loaded Parts Lists.
     
     - Stock part standardizing should affect the final score.
@@ -156,4 +159,19 @@ QUESTIONS
 
 
 
-Please make sure to only return either complete, updated files, or complete functions with clear instructions on how to implement them. This applies to all files except style.css, for which you should always respond with clear instructions for the update. Don't mention files that don't require updates. Your responses should be formatted for convenient copy-pasting. 
+Please make sure to only return either complete, updated files, or complete functions with clear instructions on how to implement them. This applies to all files except style.css, for which you should always respond with clear instructions for the update. Don't mention files that don't require updates. Your responses should be formatted for convenient copy-pasting.
+
+If you make changes to the code, please ensure to follow these directions: If the change is only a handful of lines, provide the original and updated lines with context or instructions; otherwise, return either complete, updated files, or complete functions with clear instructions on how to implement them. This choice is up to your discretion. This applies to all files except style.css, for which you should always respond with clear instructions for the update, since it's so long. Don't mention files that don't require updates. Your responses should be formatted for convenient copy-pasting.
+
+
+When providing code updates, please adhere to the following format:
+For minor changes (e.g., a few lines), provide both the original and modified lines, for easy ctrl+f and pasting. For major changes, provide the complete, updated file or function by your discretion. This applies to all files except style.css (since it's so long), for which you should always respond with clear instructions for the update.
+Additionally, only include modified files, and format your responses for easy copy-pasting. Do not include update comments in the code unless absolutely necessary. Your changes should be listed before the code instead.
+
+
+When providing code updates, please adhere to the following format:
+For Minor Changes(of a few lines or less): To make finding and replacing easy, provide the original code and the new version to replace it with.
+For Major Changes: At your discretion, provide either the complete, updated file or the entire updated function. Base your choice on the scale of the change and the length of the file.
+Exception for `style.css`: Given it's length, never provide the full file. Instead, provide the specific snippet to be changed or added, with clear instructions.
+Keep Code Clean: Do not add explanatory comments inside code blocks unless absolutely necessary. All explanations should be in the summary at the top.
+General Rule: Only include code from files that have actually been modified. If you need to mention code in an unchanged file, the function name should be sufficient.
