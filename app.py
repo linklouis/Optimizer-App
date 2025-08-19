@@ -116,7 +116,7 @@ def run_optimization_task(task_id, config):
                 offcuts_with_id['type'] = 'Offcut'
                 stock_sheets.extend(offcuts_with_id.to_dict('records'))
 
-        layouts, remaining, score = optimize_multiple_sheets(
+        layouts, remaining, score, final_tree_update = optimize_multiple_sheets(
             parts_to_cut, stock_sheets, config, optional_stock_parts, is_stock_only_job, progress_callback,
             max_offcut_quantity=max_offcut_quantity
         )
@@ -136,6 +136,9 @@ def run_optimization_task(task_id, config):
         optimization_result = prepare_results_for_render(
             final_layouts, remaining, final_score, config, opt_elapsed_time, ideal_score, score_percentage
         )
+        
+        if optimization_result:
+            optimization_result['final_tree_update'] = final_tree_update
         
         with tasks_lock:
             if task_id in tasks:

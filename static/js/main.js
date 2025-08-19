@@ -211,11 +211,17 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 eventSource.addEventListener('done', (event) => {
                     receivedDoneEvent = true;
+                    const result = JSON.parse(event.data); // Parse result first
+
                     if (treeVisualizer) {
+                        // Process any final node updates that arrived with the 'done' event
+                        if (result && result.final_tree_update) {
+                            treeVisualizer.addOrUpdateNodes(result.final_tree_update);
+                        }
                         treeVisualizer.activePathIds.clear();
-                        treeVisualizer.render();
+                        treeVisualizer.render(); // Now render with the guaranteed final state
                     }
-                    const result = JSON.parse(event.data);
+
                     currentState = result;
                     stateHistory = [];
                     // Only render if the result is not null

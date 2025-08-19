@@ -492,9 +492,6 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
                     tree_nodes[current_node_id]["status"] = "pruned_bound"
                     tree_update_batch[current_node_id] = tree_nodes[current_node_id].copy()
     
-    if progress_callback: # Send final update
-        if tree_update_batch:
-            progress_callback({"tree_update": list(tree_update_batch.values())})
-    
     final_layouts, remaining_parts = best_solution
-    return final_layouts, remaining_parts, best_score
+    # Return the final batch of nodes so the frontend can sync before the final render.
+    return final_layouts, remaining_parts, best_score, list(tree_update_batch.values())

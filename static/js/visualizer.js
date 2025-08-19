@@ -6,6 +6,8 @@ class TreeVisualizer {
         this.renderInterval = 250; 
         this.solutionNodeId = null;
         this.activePathIds = new Set();
+        this.minScore = Infinity;
+        this.maxScore = -Infinity;
     }
 
     addOrUpdateNodes(nodeList, activePathIds = []) {
@@ -13,8 +15,12 @@ class TreeVisualizer {
         this.activePathIds = new Set(activePathIds);
 
         nodeList.forEach(nodeData => {
-            // If the current solution node is being updated to a non-solution status, clear it.
-            // This handles cases where a better solution is found and the old one is demoted.
+            // Update min/max scores for the color scale
+            if (nodeData.score !== undefined) {
+                this.minScore = Math.min(this.minScore, nodeData.score);
+                this.maxScore = Math.max(this.maxScore, nodeData.score);
+            }
+
             if (this.solutionNodeId === nodeData.id && nodeData.status !== 'solution') {
                 this.solutionNodeId = null;
                 hasChanges = true;
@@ -31,7 +37,6 @@ class TreeVisualizer {
                     x: existingNode?.x ?? initialX, y: existingNode?.y ?? initialY
                 };
 
-                // Set the new solution if one arrives in the batch.
                 if (nodeData.status === 'solution') {
                     this.solutionNodeId = nodeData.id;
                 }
@@ -47,6 +52,26 @@ class TreeVisualizer {
             this.render();
             this.lastRenderTime = now;
         }
+    }
+
+    _getScoreColor(score) {
+        if (score === undefined || this.minScore === Infinity || this.maxScore === -Infinity) {
+            return 'var(--bg-secondary)'; // Default color if score is not available
+        }
+
+        const range = this.maxScore - this.minScore;
+        if (range < 1e-6) { // If all scores are effectively the same
+            return 'hsl(60, 60%, 50%)'; // Return a neutral yellow
+        }
+
+        // Normalize score to be between 0 (worst) and 1 (best)
+        const normalized = (score - this.minScore) / range;
+
+        // Map normalized value to a hue from red (0) to green (120)
+        const hue = normalized * 120;
+        
+        // Use HSL for easy color interpolation
+        return `hsl(${hue}, 70%, 50%)`;
     }
 
     _calculateChildCounts() {
@@ -70,12 +95,11 @@ class TreeVisualizer {
         const kAttract = 0.5;
         const leftRepel = 100;
         const damping = 0.9;
-        const iterations = 3;
+        const iterations = 50;
 
-        // Pin the root node
         const rootNode = this.nodes[0];
         if (rootNode) {
-            rootNode.x = 30; // Pin to the left side
+            rootNode.x = 30;
             rootNode.y = height / 2;
         }
 
@@ -92,11 +116,11 @@ class TreeVisualizer {
                         n1.fx += (dx / Math.sqrt(distanceSq)) * force;
                         n1.fy += (dy / Math.sqrt(distanceSq)) * force;
                     } else {
-                        n1.fx += (Math.random() - 0.5) * kRepel; // Randomly push apart if overlapping
+                        n1.fx += (Math.random() - 0.5) * kRepel;
                         n1.fy += (Math.random() - 0.5) * kRepel;
                     }
                 }
-                n1.fx += leftRepel / (n1.x + 1); // Repel from the left edge
+                n1.fx += leftRepel / (n1.x + 1);
             }
 
             for (const node of nodes) {
@@ -112,7 +136,7 @@ class TreeVisualizer {
             }
             
             for (const node of nodes) {
-                if (node.id === 0) continue; // Do not move the root node
+                if (node.id === 0) continue;
                 node.vx = (node.vx || 0) * damping + node.fx * 0.01;
                 node.vy = (node.vy || 0) * damping + node.fy * 0.01;
                 node.x += node.vx;
@@ -126,9 +150,6 @@ class TreeVisualizer {
 
     render() {
         if (!this.svg) return;
-        
-        // --- TEMPORARY DEBUGGING ---
-        console.log(`Final Render Triggered. Solution Node ID: ${this.solutionNodeId}`);
         
         const { width, height } = this.svg.parentElement.getBoundingClientRect();
         if (width === 0 || height === 0) return;
@@ -189,8 +210,14 @@ class TreeVisualizer {
             
             const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
             circle.setAttribute('r', 5);
-            g.appendChild(circle);
+
+            // Apply score color only to non-special nodes
+            if (!isRoot && !isHighBranching && node.status !== 'solution') {
+                const color = this._getScoreColor(node.score);
+                circle.setAttribute('style', `fill: ${color}`);
+            }
             
+            g.appendChild(circle);
             nodeGroup.appendChild(g);
         });
 
@@ -203,6 +230,8 @@ class TreeVisualizer {
         this.nodes = {};
         this.solutionNodeId = null;
         this.activePathIds = new Set();
+        this.minScore = Infinity;
+        this.maxScore = -Infinity;
         if (this.svg) this.svg.innerHTML = '';
     }
 }
