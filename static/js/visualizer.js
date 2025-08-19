@@ -226,16 +226,20 @@ class TreeVisualizer {
         return bestPath;
     }
 
-    _runLayoutSimulation(width, height) {
+_runLayoutSimulation(width, height) {
         const nodes = Object.values(this.nodes);
         if (nodes.length < 2) return;
 
+        // --- Tuned Physics Parameters ---
         const kRepel = 2000;
-        const kAttract = 5;
-        const damping = 0;
+        const kAttract = 0.1;
+        const kAlign = 0.05; // Strength of the new directional alignment force
+        const damping = 0.3;
 
+        // 1. Reset forces for this frame
         for (const n1 of nodes) {
             n1.fx = 0; n1.fy = 0;
+            // 2. Repulsion Force (pushes all nodes away from each other)
             for (const n2 of nodes) {
                 if (n1 === n2) continue;
                 const dx = n1.x - n2.x;
@@ -248,24 +252,45 @@ class TreeVisualizer {
             }
         }
 
+        // 3. Attraction and Alignment Forces
         for (const node of nodes) {
             const parent = this.nodes[node.parent];
-            if (parent) {
-                const dx = parent.x - node.x;
-                const dy = parent.y - node.y;
-                node.fx += dx * kAttract;
-                node.fy += dy * kAttract;
-                parent.fx -= dx * kAttract;
-                parent.fy -= dy * kAttract;
+            if (!parent) continue;
+
+            // --- Attraction Force (pulls node to parent) ---
+            const dx_attract = parent.x - node.x;
+            const dy_attract = parent.y - node.y;
+            node.fx += dx_attract * kAttract;
+            node.fy += dy_attract * kAttract;
+            // The parent is pushed in the opposite direction
+            parent.fx -= dx_attract * kAttract;
+            parent.fy -= dy_attract * kAttract;
+
+            // --- NEW: Directional Alignment Force ---
+            const grandparent = this.nodes[parent.parent];
+            if (grandparent) {
+                // Get the vector from grandparent to parent (the "flow" direction)
+                const flow_dx = parent.x - grandparent.x;
+                const flow_dy = parent.y - grandparent.y;
+
+                // Nudge the current node to follow that same direction from its parent
+                const target_x = parent.x + flow_dx;
+                const target_y = parent.y + flow_dy;
+                
+                node.fx += (target_x - node.x) * kAlign;
+                node.fy += (target_y - node.y) * kAlign;
             }
         }
         
+        // 4. Update Velocities and Positions
         const rootNode = this.nodes[0];
         for (const node of nodes) {
             if (node === rootNode) {
                 node.x = 30; node.y = height / 2; continue;
             }
-            // Increased from 0.01 to 0.02 to make forces apply more strongly
+            
+            node.fx += 0.1; // Constant rightward force
+
             node.vx = (node.vx || 0) * damping + node.fx * 0.02;
             node.vy = (node.vy || 0) * damping + node.fy * 0.02;
             node.x += node.vx;
