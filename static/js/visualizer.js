@@ -1,8 +1,11 @@
 class TreeVisualizer {
     constructor(svgId) {
         this.svg = document.getElementById(svgId);
-        this.linkGroup = this.svg.appendChild(document.createElementNS('http://www.w3.org/2000/svg', 'g'));
-        this.nodeGroup = this.svg.appendChild(document.createElementNS('http://www.w3.org/2000/svg', 'g'));
+        
+        // Create a wrapper group for zoom and pan
+        this.zoomWrapper = this.svg.appendChild(document.createElementNS('http://www.w3.org/2000/svg', 'g'));
+        this.linkGroup = this.zoomWrapper.appendChild(document.createElementNS('http://www.w3.org/2000/svg', 'g'));
+        this.nodeGroup = this.zoomWrapper.appendChild(document.createElementNS('http://www.w3.org/2000/svg', 'g'));
         
         this.nodes = {};
         this.pendingNodes = [];
@@ -16,25 +19,36 @@ class TreeVisualizer {
         this.maxScore = -Infinity;
 
         this.framesSinceLastSpawn = 0;
-        this.spawnInterval = 5; // Introduce a node every 5 frames
+        this.spawnInterval = 5;
+
+        // --- New properties for Zoom and Pan ---
+        this.zoom = { x: 0, y: 0, scale: 1.0 };
+        this.isPanning = false;
+        this.panStart = { x: 0, y: 0 };
+
+        // --- Event Listeners for Navigation ---
+        this.svg.addEventListener('wheel', this._handleZoom.bind(this), { passive: false });
+        this.svg.addEventListener('mousedown', this._handlePanStart.bind(this));
+        this.svg.addEventListener('mousemove', this._handlePanMove.bind(this));
+        this.svg.addEventListener('mouseup', this._handlePanEnd.bind(this));
+        this.svg.addEventListener('mouseleave', this._handlePanEnd.bind(this));
     }
 
     // --- Public Methods ---
 
     start() {
-        if (this.animationFrameId) return; // Already running
+        if (this.animationFrameId) return;
         this.clear();
         this._animationLoop();
     }
 
     stop() {
-        // TODO uncomment this line to stop the animation
-        // if (this.animationFrameId) {
-        //     cancelAnimationFrame(this.animationFrameId);
-        //     this.animationFrameId = null;
-        // }
-        this._introducePendingNodes(true); // Introduce all remaining nodes
-        this._updatePositions(); // Final position update
+        if (this.animationFrameId) {
+             cancelAnimationFrame(this.animationFrameId);
+             this.animationFrameId = null;
+        }
+        this._introducePendingNodes(true);
+        this._updatePositions();
     }
     
     addOrUpdateNodes(nodeList, activePathIds = []) {
@@ -54,6 +68,49 @@ class TreeVisualizer {
         this.nodeGroup.innerHTML = '';
         this.linkGroup.innerHTML = '';
         this.framesSinceLastSpawn = 0;
+        this.zoom = { x: 50, y: 150, scale: 1.0 }; // Reset zoom on clear
+    }
+
+    // --- Navigation Handlers ---
+
+    _handleZoom(e) {
+        e.preventDefault();
+        const zoomIntensity = 0.1;
+        const wheel = e.deltaY < 0 ? 1 : -1;
+        const newScale = this.zoom.scale * (1 + wheel * zoomIntensity);
+
+        // Get mouse position relative to the SVG
+        const point = new DOMPoint(e.clientX, e.clientY);
+        const transformedPoint = point.matrixTransform(this.svg.getScreenCTM().inverse());
+
+        // Update zoom state
+        this.zoom.x = transformedPoint.x - (transformedPoint.x - this.zoom.x) * (newScale / this.zoom.scale);
+        this.zoom.y = transformedPoint.y - (transformedPoint.y - this.zoom.y) * (newScale / this.zoom.scale);
+        this.zoom.scale = newScale;
+    }
+
+    _handlePanStart(e) {
+        e.preventDefault();
+        this.isPanning = true;
+        this.panStart.x = e.clientX;
+        this.panStart.y = e.clientY;
+        this.svg.style.cursor = 'grabbing';
+    }
+
+    _handlePanMove(e) {
+        if (!this.isPanning) return;
+        e.preventDefault();
+        const dx = (e.clientX - this.panStart.x) / this.zoom.scale;
+        const dy = (e.clientY - this.panStart.y) / this.zoom.scale;
+        this.zoom.x += dx;
+        this.zoom.y += dy;
+        this.panStart.x = e.clientX;
+        this.panStart.y = e.clientY;
+    }
+
+    _handlePanEnd(e) {
+        this.isPanning = false;
+        this.svg.style.cursor = 'grab';
     }
 
     // --- Animation and Drawing Loop ---
@@ -62,6 +119,8 @@ class TreeVisualizer {
         const { width, height } = this.svg.parentElement.getBoundingClientRect();
         if (width > 0 && height > 0) {
             this.svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+            this.zoomWrapper.setAttribute('transform', `translate(${this.zoom.x}, ${this.zoom.y}) scale(${this.zoom.scale})`);
+            
             this._introducePendingNodes();
             this._runLayoutSimulation(width, height);
             this._updatePositions();
@@ -71,7 +130,6 @@ class TreeVisualizer {
 
     _introducePendingNodes(introduceAll = false) {
         if (introduceAll) {
-            // When stopping, introduce all remaining nodes at once
             this.pendingNodes.forEach(this._processSingleNode.bind(this));
             this.pendingNodes = [];
             return;
@@ -79,13 +137,12 @@ class TreeVisualizer {
 
         this.framesSinceLastSpawn++;
         if (this.pendingNodes.length > 0 && this.framesSinceLastSpawn >= this.spawnInterval) {
-            const nodeData = this.pendingNodes.shift(); // Get one node from the front
+            const nodeData = this.pendingNodes.shift();
             this._processSingleNode(nodeData);
             this.framesSinceLastSpawn = 0;
         }
     }
 
-    // This new helper contains the logic for processing one node
     _processSingleNode(nodeData) {
         if (nodeData.score !== undefined) {
             this.minScore = Math.min(this.minScore, nodeData.score);
@@ -104,13 +161,31 @@ class TreeVisualizer {
             let initialX, initialY;
 
             if (isRoot) {
-                const { height } = this.svg.parentElement.getBoundingClientRect();
-                initialX = 30;
-                initialY = height > 0 ? height / 2 : 150;
+                initialX = 0; // Root starts at the origin of the zoomable world
+                initialY = 0;
+            } else if (parentPos) {
+                const grandparentPos = this.nodes[parentPos.parent];
+                const spawn_distance = 20;
+
+                if (grandparentPos) {
+                    let flow_dx = parentPos.x - grandparentPos.x;
+                    let flow_dy = parentPos.y - grandparentPos.y;
+                    const magnitude = Math.sqrt(flow_dx * flow_dx + flow_dy * flow_dy);
+                    if (magnitude > 0.1) {
+                        initialX = parentPos.x + (flow_dx / magnitude) * spawn_distance;
+                        initialY = parentPos.y + (flow_dy / magnitude) * spawn_distance;
+                    } else {
+                        const angle = Math.random() * 2 * Math.PI;
+                        initialX = parentPos.x + Math.cos(angle) * spawn_distance;
+                        initialY = parentPos.y + Math.sin(angle) * spawn_distance;
+                    }
+                } else {
+                    const angle = Math.random() * 2 * Math.PI;
+                    initialX = parentPos.x + Math.cos(angle) * spawn_distance;
+                    initialY = parentPos.y + Math.sin(angle) * spawn_distance;
+                }
             } else {
-                const fallbackX = this.svg.clientWidth > 0 ? this.svg.clientWidth / 2 : 200;
-                initialX = parentPos ? parentPos.x + 10 : fallbackX;
-                initialY = parentPos ? parentPos.y + (Math.random() - 0.5) * 10 : 30;
+                initialX = 0; initialY = 0;
             }
 
             this.nodes[nodeData.id] = { 
@@ -131,7 +206,6 @@ class TreeVisualizer {
         const bestPathNodeIds = this._getBestPath();
 
         Object.values(this.nodes).forEach(node => {
-            // Update or create node SVG element
             let g = this.svgNodes[node.id];
             if (!g) {
                 g = this._createNodeElement();
@@ -139,7 +213,6 @@ class TreeVisualizer {
                 this.nodeGroup.appendChild(g);
             }
             
-            // Update node classes and styles
             const isRoot = node.id === 0;
             const isBest = bestPathNodeIds.has(node.id);
             const isActive = this.activePathIds.has(node.id);
@@ -161,7 +234,6 @@ class TreeVisualizer {
 
             g.setAttribute('transform', `translate(${node.x}, ${node.y})`);
 
-            // Update or create link SVG element
             const parent = this.nodes[node.parent];
             if (parent) {
                 const linkId = `${parent.id}-${node.id}`;
@@ -190,8 +262,6 @@ class TreeVisualizer {
         return g;
     }
     
-    // --- Helper Methods ---
-
     _getScoreColor(score) {
         if (score === undefined || this.minScore === Infinity || this.maxScore === -Infinity) {
             return 'var(--bg-secondary)';
@@ -226,20 +296,17 @@ class TreeVisualizer {
         return bestPath;
     }
 
-_runLayoutSimulation(width, height) {
+    _runLayoutSimulation(width, height) {
         const nodes = Object.values(this.nodes);
         if (nodes.length < 2) return;
 
-        // --- Tuned Physics Parameters ---
         const kRepel = 2000;
-        const kAttract = 0.1;
-        const kAlign = 0.05; // Strength of the new directional alignment force
+        const kAttract = 2;
+        const kAlign = 0.05;
         const damping = 0.3;
 
-        // 1. Reset forces for this frame
         for (const n1 of nodes) {
             n1.fx = 0; n1.fy = 0;
-            // 2. Repulsion Force (pushes all nodes away from each other)
             for (const n2 of nodes) {
                 if (n1 === n2) continue;
                 const dx = n1.x - n2.x;
@@ -252,52 +319,42 @@ _runLayoutSimulation(width, height) {
             }
         }
 
-        // 3. Attraction and Alignment Forces
         for (const node of nodes) {
             const parent = this.nodes[node.parent];
             if (!parent) continue;
 
-            // --- Attraction Force (pulls node to parent) ---
             const dx_attract = parent.x - node.x;
             const dy_attract = parent.y - node.y;
             node.fx += dx_attract * kAttract;
             node.fy += dy_attract * kAttract;
-            // The parent is pushed in the opposite direction
             parent.fx -= dx_attract * kAttract;
             parent.fy -= dy_attract * kAttract;
 
-            // --- NEW: Directional Alignment Force ---
             const grandparent = this.nodes[parent.parent];
             if (grandparent) {
-                // Get the vector from grandparent to parent (the "flow" direction)
                 const flow_dx = parent.x - grandparent.x;
                 const flow_dy = parent.y - grandparent.y;
-
-                // Nudge the current node to follow that same direction from its parent
                 const target_x = parent.x + flow_dx;
                 const target_y = parent.y + flow_dy;
-                
                 node.fx += (target_x - node.x) * kAlign;
                 node.fy += (target_y - node.y) * kAlign;
             }
         }
         
-        // 4. Update Velocities and Positions
         const rootNode = this.nodes[0];
         for (const node of nodes) {
             if (node === rootNode) {
-                node.x = 30; node.y = height / 2; continue;
+                node.x = 0; 
+                node.y = 0; 
+                continue;
             }
-            
-            node.fx += 0.1; // Constant rightward force
 
             node.vx = (node.vx || 0) * damping + node.fx * 0.02;
             node.vy = (node.vy || 0) * damping + node.fy * 0.02;
             node.x += node.vx;
             node.y += node.vy;
-
-            node.x = Math.max(10, Math.min(width - 10, node.x));
-            node.y = Math.max(10, Math.min(height - 10, node.y));
+            
+            // Removed the boundary constraints to allow the tree to expand
         }
     }
 }
