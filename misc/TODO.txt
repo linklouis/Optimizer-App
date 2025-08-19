@@ -157,6 +157,7 @@ QUESTIONS
     - Should the top configurator sections be open or closed by default?
     - ---> Prefer layouts that are used multiple/more times?
 
+UNCOMMENT TODO LINES IN VISUALIZER
 
 
 

@@ -162,7 +162,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // --- Initialize Visualizer ---
             const visualizerSvgId = 'path-visualization-svg'; 
             treeVisualizer = new TreeVisualizer(visualizerSvgId);
-            treeVisualizer.clear();
+            treeVisualizer.start();
 
             progressBarFill.style.width = '0%';
             partProgressPercent.textContent = '0%';
@@ -219,7 +219,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             treeVisualizer.addOrUpdateNodes(result.final_tree_update);
                         }
                         treeVisualizer.activePathIds.clear();
-                        treeVisualizer.render(); // Now render with the guaranteed final state
+                        treeVisualizer.stop(); // Stop the animation and draw the final state
                     }
 
                     currentState = result;
