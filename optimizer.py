@@ -294,15 +294,10 @@ def _calculate_bound(remaining_parts: list, current_raw_score: float, used_layou
                 optimistic_future_bonuses += (deficit / part['target_stock']) * (part_area / reference_area) * w_stock_fill
 
     # --- 3. Estimate future penalties (optimistic) ---
-    remaining_area = sum(p['length'] * p['width'] for p in remaining_parts)
-    min_additional_sheets = math.ceil(remaining_area / reference_area) if reference_area > 0 else 0
-    
-    future_sheets_penalty = min_additional_sheets * config.get('w_sheets', 1.0)
-    future_cuts_penalty = 0 # Cuts penalty is part of layout_score, not a global penalty
-    
-    # Assume a fraction of future sheets might require a new unique layout
-    optimistic_new_layouts = math.ceil(min_additional_sheets * 0.1) 
-    future_layouts_penalty = optimistic_new_layouts * config.get('w_unique_layouts', 0.5)
+    # EXPERIMENT: Temporarily disable future penalties to test bound accuracy.
+    future_sheets_penalty = 0
+    future_layouts_penalty = 0
+    future_cuts_penalty = 0
 
     # --- 4. Combine for the final bound ---
     upper_bound = (
@@ -315,6 +310,65 @@ def _calculate_bound(remaining_parts: list, current_raw_score: float, used_layou
     )
     
     return upper_bound
+
+
+def _find_initial_greedy_solution(
+    initial_parts: Dict[int, Part],
+    stock_sheets: List[Dict],
+    config: Dict,
+    reference_area: float,
+    max_offcut_quantity: float,
+    optional_parts: List[Part],
+    is_stock_only_job: bool
+) -> Tuple[List[Dict], float]:
+    """
+    Finds a single, good-enough solution quickly using a greedy approach.
+    """
+    greedy_layouts = []
+    remaining_parts_list = list(initial_parts.values())
+    
+    while remaining_parts_list:
+        best_candidate_layout = None
+        best_candidate_score = -float('inf')
+
+        unique_sheets = {f"{s['length']}x{s['width']}_{s.get('type', 'Default')}": s for s in stock_sheets}.values()
+        for sheet_tpl in unique_sheets:
+            layout = run_single_sheet_optimization(
+                sheet_tpl, remaining_parts_list, config, reference_area, 
+                max_offcut_quantity, optional_parts
+            )
+            
+            if layout and layout.get("placed_parts"):
+                # Score layout based on a simple efficiency metric (score per part placed)
+                num_placed = len([p for p in layout['placed_parts'] if p['part_id'] in initial_parts])
+                if num_placed > 0:
+                    score = calculate_layout_score(layout, sheet_tpl, config, config['min_offcut_dim'], reference_area, max_offcut_quantity, is_stock_only_job)
+                    score_per_part = score / num_placed
+                    if score_per_part > best_candidate_score:
+                        best_candidate_score = score_per_part
+                        best_candidate_layout = layout
+        
+        if best_candidate_layout:
+            greedy_layouts.append(best_candidate_layout)
+            placed_ids = {p['part_id'] for p in best_candidate_layout['placed_parts']}
+            remaining_parts_list = [p for p in remaining_parts_list if p['part_id'] not in placed_ids]
+        else:
+            # Cannot place any more parts, break
+            break
+
+    # Calculate final score for the greedy solution
+    if not greedy_layouts:
+        return [], -float('inf')
+
+    raw_score = sum(calculate_layout_score(l, l['sheet_info'], config, config['min_offcut_dim'], reference_area, max_offcut_quantity, is_stock_only_job) for l in greedy_layouts)
+    num_sheets = len(greedy_layouts)
+    num_unique = len({get_layout_signature(l) for l in greedy_layouts})
+    
+    final_score = raw_score \
+                - num_sheets * config.get('w_sheets', 1.0) \
+                - num_unique * config.get('w_unique_layouts', 0.5)
+
+    return greedy_layouts, final_score
 
 
 def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict], config: Dict, 
@@ -359,16 +413,24 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
                 optional_parts_list.append(p_copy)
                 part_id_counter += 1
 
+    # --- SEED WITH GREEDY SOLUTION ---
+    print("--- Finding initial greedy solution ---")
+    greedy_solution, greedy_score = _find_initial_greedy_solution(
+        initial_parts_dict, stock_sheets, config, reference_area, 
+        max_offcut_quantity, optional_parts_list, is_stock_only_job,
+        tracker=score_component_tracker
+    )
+    best_solution = (greedy_solution, []) if greedy_solution else ([], list(initial_parts_dict.values()))
+    best_score = greedy_score
+    print(f"--- Initial solution found with score: {best_score:.4f} using {len(greedy_solution)} layouts ---")
+
+
+    # --- Setup Branch and Bound ---
     initial_bound = -_calculate_bound(list(initial_parts_dict.values()), 0.0, [], config, reference_area)
-    
     node_counter = 0
-    # PQ stores: (-bound, raw_score, node_id, parts_left, layouts_used)
     pq = [ (initial_bound, 0.0, node_counter, initial_parts_dict, []) ]
     node_counter += 1
     
-    best_solution = ([], list(initial_parts_dict.values()))
-    best_score = -float('inf')
-
     # --- Branch and Bound Loop ---
     while pq and (time_limit <= 0 or (time.time() - start_time) < time_limit):
         _, current_raw_score, _, current_parts, used_layouts = heapq.heappop(pq)
