@@ -281,6 +281,14 @@
                                     <label for="w_priority_offcut">Priority Offcut Bonus<span class="tooltip" data-tooltip="Large bonus for using a priority offcut.">[?]</span></label>
                                     <input type="number" step="any" id="w_priority_offcut" name="w_priority_offcut" value="{{ config.w_priority_offcut }}">
                                 </div>
+                                <div>
+                                    <label for="expected_max_cuts_per_sheet">Expected Max Cuts <span class="tooltip" data-tooltip="The expected number of parts on a typical sheet. Used to normalize the '# of Cuts' penalty to a value between 0-1.">[?]</span></label>
+                                    <input type="number" step="any" min="1" id="expected_max_cuts_per_sheet" name="expected_max_cuts_per_sheet" value="{{ config.expected_max_cuts_per_sheet }}">
+                                </div>
+                                <div>
+                                    <label for="max_unique_layouts">Max Unique Layouts <span class="tooltip" data-tooltip="Limits the total number of unique cutting patterns in the solution. Set to 0 for no limit.">[?]</span></label>
+                                    <input type="number" step="1" min="0" id="max_unique_layouts" name="max_unique_layouts" value="{{ config.max_unique_layouts }}">
+                                </div>
                             </div>
                         </section>
                     </div>

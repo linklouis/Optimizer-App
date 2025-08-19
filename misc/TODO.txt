@@ -47,6 +47,8 @@ FEATURES
         - -----> Add an "accept early" button to the Optimizing Layouts... loading card?
         - Allow the user to apply Stock Part Layout standardization post-opimization?
         - Be able to click to make an area an offcut
+        - Click to remove Offcut as sheets. (Would have to run optimization again?)
+        - Allow greedy algorithm as fallback
     
     Optimizer
         - ✓ Only keep reusing a layout of stock parts until another layout is better because the number of the original stock parts needed has been filled.
@@ -170,7 +172,7 @@ Additionally, only include modified files, and format your responses for easy co
 
 
 When providing code updates, please adhere to the following format:
-For Minor Changes(of a few lines or less): To make finding and replacing easy, provide the original code and the new version to replace it with.
+For Minor Changes(of a few lines or less): To make finding and replacing easy, provide the original code and the new version to replace it with. Make sure these are in separate code blocks. Any text to mark the original vs new should be outside of the code blocks.
 For Major Changes: At your discretion, provide either the complete, updated file or the entire updated function. Base your choice on the scale of the change and the length of the file.
 Exception for `style.css`: Given it's length, never provide the full file. Instead, provide the specific snippet to be changed or added, with clear instructions.
 Keep Code Clean: Do not add explanatory comments inside code blocks unless absolutely necessary. All explanations should be in the summary at the top.

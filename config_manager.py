@@ -10,6 +10,7 @@ DEFAULT_CONFIG = {
     'search_time_limit': 5.0,
     'branching_factor': 1,
     'expected_max_cuts_per_sheet': 10.0,
+    'max_unique_layouts': 0,
     'selected_stock_parts': [],
     'required_stock_quantities': {},
     'dark_mode': False,
@@ -59,7 +60,8 @@ def update_config_from_form(config, form_data):
     
     if 'branching_factor' in form_data: config['branching_factor'] = form_data.get('branching_factor', type=int)
     if 'expected_max_cuts_per_sheet' in form_data: config['expected_max_cuts_per_sheet'] = form_data.get('expected_max_cuts_per_sheet', type=float)
-    
+    if 'max_unique_layouts' in form_data: config['max_unique_layouts'] = form_data.get('max_unique_layouts', type=int)
+
     config['allow_rotation'] = form_data.get('allow_rotation') in ['true', 'on']
     config['use_offcuts'] = form_data.get('use_offcuts') in ['true', 'on']
     config['add_stock_parts'] = form_data.get('add_stock_parts') in ['true', 'on']
