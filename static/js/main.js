@@ -212,6 +212,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 eventSource.addEventListener('done', (event) => {
                     receivedDoneEvent = true;
                     if (treeVisualizer) {
+                        treeVisualizer.activePathIds.clear();
                         treeVisualizer.render();
                     }
                     const result = JSON.parse(event.data);

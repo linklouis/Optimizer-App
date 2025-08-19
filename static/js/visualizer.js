@@ -13,6 +13,13 @@ class TreeVisualizer {
         this.activePathIds = new Set(activePathIds);
 
         nodeList.forEach(nodeData => {
+            // If the current solution node is being updated to a non-solution status, clear it.
+            // This handles cases where a better solution is found and the old one is demoted.
+            if (this.solutionNodeId === nodeData.id && nodeData.status !== 'solution') {
+                this.solutionNodeId = null;
+                hasChanges = true;
+            }
+
             const existingNode = this.nodes[nodeData.id];
             if (!existingNode || existingNode.status !== nodeData.status) {
                 const parentPos = existingNode?.parent ? this.nodes[existingNode.parent] : this.nodes[nodeData.parent];
@@ -24,7 +31,10 @@ class TreeVisualizer {
                     x: existingNode?.x ?? initialX, y: existingNode?.y ?? initialY
                 };
 
-                if (nodeData.status === 'solution') this.solutionNodeId = nodeData.id;
+                // Set the new solution if one arrives in the batch.
+                if (nodeData.status === 'solution') {
+                    this.solutionNodeId = nodeData.id;
+                }
                 hasChanges = true;
             }
         });
@@ -39,6 +49,19 @@ class TreeVisualizer {
         }
     }
 
+    _calculateChildCounts() {
+        const childCounts = {};
+        for (const nodeId in this.nodes) {
+            childCounts[nodeId] = 0;
+        }
+        for (const node of Object.values(this.nodes)) {
+            if (node.parent !== null && childCounts.hasOwnProperty(node.parent)) {
+                childCounts[node.parent]++;
+            }
+        }
+        return childCounts;
+    }
+
     _runLayoutSimulation(width, height) {
         const nodes = Object.values(this.nodes);
         if (nodes.length < 2) return;
@@ -47,7 +70,7 @@ class TreeVisualizer {
         const kAttract = 0.5;
         const leftRepel = 100;
         const damping = 0.9;
-        const iterations = 50;
+        const iterations = 3;
 
         // Pin the root node
         const rootNode = this.nodes[0];
@@ -104,6 +127,9 @@ class TreeVisualizer {
     render() {
         if (!this.svg) return;
         
+        // --- TEMPORARY DEBUGGING ---
+        console.log(`Final Render Triggered. Solution Node ID: ${this.solutionNodeId}`);
+        
         const { width, height } = this.svg.parentElement.getBoundingClientRect();
         if (width === 0 || height === 0) return;
         
@@ -111,6 +137,7 @@ class TreeVisualizer {
         this.svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
 
         this._runLayoutSimulation(width, height);
+        const childCounts = this._calculateChildCounts();
 
         const bestPathNodeIds = new Set();
         const bestPathLinkIds = new Set();
@@ -147,8 +174,17 @@ class TreeVisualizer {
 
             const isBest = bestPathNodeIds.has(node.id);
             const isActive = this.activePathIds.has(node.id);
+            const isHighBranching = (childCounts[node.id] || 0) > 3;
+            const isRoot = node.id === 0;
+
             const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-            g.setAttribute('class', `node status-${node.status} ${isBest ? 'on-best-path' : ''} ${isActive ? 'on-active-path' : ''}`);
+            const classList = ['node', `status-${node.status}`];
+            if (isBest) classList.push('on-best-path');
+            if (isActive) classList.push('on-active-path');
+            if (isHighBranching) classList.push('high-branching');
+            if (isRoot) classList.push('is-root');
+            
+            g.setAttribute('class', classList.join(' '));
             g.setAttribute('transform', `translate(${node.x}, ${node.y})`);
             
             const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');

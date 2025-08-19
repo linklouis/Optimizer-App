@@ -24,6 +24,10 @@
     --stock-part-fill: #4ade80;
     --offcut-fill: #cbd5e1;
     --dim-line-color: #f87171;
+
+    --accent-color-alt: #8855ff; /* A distinct purple for branching nodes */
+    --accent-color-gold: #ffc700;
+    --accent-color-gold-dark: #d4a600;
 }
 
 body.dark-mode {
@@ -382,6 +386,7 @@ th .select-all-parts-in-file { cursor: pointer; }
     padding: 2rem;
     width: 100%;
     /*max-width: 1200px; /* Allow panel to be wider */
+    max-height: 80vh; /* Limit height to 80% of viewport */
     box-shadow: 0 10px 25px -5px var(--shadow-color);
     display: flex;
     flex-direction: row; /* Change to row for two columns */
@@ -587,6 +592,7 @@ input:checked + .slider:before { transform: translateX(20px); }
     transition: all 0.2s;
 }
 
+/* Base Node Statuses (Lowest Precedence) */
 #path-visualization-svg .node.status-explored circle,
 #path-visualization-svg .node.status-exploring circle {
     fill: var(--bg-secondary);
@@ -595,7 +601,7 @@ input:checked + .slider:before { transform: translateX(20px); }
 }
 
 #path-visualization-svg .node.status-pruned_bound circle {
-    fill: var(--danger); /* Solid red fill */
+    fill: var(--danger);
     stroke: var(--danger-bg);
     opacity: 0.8;
 }
@@ -605,11 +611,33 @@ input:checked + .slider:before { transform: translateX(20px); }
     stroke: var(--success);
 }
 
+/* Modifier for high-branching nodes */
+#path-visualization-svg .node.high-branching > circle {
+  fill: var(--accent-color-alt);
+}
+
+/* General style for any node on the best path */
 #path-visualization-svg .node.on-best-path circle {
-    stroke-width: 2px;
+    fill: var(--primary-hover); /* Added fill to make path visible */
+    stroke-width: 2.5px;
     stroke: var(--primary);
 }
 
+/* Root node styles (Highest Precedence) */
+#path-visualization-svg .node.is-root.is-root > circle {
+  fill: var(--accent-color-gold);
+  stroke: var(--accent-color-gold-dark);
+  r: 7px;
+}
+
+/* Override for the root node WHEN it is on the best path */
+#path-visualization-svg .node.on-best-path.is-root > circle {
+  fill: var(--accent-color-gold); /* Re-asserts gold fill */
+  stroke: var(--primary); /* Keeps the best-path stroke color */
+  stroke-width: 3px;
+}
+
+/* Link Styles */
 #path-visualization-svg .link.on-best-path {
     stroke: var(--primary);
     stroke-width: 2.5px;
@@ -624,5 +652,3 @@ input:checked + .slider:before { transform: translateX(20px); }
 #path-visualization-svg .link.on-active-path {
     stroke-width: 2px;
 }
-
-
