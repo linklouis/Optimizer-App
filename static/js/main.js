@@ -205,7 +205,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (data.sheets_in_best_solution !== undefined && data.sheets_in_best_solution !== null) sheetsUsedValue.textContent = data.sheets_in_best_solution;
                     // --- Update Visualizer ---
                     if (data.tree_update && treeVisualizer) {
-                        treeVisualizer.addOrUpdateNodes(data.tree_update, data.active_path_ids);
+                        treeVisualizer.addOrUpdateNodes(data.tree_update);
                     }
                 });
 

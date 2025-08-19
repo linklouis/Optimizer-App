@@ -410,20 +410,13 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
 
         current_time = time.time()
         if progress_callback and (current_time - last_update_time > 0.2):
-            active_path_ids = []
-            curr_p_id = parent_node_id
-            while curr_p_id is not None:
-                active_path_ids.append(curr_p_id)
-                curr_p_id = tree_nodes.get(curr_p_id, {}).get("parent")
-
             progress_data = {
                 "part_progress": int(((total_initial_parts - len(current_parts)) / total_initial_parts) * 100 if total_initial_parts > 0 else 100),
                 "elapsed_time": current_time - start_time,
                 "time_limit": time_limit, "nodes_explored": node_counter,
                 "current_best_score": best_score if best_score > -float('inf') else None,
                 "sheets_in_best_solution": len(best_solution[0]) if best_solution[0] else None,
-                "tree_update": list(tree_update_batch.values()),
-                "active_path_ids": active_path_ids
+                "tree_update": list(tree_update_batch.values())
             }
             progress_callback(progress_data)
             tree_update_batch.clear()

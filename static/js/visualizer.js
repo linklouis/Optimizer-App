@@ -14,7 +14,7 @@ class TreeVisualizer {
         
         this.animationFrameId = null;
         this.solutionNodeId = null;
-        this.activePathIds = new Set();
+        this.lastAddedNodeId = null;
         this.minScore = Infinity;
         this.maxScore = -Infinity;
 
@@ -48,11 +48,10 @@ class TreeVisualizer {
              this.animationFrameId = null;
         }
         this._introducePendingNodes(true);
-        this._updatePositions();
+        this._updatePositions(this._calculateChildCounts());
     }
     
-    addOrUpdateNodes(nodeList, activePathIds = []) {
-        this.activePathIds = new Set(activePathIds);
+    addOrUpdateNodes(nodeList) {
         this.pendingNodes.push(...nodeList);
     }
 
@@ -62,13 +61,14 @@ class TreeVisualizer {
         this.svgNodes = {};
         this.svgLinks = {};
         this.solutionNodeId = null;
-        this.activePathIds = new Set();
+        this.lastAddedNodeId = null;
         this.minScore = Infinity;
         this.maxScore = -Infinity;
         this.nodeGroup.innerHTML = '';
         this.linkGroup.innerHTML = '';
         this.framesSinceLastSpawn = 0;
-        this.zoom = { x: 50, y: 150, scale: 1.0 }; // Reset zoom on clear
+        const { width, height } = this.svg.parentElement.getBoundingClientRect();
+        this.zoom = { x: width / 2, y: height / 2, scale: 1.0 };
     }
 
     // --- Navigation Handlers ---
@@ -79,11 +79,9 @@ class TreeVisualizer {
         const wheel = e.deltaY < 0 ? 1 : -1;
         const newScale = this.zoom.scale * (1 + wheel * zoomIntensity);
 
-        // Get mouse position relative to the SVG
         const point = new DOMPoint(e.clientX, e.clientY);
         const transformedPoint = point.matrixTransform(this.svg.getScreenCTM().inverse());
 
-        // Update zoom state
         this.zoom.x = transformedPoint.x - (transformedPoint.x - this.zoom.x) * (newScale / this.zoom.scale);
         this.zoom.y = transformedPoint.y - (transformedPoint.y - this.zoom.y) * (newScale / this.zoom.scale);
         this.zoom.scale = newScale;
@@ -121,9 +119,11 @@ class TreeVisualizer {
             this.svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
             this.zoomWrapper.setAttribute('transform', `translate(${this.zoom.x}, ${this.zoom.y}) scale(${this.zoom.scale})`);
             
+            const childCounts = this._calculateChildCounts();
+            
             this._introducePendingNodes();
-            this._runLayoutSimulation(width, height);
-            this._updatePositions();
+            this._runLayoutSimulation(childCounts);
+            this._updatePositions(childCounts);
         }
         this.animationFrameId = requestAnimationFrame(() => this._animationLoop());
     }
@@ -161,7 +161,7 @@ class TreeVisualizer {
             let initialX, initialY;
 
             if (isRoot) {
-                initialX = 0; // Root starts at the origin of the zoomable world
+                initialX = 0;
                 initialY = 0;
             } else if (parentPos) {
                 const grandparentPos = this.nodes[parentPos.parent];
@@ -194,6 +194,8 @@ class TreeVisualizer {
                 y: existingNode?.y ?? initialY,
                 vx: 0, vy: 0
             };
+            
+            this.lastAddedNodeId = nodeData.id;
 
             if (nodeData.status === 'solution') {
                 this.solutionNodeId = nodeData.id;
@@ -201,9 +203,21 @@ class TreeVisualizer {
         }
     }
 
-    _updatePositions() {
-        const childCounts = this._calculateChildCounts();
+    _getActivePath() {
+        const activePath = new Set();
+        if (this.lastAddedNodeId !== null) {
+            let currentNode = this.nodes[this.lastAddedNodeId];
+            while (currentNode) {
+                activePath.add(currentNode.id);
+                currentNode = this.nodes[currentNode.parent];
+            }
+        }
+        return activePath;
+    }
+
+    _updatePositions(childCounts) {
         const bestPathNodeIds = this._getBestPath();
+        const activePathNodeIds = this._getActivePath();
 
         Object.values(this.nodes).forEach(node => {
             let g = this.svgNodes[node.id];
@@ -215,7 +229,7 @@ class TreeVisualizer {
             
             const isRoot = node.id === 0;
             const isBest = bestPathNodeIds.has(node.id);
-            const isActive = this.activePathIds.has(node.id);
+            const isActive = activePathNodeIds.has(node.id);
             const isHighBranching = (childCounts[node.id] || 0) > 3;
 
             const classList = ['node', `status-${node.status}`];
@@ -244,7 +258,7 @@ class TreeVisualizer {
                     this.linkGroup.appendChild(link);
                 }
                 const isBestLink = isBest && bestPathNodeIds.has(parent.id);
-                const isActiveLink = isActive && this.activePathIds.has(parent.id);
+                const isActiveLink = isActive && activePathNodeIds.has(parent.id);
                 link.setAttribute('class', `link ${isBestLink ? 'on-best-path' : ''} ${isActiveLink ? 'on-active-path' : ''}`);
                 link.setAttribute('x1', parent.x);
                 link.setAttribute('y1', parent.y);
@@ -296,13 +310,13 @@ class TreeVisualizer {
         return bestPath;
     }
 
-    _runLayoutSimulation(width, height) {
+    _runLayoutSimulation(childCounts) {
         const nodes = Object.values(this.nodes);
         if (nodes.length < 2) return;
 
         const kRepel = 2000;
         const kAttract = 2;
-        const kAlign = 0.05;
+        const kAlign = 0.1;
         const damping = 0.3;
 
         for (const n1 of nodes) {
@@ -334,10 +348,22 @@ class TreeVisualizer {
             if (grandparent) {
                 const flow_dx = parent.x - grandparent.x;
                 const flow_dy = parent.y - grandparent.y;
-                const target_x = parent.x + flow_dx;
-                const target_y = parent.y + flow_dy;
-                node.fx += (target_x - node.x) * kAlign;
-                node.fy += (target_y - node.y) * kAlign;
+                const flow_magnitude = Math.sqrt(flow_dx * flow_dx + flow_dy * flow_dy);
+
+                if (flow_magnitude > 0.1) {
+                    const desired_distance = 20;
+                    const norm_flow_dx = (flow_dx / flow_magnitude) * desired_distance;
+                    const norm_flow_dy = (flow_dy / flow_magnitude) * desired_distance;
+
+                    const target_x = parent.x + norm_flow_dx;
+                    const target_y = parent.y + norm_flow_dy;
+                    
+                    const nodeChildCount = childCounts[node.id] || 0;
+                    const alignmentStrength = 1 + Math.log1p(nodeChildCount);
+
+                    node.fx += (target_x - node.x) * kAlign * alignmentStrength;
+                    node.fy += (target_y - node.y) * kAlign * alignmentStrength;
+                }
             }
         }
         
@@ -353,8 +379,6 @@ class TreeVisualizer {
             node.vy = (node.vy || 0) * damping + node.fy * 0.02;
             node.x += node.vx;
             node.y += node.vy;
-            
-            // Removed the boundary constraints to allow the tree to expand
         }
     }
 }
