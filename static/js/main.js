@@ -196,6 +196,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (data.nodes_explored !== undefined) nodesExploredValue.textContent = data.nodes_explored.toLocaleString();
                     if (data.current_best_score !== undefined && data.current_best_score !== null) bestScoreValue.textContent = data.current_best_score.toFixed(2);
                     if (data.sheets_in_best_solution !== undefined && data.sheets_in_best_solution !== null) sheetsUsedValue.textContent = data.sheets_in_best_solution;
+                    if (data.tree_update) {
+                        console.log("Tree Update Received:", data.tree_update);
+                    }
                 });
 
                 eventSource.addEventListener('done', (event) => {
