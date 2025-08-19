@@ -297,71 +297,60 @@
                 </form>
             </div>
 
-            <div id="results" class="tab-content">
+<div id="results" class="tab-content">
                 <div id="loading-overlay" style="display: none;">
                     <div class="loading-panel">
-                        <div class="loading-header">
-                            <i class="fa-solid fa-gears fa-spin"></i>
-                            <h2>Optimizing Layouts...</h2>
+                        <div class="loading-panel-left">
+                            <div class="loading-header">
+                                <i class="fa-solid fa-gears fa-spin"></i>
+                                <h2>Optimizing Layouts...</h2>
+                            </div>
+                    
+                            <div class="main-progress">
+                                <div class="progress-label">
+                                    <span>Part Placement Progress</span>
+                                    <span id="part-progress-percent">0%</span>
+                                </div>
+                                <div class="progress-bar-container">
+                                    <div id="progress-bar-fill" class="progress-bar-fill"></div>
+                                </div>
+                            </div>
+                    
+                            <div class="live-stats-grid">
+                                <div class="stat-card">
+                                    <span class="stat-label"><i class="fa-regular fa-clock"></i> Time</span>
+                                    <span class="stat-value" id="time-tracker-value">00:00</span>
+                                </div>
+                                <div class="stat-card">
+                                    <span class="stat-label"><i class="fa-solid fa-sitemap"></i> Nodes Explored</span>
+                                    <span class="stat-value" id="nodes-explored-value">0</span>
+                                </div>
+                                <div class="stat-card">
+                                    <span class="stat-label"><i class="fa-solid fa-star"></i> Best Score</span>
+                                    <span class="stat-value" id="best-score-value">-</span>
+                                </div>
+                                <div class="stat-card">
+                                    <span class="stat-label"><i class="fa-solid fa-file-invoice"></i> Sheets in Solution</span>
+                                    <span class="stat-value" id="sheets-used-value">-</span>
+                                </div>
+                            </div>
+                            
+                            <p class="loading-tip">
+                                <strong>Tip:</strong> Allowing more search time can improve material yield and reduce waste.
+                            </p>
                         </div>
-                
-                        <div class="main-progress">
-                            <div class="progress-label">
-                                <span>Part Placement Progress</span>
-                                <span id="part-progress-percent">0%</span>
-                            </div>
-                            <div class="progress-bar-container">
-                                <div id="progress-bar-fill" class="progress-bar-fill"></div>
+                        <div class="loading-panel-right">
+                            <div class="path-visualizer">
+                                <span class="path-visualizer-title"><i class="fa-solid fa-code-branch"></i> Optimizer Search Path</span>
+                                <div class="path-svg-container">
+                                    <svg id="path-visualization-svg"></svg>
+                                </div>
                             </div>
                         </div>
-                
-                        <div class="live-stats-grid">
-                            <div class="stat-card">
-                                <span class="stat-label"><i class="fa-regular fa-clock"></i> Time</span>
-                                <span class="stat-value" id="time-tracker-value">00:00</span>
-                            </div>
-                            <div class="stat-card">
-                                <span class="stat-label"><i class="fa-solid fa-sitemap"></i> Nodes Explored</span>
-                                <span class="stat-value" id="nodes-explored-value">0</span>
-                            </div>
-                            <div class="stat-card">
-                                <span class="stat-label"><i class="fa-solid fa-star"></i> Best Score</span>
-                                <span class="stat-value" id="best-score-value">-</span>
-                            </div>
-                            <div class="stat-card">
-                                <span class="stat-label"><i class="fa-solid fa-file-invoice"></i> Sheets in Solution</span>
-                                <span class="stat-value" id="sheets-used-value">-</span>
-                            </div>
-                        </div>
-
-                        <div class="path-visualizer">
-                            <span class="path-visualizer-title"><i class="fa-solid fa-code-branch"></i> Optimizer Search Path</span>
-                            <div class="path-svg-container">
-                                <svg id="path-visualization-svg"></svg>
-                            </div>
-                        </div>
-                        
-                        <p class="loading-tip">
-                            <strong>Tip:</strong> Allowing more search time can improve material yield and reduce waste.
-                        </p>
                     </div>
                 </div>
                 <div id="results-container"></div>
-                <template id="layout-card-template">
-                    <div class="layout-card card">
-                        <h3 class="layout-title"></h3>
-                        <div class="svg-container">
-                            <svg viewBox="-2 -2 100 100">
-                                <defs>
-                                    <pattern id="stockPattern" patternUnits="userSpaceOnUse" width="5" height="5"><rect width="5" height="5" fill="var(--stock-part-fill)"/><circle cx="2.5" cy="2.5" r="0.8" fill="rgba(0,0,0,0.4)"/></pattern>
-                                    <pattern id="offcutPattern" patternUnits="userSpaceOnUse" width="6" height="6"><rect width="6" height="6" fill="var(--offcut-fill)"/><path d="M-1,1 l2,-2 M0,6 l6,-6 M5,7 l2,-2" stroke-width="0.7" stroke="rgba(0,0,0,0.4)"/></pattern>
-                                </defs>
-                                <rect class="sheet-bg"></rect>
-                            </svg>
-                        </div>
-                    </div>
-                </template>
-            </div>
+                </div>
         </main>
     </div>
     <script src="{{ url_for('static', filename='js/renderer.js') }}"></script>

@@ -2,27 +2,33 @@ class TreeVisualizer {
     constructor(svgId) {
         this.svg = document.getElementById(svgId);
         this.nodes = {};
-        this.links = {};
         this.lastRenderTime = 0;
-        this.renderInterval = 250; // Render at most ~4 times per second
+        this.renderInterval = 250; 
         this.solutionNodeId = null;
+        this.activePathIds = new Set();
     }
 
-    addOrUpdateNodes(nodeList) {
+    addOrUpdateNodes(nodeList, activePathIds = []) {
         let hasChanges = false;
+        this.activePathIds = new Set(activePathIds);
+
         nodeList.forEach(nodeData => {
-            if (!this.nodes[nodeData.id] || this.nodes[nodeData.id].status !== nodeData.status) {
-                this.nodes[nodeData.id] = { ...this.nodes[nodeData.id], ...nodeData };
-                if (nodeData.status === 'solution') {
-                    this.solutionNodeId = nodeData.id;
-                }
+            const existingNode = this.nodes[nodeData.id];
+            if (!existingNode || existingNode.status !== nodeData.status) {
+                const parentPos = existingNode?.parent ? this.nodes[existingNode.parent] : this.nodes[nodeData.parent];
+                const initialX = parentPos ? parentPos.x + (Math.random() - 0.5) * 20 : this.svg.clientWidth / 2;
+                const initialY = parentPos ? parentPos.y + 20 : 30;
+
+                this.nodes[nodeData.id] = { 
+                    ...existingNode, ...nodeData,
+                    x: existingNode?.x ?? initialX, y: existingNode?.y ?? initialY
+                };
+
+                if (nodeData.status === 'solution') this.solutionNodeId = nodeData.id;
                 hasChanges = true;
             }
         });
-
-        if (hasChanges) {
-            this.scheduleRender();
-        }
+        if (hasChanges) this.scheduleRender();
     }
 
     scheduleRender() {
@@ -33,63 +39,79 @@ class TreeVisualizer {
         }
     }
 
-render() {
-        if (!this.svg) return;
-        this.svg.innerHTML = ''; // Clear previous render
+    _runLayoutSimulation(width, height) {
+        const nodes = Object.values(this.nodes);
+        if (nodes.length < 2) return;
 
-        const { width } = this.svg.parentElement.getBoundingClientRect();
-        if (width === 0) return;
+        const kRepel = 1000;
+        const kAttract = 0.5;
+        const leftRepel = 100;
+        const damping = 0.9;
+        const iterations = 50;
 
-        // --- Layout Calculation ---
-        const depths = {};
-        const calculateDepth = (nodeId) => {
-            if (depths[nodeId] !== undefined) return depths[nodeId];
-            const node = this.nodes[nodeId];
-            if (node.parent === null || node.parent === undefined) {
-                depths[nodeId] = 0;
-                return 0;
+        // Pin the root node
+        const rootNode = this.nodes[0];
+        if (rootNode) {
+            rootNode.x = 30; // Pin to the left side
+            rootNode.y = height / 2;
+        }
+
+        for (let i = 0; i < iterations; i++) {
+            for (const n1 of nodes) {
+                n1.fx = 0; n1.fy = 0;
+                for (const n2 of nodes) {
+                    if (n1 === n2) continue;
+                    const dx = n1.x - n2.x;
+                    const dy = n1.y - n2.y;
+                    const distanceSq = dx * dx + dy * dy;
+                    if (distanceSq > 0) {
+                        const force = kRepel / distanceSq;
+                        n1.fx += (dx / Math.sqrt(distanceSq)) * force;
+                        n1.fy += (dy / Math.sqrt(distanceSq)) * force;
+                    } else {
+                        n1.fx += (Math.random() - 0.5) * kRepel; // Randomly push apart if overlapping
+                        n1.fy += (Math.random() - 0.5) * kRepel;
+                    }
+                }
+                n1.fx += leftRepel / (n1.x + 1); // Repel from the left edge
             }
-            if (!this.nodes[node.parent]) {
-                depths[nodeId] = 0;
-                return 0;
+
+            for (const node of nodes) {
+                const parent = this.nodes[node.parent];
+                if (parent) {
+                    const dx = parent.x - node.x;
+                    const dy = parent.y - node.y;
+                    node.fx += dx * kAttract;
+                    node.fy += dy * kAttract;
+                    parent.fx -= dx * kAttract;
+                    parent.fy -= dy * kAttract;
+                }
             }
-            depths[nodeId] = calculateDepth(node.parent) + 1;
-            return depths[nodeId];
-        };
-        Object.keys(this.nodes).forEach(calculateDepth);
-
-        const layers = {};
-        let maxLayerSize = 0;
-        Object.values(this.nodes).forEach(node => {
-            const depth = depths[node.id];
-            if (!layers[depth]) layers[depth] = [];
-            layers[depth].push(node);
-            if (layers[depth].length > maxLayerSize) {
-                maxLayerSize = layers[depth].length;
-            }
-        });
-
-        // --- NEW: Dynamic Height Calculation ---
-        const yStep = 18; // Fixed vertical space for each node
-        const requiredHeight = Math.max(200, (maxLayerSize + 1) * yStep);
-        this.svg.setAttribute('height', requiredHeight);
-        this.svg.setAttribute('viewBox', `0 0 ${width} ${requiredHeight}`);
-        // --- END NEW ---
-
-        const maxDepth = Math.max(0, ...Object.keys(layers).map(Number));
-        const xStep = (width - 60) / Math.max(1, maxDepth);
-
-        Object.values(this.nodes).forEach(node => {
-            const depth = depths[node.id];
-            node.x = 30 + depth * xStep;
             
-            const layer = layers[depth];
-            const layerIndex = layer.findIndex(n => n.id === node.id);
-            // Use the new fixed yStep instead of dividing container height
-            node.y = (layerIndex + 1) * yStep;
-        });
+            for (const node of nodes) {
+                if (node.id === 0) continue; // Do not move the root node
+                node.vx = (node.vx || 0) * damping + node.fx * 0.01;
+                node.vy = (node.vy || 0) * damping + node.fy * 0.01;
+                node.x += node.vx;
+                node.y += node.vy;
 
-        // --- Build Solution Path ---
+                node.x = Math.max(10, Math.min(width - 10, node.x));
+                node.y = Math.max(10, Math.min(height - 10, node.y));
+            }
+        }
+    }
+
+    render() {
+        if (!this.svg) return;
+        
+        const { width, height } = this.svg.parentElement.getBoundingClientRect();
+        if (width === 0 || height === 0) return;
+        
+        this.svg.innerHTML = '';
+        this.svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+
+        this._runLayoutSimulation(width, height);
+
         const bestPathNodeIds = new Set();
         const bestPathLinkIds = new Set();
         if (this.solutionNodeId !== null) {
@@ -103,7 +125,6 @@ render() {
             }
         }
 
-        // --- SVG Rendering (remains the same) ---
         const fragment = document.createDocumentFragment();
         const linkGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         const nodeGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
@@ -112,8 +133,11 @@ render() {
             const parent = this.nodes[node.parent];
             if (parent) {
                 const linkId = `${parent.id}-${node.id}`;
+                const isBest = bestPathLinkIds.has(linkId);
+                const isActive = this.activePathIds.has(node.id) && this.activePathIds.has(parent.id);
+                
                 const link = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-                link.setAttribute('class', `link ${bestPathLinkIds.has(linkId) ? 'on-best-path' : ''}`);
+                link.setAttribute('class', `link ${isBest ? 'on-best-path' : ''} ${isActive ? 'on-active-path' : ''}`);
                 link.setAttribute('x1', parent.x);
                 link.setAttribute('y1', parent.y);
                 link.setAttribute('x2', node.x);
@@ -121,8 +145,10 @@ render() {
                 linkGroup.appendChild(link);
             }
 
+            const isBest = bestPathNodeIds.has(node.id);
+            const isActive = this.activePathIds.has(node.id);
             const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-            g.setAttribute('class', `node status-${node.status} ${bestPathNodeIds.has(node.id) ? 'on-best-path' : ''}`);
+            g.setAttribute('class', `node status-${node.status} ${isBest ? 'on-best-path' : ''} ${isActive ? 'on-active-path' : ''}`);
             g.setAttribute('transform', `translate(${node.x}, ${node.y})`);
             
             const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
@@ -140,6 +166,7 @@ render() {
     clear() {
         this.nodes = {};
         this.solutionNodeId = null;
+        this.activePathIds = new Set();
         if (this.svg) this.svg.innerHTML = '';
     }
 }

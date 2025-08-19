@@ -356,8 +356,7 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
     layout_score_cache = {}
 
     # --- Tree Visualization Data ---
-    tree_nodes = {0: {"id": 0, "parent": None, "score": 0, "status": "exploring"}}
-    tree_update_batch = {0: tree_nodes[0].copy()}
+    tree_data = {0: {"id": 0, "parent": None, "score": 0, "status": "exploring"}}
     last_best_sol_node = None
 
     # --- Initial State Setup ---
@@ -396,7 +395,7 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
     initial_bound = -_calculate_bound(list(initial_parts_dict.values()), 0, config, reference_area, initial_used_signatures)
     
     node_counter = 1 # Start at 1 since root is 0
-    pq = [ (initial_bound, 0.0, 0, initial_parts_dict, [], initial_used_signatures) ]
+    pq = [ (initial_bound, 0.0, 0, initial_parts_dict, [], initial_used_signatures) ] # Parent node ID is 0
     
     best_solution = ([], list(initial_parts_dict.values()))
     best_score = -float('inf')
@@ -405,8 +404,7 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
     while pq and (time_limit <= 0 or (time.time() - start_time) < time_limit):
         _, current_score, parent_node_id, current_parts, used_layouts, used_signatures = heapq.heappop(pq)
         
-        tree_nodes[parent_node_id]["status"] = "explored"
-        tree_update_batch[parent_node_id] = tree_nodes[parent_node_id].copy()
+        tree_data[parent_node_id]["status"] = "explored"
 
         current_time = time.time()
         if progress_callback and (current_time - last_update_time > 0.2): # Update every 0.2s
@@ -416,29 +414,39 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
                 "time_limit": time_limit, "nodes_explored": node_counter,
                 "current_best_score": best_score if best_score > -float('inf') else None,
                 "sheets_in_best_solution": len(best_solution[0]) if best_solution[0] else None,
-                "tree_update": list(tree_update_batch.values())
+                "tree_update": list(tree_data.values()) # Send the whole tree for now
             }
             progress_callback(progress_data)
-            tree_update_batch.clear()
             last_update_time = current_time
         
-        if _calculate_bound(list(current_parts.values()), current_score, config, reference_area, used_signatures) < best_score:
+        bound_for_current = _calculate_bound(list(current_parts.values()), current_score, config, reference_area, used_signatures)
+        if bound_for_current < best_score:
+            tree_data[parent_node_id]["status"] = "pruned_bound"
             continue
 
         remaining_primary_parts = list(current_parts.values())
         candidate_actions = []
 
+        # --- ACTION 1: Generate a NEW layout ---
         unique_sheets = {f"{s['length']}x{s['width']}_{s.get('type', 'Default')}": s for s in stock_sheets}.values()
         for sheet_tpl in unique_sheets:
             for _ in range(branching_factor):
-                layout_attempt = run_single_sheet_optimization(sheet_tpl, remaining_primary_parts, config, reference_area, max_offcut_quantity, optional_parts_list)
-                if any(p.get('part_id') in current_parts for p in layout_attempt['placed_parts']):
-                    candidate_actions.append({'type': 'generate', 'layout': layout_attempt})
+                layout_attempt = run_single_sheet_optimization(
+                    sheet_tpl, remaining_primary_parts, config, reference_area, max_offcut_quantity, optional_parts_list, tracker=score_component_tracker
+                )
+                placed_part_ids = {p['part_id'] for p in layout_attempt['placed_parts'] if p.get('part_id') in current_parts}
+                if placed_part_ids:
+                    candidate_actions.append({'type': 'generate', 'layout': layout_attempt, 'placed_ids': placed_part_ids})
+
+        # --- ACTION 2: REUSE an existing layout from this path ---
         unique_layouts_in_path = {get_layout_signature(l): l for l in used_layouts}.values()
         for existing_layout in unique_layouts_in_path:
-            if any(p['part_id'] in current_parts for p in existing_layout['placed_parts'] if 'part_id' in p):
-                candidate_actions.append({'type': 'reuse', 'layout': existing_layout})
-
+            placed_ids_in_layout = {p['part_id'] for p in existing_layout['placed_parts'] if 'part_id' in p}
+            reusable_part_ids = {pid for pid in current_parts if pid in placed_ids_in_layout}
+            if reusable_part_ids:
+                candidate_actions.append({'type': 'reuse', 'layout': existing_layout, 'placed_ids': reusable_part_ids})
+        
+        # --- Evaluate all possible actions for this node ---
         for action in candidate_actions:
             layout = action['layout']
             layout_sig = get_layout_signature(layout, required_only=False)
@@ -447,13 +455,11 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
             if is_new_signature and max_layouts > 0 and len(used_signatures) >= max_layouts:
                 continue
 
-            if layout_sig not in layout_score_cache:
-                layout_score_cache[layout_sig] = calculate_layout_score(layout, layout['sheet_info'], config, config['min_offcut_dim'], reference_area, max_offcut_quantity, is_stock_only_job)
-            layout_score = layout_score_cache[layout_sig]
-            
             placed_ids = {p['part_id'] for p in layout['placed_parts'] if p['part_id'] in current_parts}
             if not placed_ids: continue
 
+            layout_score = calculate_layout_score(layout, layout['sheet_info'], config, config['min_offcut_dim'], reference_area, max_offcut_quantity, is_stock_only_job)
+            
             layouts_penalty = normalized_layouts_penalty if action['type'] == 'generate' and is_new_signature else 0
             child_score = current_score + layout_score - normalized_sheet_penalty - layouts_penalty
             
@@ -462,31 +468,44 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
             child_signatures = used_signatures.union({layout_sig})
 
             current_node_id = node_counter
-            new_node = {"id": current_node_id, "parent": parent_node_id, "score": child_score, "status": "exploring"}
-            tree_nodes[current_node_id] = new_node
-            tree_update_batch[current_node_id] = new_node.copy()
             node_counter += 1
+
+            tree_data[current_node_id] = {"id": current_node_id, "parent": parent_node_id, "score": child_score, "status": "exploring"}
 
             if not child_parts: # Complete solution
                 if child_score > best_score:
                     best_score = child_score
                     best_solution = (child_layouts, [])
-                    tree_nodes[current_node_id]["status"] = "solution"
-                    tree_update_batch[current_node_id] = tree_nodes[current_node_id].copy()
-                    if last_best_sol_node is not None and last_best_sol_node in tree_nodes:
-                        tree_nodes[last_best_sol_node]["status"] = "explored"
-                        tree_update_batch[last_best_sol_node] = tree_nodes[last_best_sol_node].copy()
+                    tree_data[current_node_id]["status"] = "solution"
+                    if last_best_sol_node is not None:
+                        tree_data[last_best_sol_node]["status"] = "explored" # Demote old best
                     last_best_sol_node = current_node_id
             else: # Partial solution
                 child_bound = _calculate_bound(list(child_parts.values()), child_score, config, reference_area, child_signatures)
                 if child_bound > best_score:
                     heapq.heappush(pq, (-child_bound, child_score, current_node_id, child_parts, child_layouts, child_signatures))
                 else:
-                    tree_nodes[current_node_id]["status"] = "pruned_bound"
-                    tree_update_batch[current_node_id] = tree_nodes[current_node_id].copy()
-    
-    if progress_callback: # Send final update
-        progress_callback({"tree_update": list(tree_update_batch.values())})
-    
+                    tree_data[current_node_id]["status"] = "pruned_bound"
+
+    if progress_callback:
+        progress_callback({
+            "part_progress": 100, "elapsed_time": time.time() - start_time,
+            "time_limit": time_limit, "nodes_explored": node_counter,
+            "current_best_score": best_score if best_score > -float('inf') else None,
+            "sheets_in_best_solution": len(best_solution[0]) if best_solution[0] else None
+        })
+
+    print("\n--- Optimization Score Component Analysis ---")
+    if not score_component_tracker:
+        print("No scoring data was collected.")
+    else:
+        for component, stats in sorted(score_component_tracker.items()):
+            if stats['count'] > 0:
+                average = stats['sum'] / stats['count']
+                print(f"Component: {component:<20} | Min: {stats['min']:>10.4f} | Max: {stats['max']:>10.4f} | Avg: {average:>10.4f}")
+            else:
+                print(f"Component: {component:<20} | No data collected.")
+    print("-------------------------------------------\n")
+
     final_layouts, remaining_parts = best_solution
     return final_layouts, remaining_parts, best_score

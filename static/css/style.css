@@ -381,11 +381,55 @@ th .select-all-parts-in-file { cursor: pointer; }
     border-radius: 1rem;
     padding: 2rem;
     width: 100%;
-    max-width: 550px;
+    /*max-width: 1200px; /* Allow panel to be wider */
     box-shadow: 0 10px 25px -5px var(--shadow-color);
+    display: flex;
+    flex-direction: row; /* Change to row for two columns */
+    gap: 2rem;
+}
+
+.loading-panel-left {
+    flex: 1; /* Takes up 1 part of the space */
     display: flex;
     flex-direction: column;
     gap: 1.5rem;
+}
+
+.loading-panel-right {
+    flex: 1.5; /* Takes up 1.5 parts, giving more room to the viz */
+    display: flex;
+    flex-direction: column;
+}
+
+.path-visualizer {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    height: 100%; /* Make it fill the right panel */
+}
+
+.path-svg-container {
+    background-color: var(--bg-primary);
+    border-radius: 0.5rem;
+    border: 1px solid var(--border-color);
+    overflow: hidden; /* No more scrolling */
+    flex-grow: 1; /* Make it fill available space */
+}
+
+/* --- Tree Visualization Style Updates --- */
+.node.status-pruned_bound circle {
+    fill: var(--danger); /* Solid red fill */
+    stroke: var(--danger-bg);
+    opacity: 0.8;
+}
+
+.link.on-active-path,
+.node.on-active-path circle {
+    stroke: #facc15; /* Yellow */
+}
+
+.link.on-active-path {
+    stroke-width: 2px;
 }
 
 .loading-header {
@@ -567,16 +611,29 @@ input:checked + .slider:before { transform: translateX(20px); }
     stroke-width: 2px;
     stroke: var(--primary);
 }
+#path-visualization-svg .link {
+    stroke: var(--border-color);
+    stroke-width: 1px; /* Thicker base links */
+    opacity: 0.6;
+}
 #path-visualization-svg .link.on-best-path {
     stroke: var(--primary);
     stroke-width: 2.5px;
+    opacity: 1;
 }
 
-.path-svg-container {
-    background-color: var(--bg-primary);
-    border-radius: 0.5rem;
-    height: 200px; /* Give it a fixed height */
-    border: 1px solid var(--border-color);
-    overflow-y: auto; /* Allow scrolling */
-    overflow-x: hidden;
+/* --- Tree Visualization Style Updates --- */
+#path-visualization-svg .node.status-pruned_bound circle {
+    fill: var(--danger); /* Solid red fill */
+    stroke: var(--danger-bg);
+    opacity: 0.8;
+}
+
+#path-visualization-svg .link.on-active-path,
+#path-visualization-svg .node.on-active-path circle {
+    stroke: #facc15; /* Yellow */
+}
+
+#path-visualization-svg .link.on-active-path {
+    stroke-width: 2px;
 }
