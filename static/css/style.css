@@ -416,22 +416,6 @@ th .select-all-parts-in-file { cursor: pointer; }
     flex-grow: 1; /* Make it fill available space */
 }
 
-/* --- Tree Visualization Style Updates --- */
-.node.status-pruned_bound circle {
-    fill: var(--danger); /* Solid red fill */
-    stroke: var(--danger-bg);
-    opacity: 0.8;
-}
-
-.link.on-active-path,
-.node.on-active-path circle {
-    stroke: #facc15; /* Yellow */
-}
-
-.link.on-active-path {
-    stroke-width: 2px;
-}
-
 .loading-header {
     display: flex;
     align-items: center;
@@ -591,42 +575,45 @@ input:checked + .slider:before { transform: translateX(20px); }
     fill: var(--text-primary);
 }
 
-/* Tree Node Statuses */
+/* --- Tree Visualization Style Updates (Consolidated) --- */
+#path-visualization-svg .link {
+    stroke: var(--border-color);
+    stroke-width: 1px;
+    opacity: 0.6;
+    transition: all 0.2s;
+}
+
+#path-visualization-svg .node circle {
+    transition: all 0.2s;
+}
+
 #path-visualization-svg .node.status-explored circle,
 #path-visualization-svg .node.status-exploring circle {
     fill: var(--bg-secondary);
     stroke: var(--text-secondary);
     stroke-dasharray: 2 1;
 }
-#path-visualization-svg .node.status-pruned_bound circle {
-    fill: var(--danger-bg);
-    stroke: var(--danger);
-    opacity: 0.5;
-}
-#path-visualization-svg .node.status-solution circle {
-    fill: var(--success);
-    stroke: var(--success);
-}
-#path-visualization-svg .node.on-best-path circle {
-    stroke-width: 2px;
-    stroke: var(--primary);
-}
-#path-visualization-svg .link {
-    stroke: var(--border-color);
-    stroke-width: 1px; /* Thicker base links */
-    opacity: 0.6;
-}
-#path-visualization-svg .link.on-best-path {
-    stroke: var(--primary);
-    stroke-width: 2.5px;
-    opacity: 1;
-}
 
-/* --- Tree Visualization Style Updates --- */
 #path-visualization-svg .node.status-pruned_bound circle {
     fill: var(--danger); /* Solid red fill */
     stroke: var(--danger-bg);
     opacity: 0.8;
+}
+
+#path-visualization-svg .node.status-solution circle {
+    fill: var(--success);
+    stroke: var(--success);
+}
+
+#path-visualization-svg .node.on-best-path circle {
+    stroke-width: 2px;
+    stroke: var(--primary);
+}
+
+#path-visualization-svg .link.on-best-path {
+    stroke: var(--primary);
+    stroke-width: 2.5px;
+    opacity: 1;
 }
 
 #path-visualization-svg .link.on-active-path,
@@ -637,3 +624,5 @@ input:checked + .slider:before { transform: translateX(20px); }
 #path-visualization-svg .link.on-active-path {
     stroke-width: 2px;
 }
+
+

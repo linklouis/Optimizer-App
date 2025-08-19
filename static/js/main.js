@@ -182,6 +182,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 const { task_id } = await startResponse.json();
                 const eventSource = new EventSource(`/stream/${task_id}`);
+                let receivedDoneEvent = false;
 
                 eventSource.addEventListener('progress', (event) => {
                     const data = JSON.parse(event.data);
@@ -209,21 +210,34 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
 
                 eventSource.addEventListener('done', (event) => {
+                    receivedDoneEvent = true;
                     if (treeVisualizer) {
                         treeVisualizer.render();
                     }
                     const result = JSON.parse(event.data);
                     currentState = result;
                     stateHistory = [];
-                    renderResults(result);
-                    if(result && !result.error) {
-                        document.getElementById('undo-button')?.addEventListener('click', handleUndo);
+                    // Only render if the result is not null
+                    if (result) { 
+                        renderResults(result);
+                        if(!result.error) {
+                            document.getElementById('undo-button')?.addEventListener('click', handleUndo);
+                        }
+                    } else {
+                        // If result is null, display a placeholder
+                        renderResults(null); 
                     }
-                    loadingOverlay.style.display = 'none';
+                    // --- DEBUG: Keep visualizer open. To revert, uncomment the line below. ---
+                    // TODO: Remove this line in production
+                    // loadingOverlay.style.display = 'none';
                     eventSource.close();
                 });
 
                 eventSource.onerror = (err) => {
+                    if (receivedDoneEvent) { // If we're already done, ignore the error
+                        eventSource.close();
+                        return;
+                    }
                     console.error("EventSource failed:", err);
                     alert("An error occurred while streaming results. Please check the console.");
                     loadingOverlay.style.display = 'none';
