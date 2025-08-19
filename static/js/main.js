@@ -1,6 +1,7 @@
 document.addEventListener('DOMContentLoaded', function() {
     let stateHistory = [];
     let currentState = null;
+    let treeVisualizer = null;
 
     // --- State-dependent Handlers ---
     async function handleUndo() {
@@ -158,6 +159,11 @@ document.addEventListener('DOMContentLoaded', function() {
             document.querySelector('.tab-button[data-tab="results"]')?.click();
             document.getElementById('results-container').innerHTML = '';
 
+            // --- Initialize Visualizer ---
+            const visualizerSvgId = 'path-visualization-svg'; 
+            treeVisualizer = new TreeVisualizer(visualizerSvgId);
+            treeVisualizer.clear();
+
             progressBarFill.style.width = '0%';
             partProgressPercent.textContent = '0%';
             timeTrackerValue.textContent = '00:00';
@@ -196,12 +202,16 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (data.nodes_explored !== undefined) nodesExploredValue.textContent = data.nodes_explored.toLocaleString();
                     if (data.current_best_score !== undefined && data.current_best_score !== null) bestScoreValue.textContent = data.current_best_score.toFixed(2);
                     if (data.sheets_in_best_solution !== undefined && data.sheets_in_best_solution !== null) sheetsUsedValue.textContent = data.sheets_in_best_solution;
-                    if (data.tree_update) {
-                        console.log("Tree Update Received:", data.tree_update);
+                    // --- Update Visualizer ---
+                    if (data.tree_update && treeVisualizer) {
+                        treeVisualizer.addOrUpdateNodes(data.tree_update);
                     }
                 });
 
                 eventSource.addEventListener('done', (event) => {
+                    if (treeVisualizer) {
+                        treeVisualizer.render();
+                    }
                     const result = JSON.parse(event.data);
                     currentState = result;
                     stateHistory = [];

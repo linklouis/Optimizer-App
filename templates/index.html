@@ -333,6 +333,13 @@
                                 <span class="stat-value" id="sheets-used-value">-</span>
                             </div>
                         </div>
+
+                        <div class="path-visualizer">
+                            <span class="path-visualizer-title"><i class="fa-solid fa-code-branch"></i> Optimizer Search Path</span>
+                            <div class="path-svg-container">
+                                <svg id="path-visualization-svg"></svg>
+                            </div>
+                        </div>
                         
                         <p class="loading-tip">
                             <strong>Tip:</strong> Allowing more search time can improve material yield and reduce waste.
@@ -358,6 +365,7 @@
         </main>
     </div>
     <script src="{{ url_for('static', filename='js/renderer.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/visualizer.js') }}"></script>
     <script src="{{ url_for('static', filename='js/ui.js') }}"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>
