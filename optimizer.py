@@ -267,49 +267,50 @@ def run_single_sheet_optimization(sheet_info: Dict, required_parts: List[Part], 
     
     return best_layout
 
-def _calculate_bound(remaining_parts: list, current_score: float, config: dict, reference_area: float, used_signatures: frozenset) -> float:
+def _calculate_bound(remaining_parts: list, current_raw_score: float, used_layouts: list, config: dict, reference_area: float) -> float:
     """
     Calculates a more sophisticated upper bound on the final score for a partial solution.
     This bound is optimistic, assuming the best possible outcome for the remaining parts.
     """
-    if not remaining_parts:
-        return current_score
+    # --- 1. Calculate penalties for the path taken so far ---
+    penalties_so_far = 0
+    if used_layouts:
+        num_sheets_used = len(used_layouts)
+        num_unique_layouts_used = len({get_layout_signature(l) for l in used_layouts})
+        penalties_so_far += num_sheets_used * config.get('w_sheets', 1.0)
+        penalties_so_far += num_unique_layouts_used * config.get('w_unique_layouts', 0.5)
 
-    remaining_area = sum(p['length'] * p['width'] for p in remaining_parts)
-    
-    # --- Lower Bound on Additional Sheets ---
-    min_additional_sheets = math.ceil(remaining_area / reference_area) if reference_area > 0 else float('inf')
-    
-    # --- Future Score Calculation (Optimistic) ---
-    optimistic_area_score = 0
-    
-    optimistic_stock_fill_bonus = 0
+    if not remaining_parts:
+        return current_raw_score - penalties_so_far
+
+    # --- 2. Estimate future bonuses (optimistic) ---
+    optimistic_future_bonuses = 0
     w_stock_fill = config.get('w_stock_fill', 1.0)
     for part in remaining_parts:
         if part.get('is_stock_part', False):
             deficit = part.get('target_stock', 1) - part.get('current_stock', 0)
             if part.get('target_stock', 0) > 0 and deficit > 0:
                 part_area = part['length'] * part['width']
-                optimistic_stock_fill_bonus += (deficit / part['target_stock']) * (part_area / reference_area) * w_stock_fill
+                optimistic_future_bonuses += (deficit / part['target_stock']) * (part_area / reference_area) * w_stock_fill
 
-    # --- Corrected Future Penalties ---
-    # The total penalty for cuts is based on the number of parts, not multiplied by sheets.
-    expected_max_cuts = config.get('expected_max_cuts_per_sheet', 20.0)
-    w_cuts = config.get('w_cuts', 0.2)
-    future_cuts_penalty = (len(remaining_parts) / expected_max_cuts) * w_cuts if expected_max_cuts > 0 else 0
-
-    future_sheets_penalty = min_additional_sheets * config.get('w_sheets', 1.0)
+    # --- 3. Estimate future penalties (optimistic) ---
+    remaining_area = sum(p['length'] * p['width'] for p in remaining_parts)
+    min_additional_sheets = math.ceil(remaining_area / reference_area) if reference_area > 0 else 0
     
-    # Optimistically assume no new unique layouts will be needed. The penalty for layouts
-    # already used is incorporated in the `current_score`.
-    future_layouts_penalty = 0
+    future_sheets_penalty = min_additional_sheets * config.get('w_sheets', 1.0)
+    future_cuts_penalty = 0 # Cuts penalty is part of layout_score, not a global penalty
+    
+    # Assume a fraction of future sheets might require a new unique layout
+    optimistic_new_layouts = math.ceil(min_additional_sheets * 0.1) 
+    future_layouts_penalty = optimistic_new_layouts * config.get('w_unique_layouts', 0.5)
 
+    # --- 4. Combine for the final bound ---
     upper_bound = (
-        current_score 
-        + optimistic_area_score 
-        + optimistic_stock_fill_bonus 
-        - future_cuts_penalty
+        current_raw_score
+        + optimistic_future_bonuses
+        - penalties_so_far
         - future_sheets_penalty
+        - future_cuts_penalty
         - future_layouts_penalty
     )
     
@@ -331,7 +332,7 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
     last_update_time = start_time
     
     score_component_tracker = {}
-    layout_score_cache = {} # Cache scores of generated layouts to avoid recalculation
+    layout_score_cache = {}
 
     # --- Initial State Setup ---
     part_id_counter = 0
@@ -358,18 +359,11 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
                 optional_parts_list.append(p_copy)
                 part_id_counter += 1
 
-    total_parts_area = sum(p['length'] * p['width'] for p in initial_parts_dict.values())
-    expected_sheets = math.ceil(total_parts_area / reference_area) if reference_area > 0 else 1
-    penalty_normalizer = 1.0 / expected_sheets if expected_sheets > 0 else 1.0
-    
-    normalized_sheet_penalty = config.get('w_sheets', 1.0) * penalty_normalizer
-    normalized_layouts_penalty = config.get('w_unique_layouts', 0.5) * penalty_normalizer
-
-    initial_used_signatures = frozenset()
-    initial_bound = -_calculate_bound(list(initial_parts_dict.values()), 0, config, reference_area, initial_used_signatures)
+    initial_bound = -_calculate_bound(list(initial_parts_dict.values()), 0.0, [], config, reference_area)
     
     node_counter = 0
-    pq = [ (initial_bound, 0.0, node_counter, initial_parts_dict, [], initial_used_signatures) ]
+    # PQ stores: (-bound, raw_score, node_id, parts_left, layouts_used)
+    pq = [ (initial_bound, 0.0, node_counter, initial_parts_dict, []) ]
     node_counter += 1
     
     best_solution = ([], list(initial_parts_dict.values()))
@@ -377,7 +371,7 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
 
     # --- Branch and Bound Loop ---
     while pq and (time_limit <= 0 or (time.time() - start_time) < time_limit):
-        _, current_score, _, current_parts, used_layouts, used_signatures = heapq.heappop(pq)
+        _, current_raw_score, _, current_parts, used_layouts = heapq.heappop(pq)
         
         current_time = time.time()
         if progress_callback and (current_time - last_update_time > 0.1):
@@ -390,60 +384,54 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
             })
             last_update_time = current_time
         
-        if _calculate_bound(list(current_parts.values()), current_score, config, reference_area, used_signatures) < best_score:
+        if _calculate_bound(list(current_parts.values()), current_raw_score, used_layouts, config, reference_area) < best_score:
             continue
 
         remaining_primary_parts = list(current_parts.values())
         
         candidate_actions = []
 
-        # --- ACTION 1: Generate a NEW layout ---
+        # ACTION 1: Generate a NEW layout
         unique_sheets = {f"{s['length']}x{s['width']}_{s.get('type', 'Default')}": s for s in stock_sheets}.values()
         for sheet_tpl in unique_sheets:
             for _ in range(branching_factor):
-                layout_attempt = run_single_sheet_optimization(
-                    sheet_tpl, remaining_primary_parts, config, reference_area, max_offcut_quantity, optional_parts_list, tracker=score_component_tracker
-                )
-                placed_part_ids = {p['part_id'] for p in layout_attempt['placed_parts'] if p.get('part_id') in current_parts}
-                if placed_part_ids:
-                    candidate_actions.append({'type': 'generate', 'layout': layout_attempt, 'placed_ids': placed_part_ids})
+                layout_attempt = run_single_sheet_optimization(sheet_tpl, remaining_primary_parts, config, reference_area, max_offcut_quantity, optional_parts_list, tracker=score_component_tracker)
+                if any(p.get('part_id') in current_parts for p in layout_attempt['placed_parts']):
+                    candidate_actions.append(layout_attempt)
 
-        # --- ACTION 2: REUSE an existing layout from this path ---
-        unique_layouts_in_path = {get_layout_signature(l): l for l in used_layouts}.values()
-        for existing_layout in unique_layouts_in_path:
-            placed_ids_in_layout = {p['part_id'] for p in existing_layout['placed_parts'] if 'part_id' in p}
-            reusable_part_ids = {pid for pid in current_parts if pid in placed_ids_in_layout}
-            if reusable_part_ids:
-                candidate_actions.append({'type': 'reuse', 'layout': existing_layout, 'placed_ids': reusable_part_ids})
+        # ACTION 2: REUSE an existing layout
+        for existing_layout in {get_layout_signature(l): l for l in used_layouts}.values():
+            if any(p['part_id'] in current_parts for p in existing_layout['placed_parts'] if 'part_id' in p):
+                candidate_actions.append(existing_layout)
         
-        # --- Evaluate all possible actions for this node ---
-        for action in candidate_actions:
-            layout = action['layout']
-            layout_sig = get_layout_signature(layout, required_only=False)
-
+        for layout_action in candidate_actions:
+            layout_sig = get_layout_signature(layout_action)
             if layout_sig not in layout_score_cache:
-                score = calculate_layout_score(layout, layout['sheet_info'], config, config['min_offcut_dim'], reference_area, max_offcut_quantity, is_stock_only_job, tracker=score_component_tracker)
+                score = calculate_layout_score(layout_action, layout_action['sheet_info'], config, config['min_offcut_dim'], reference_area, max_offcut_quantity, is_stock_only_job, tracker=score_component_tracker)
                 layout_score_cache[layout_sig] = score
             layout_score = layout_score_cache[layout_sig]
-            
-            layouts_penalty = 0
-            if action['type'] == 'generate' and layout_sig not in used_signatures:
-                layouts_penalty = normalized_layouts_penalty
 
-            child_score = current_score + layout_score - normalized_sheet_penalty - layouts_penalty
+            placed_part_ids = {p['part_id'] for p in layout_action['placed_parts'] if p.get('part_id') in current_parts}
             
-            child_parts = {pid: p for pid, p in current_parts.items() if pid not in action['placed_ids']}
-            child_layouts = used_layouts + [layout]
-            child_signatures = used_signatures.union({layout_sig})
+            child_raw_score = current_raw_score + layout_score
+            child_parts = {pid: p for pid, p in current_parts.items() if pid not in placed_part_ids}
+            child_layouts = used_layouts + [layout_action]
 
             if not child_parts: # Complete solution
-                if child_score > best_score:
-                    best_score = child_score
+                num_sheets = len(child_layouts)
+                num_unique = len({get_layout_signature(l) for l in child_layouts})
+                
+                final_score = child_raw_score \
+                            - num_sheets * config.get('w_sheets', 1.0) \
+                            - num_unique * config.get('w_unique_layouts', 0.5)
+
+                if final_score > best_score:
+                    best_score = final_score
                     best_solution = (child_layouts, [])
             else: # Partial solution
-                child_bound = _calculate_bound(list(child_parts.values()), child_score, config, reference_area, child_signatures)
+                child_bound = _calculate_bound(list(child_parts.values()), child_raw_score, child_layouts, config, reference_area)
                 if child_bound > best_score:
-                    heapq.heappush(pq, (-child_bound, child_score, node_counter, child_parts, child_layouts, child_signatures))
+                    heapq.heappush(pq, (-child_bound, child_raw_score, node_counter, child_parts, child_layouts))
                     node_counter += 1
 
     if progress_callback:
@@ -455,15 +443,13 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
         })
 
     print("\n--- Optimization Score Component Analysis ---")
-    if not score_component_tracker:
-        print("No scoring data was collected.")
+    if not score_component_tracker: print("No scoring data was collected.")
     else:
         for component, stats in sorted(score_component_tracker.items()):
             if stats['count'] > 0:
                 average = stats['sum'] / stats['count']
                 print(f"Component: {component:<20} | Min: {stats['min']:>10.4f} | Max: {stats['max']:>10.4f} | Avg: {average:>10.4f}")
-            else:
-                print(f"Component: {component:<20} | No data collected.")
+            else: print(f"Component: {component:<20} | No data collected.")
     print("-------------------------------------------\n")
 
     final_layouts, remaining_parts = best_solution
