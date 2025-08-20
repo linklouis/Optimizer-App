@@ -117,6 +117,7 @@ Here are the next bugs/updates to address, as well as the current versions of th
     - Hitting optimize again while in the middle of an optimization doesn't cancle the previous one, so it's still running in the background.
     - Reset to defaults button only works once, and then you have to reload the page if you want to use it again?
     - THIS-------------------> Changing the multiplier in File Paths doesn't update the values for each part in Loaded Parts Lists.
+    - ------> Tree visualizer fucking explodes when using a branching factor >1
     
     - Stock part standardizing should affect the final score.
 
@@ -185,3 +186,11 @@ Keep Code Clean:
 - Do not add explanatory comments inside code blocks unless absolutely necessary. All explanations should be in the summary at the top.
 - All instructions should take place before the code block, not as comments inside of it.
 General Rules: Only include code from files that have actually been modified. If you need to mention code in an unchanged file, the function name should be sufficient.
+
+
+
+
+
+- Consider how many times a layout can be reused when scoring it?
+
+- Make springs stronger when they're more stretched? (would resist tretching better without pulling already close nodes even closer)

@@ -67,7 +67,8 @@ def find_best_fit(part_length: float, part_width: float, empty_rects_np: np.ndar
 
 def calculate_layout_score(layout: Dict[str, Any], sheet_info: Dict[str, Any], config: Dict[str, Any], 
                            min_offcut_dim: float, reference_area: float, max_offcut_quantity: float, 
-                           is_stock_only_job: bool = False, tracker: Optional[Dict] = None) -> float:
+                           is_stock_only_job: bool = False, tracker: Optional[Dict] = None,
+                           remaining_parts: Optional[List[Part]] = None) -> float:
     """Calculates a score for a given layout. Higher is better."""
     
     def _update_tracker(component_name: str, value: float):
@@ -87,60 +88,49 @@ def calculate_layout_score(layout: Dict[str, Any], sheet_info: Dict[str, Any], c
     usable_offcuts = [o for o in layout['offcuts'] if o['length'] >= min_offcut_dim and o['width'] >= min_offcut_dim]
     offcut_area = sum(o['length'] * o['width'] for o in usable_offcuts)
     
-    # --- Area-Based Components (already normalized by reference_area) ---
-    unweighted_waste = (sheet_area - used_area - offcut_area) / reference_area if reference_area > 0 else 0
-    unweighted_offcut = offcut_area / reference_area if reference_area > 0 else 0
-    _update_tracker('waste_penalty', unweighted_waste)
-    _update_tracker('offcut_penalty', unweighted_offcut)
+    area_based_score = -(((sheet_area - used_area - offcut_area) / reference_area * config.get('w_waste', 1.0)) + 
+                         ((offcut_area / reference_area) * config.get('w_offcut', 0.5)))
 
-    waste_penalty = unweighted_waste * config.get('w_waste', 1.0)
-    offcut_penalty = unweighted_offcut * config.get('w_offcut', 0.5)
-    area_based_score = -(waste_penalty + offcut_penalty)
-    _update_tracker('area_based_score', -(unweighted_waste + unweighted_offcut))
-
-    # --- Stock Fill Bonus (already normalized by area) ---
-    unweighted_stock_fill = 0
+    # --- NEW: Optimistic Score for Any In-Progress Sheet ---
+    # To solve the bias, we check if a layout is new and has room, regardless of sheet type.
+    # If so, we optimistically assume the rest of the sheet will be filled perfectly.
+    is_lightly_used = len(layout['placed_parts']) <= 2
+    
+    # This logic only runs when called from the main search loop (where remaining_parts is known).
+    if is_lightly_used and remaining_parts:
+        # Check if it's even possible for any remaining part to fit in the future.
+        can_fit_more = any(p['length'] * p['width'] < (sheet_area - used_area) for p in remaining_parts)
+        if can_fit_more:
+            area_based_score = 0.0 # Waive the area penalty entirely for a truly optimistic bound.
+    
+    # --- Stock Fill Bonus ---
+    stock_fill_bonus = 0
     for part in layout['placed_parts']:
         if part.get('is_stock_part', False):
             deficit = part.get('target_stock', 1) - part.get('current_stock', 0)
             if part.get('target_stock', 0) > 0 and deficit > 0:
                 part_area = part['length'] * part['width']
-                unweighted_stock_fill += (deficit / part['target_stock']) * (part_area / reference_area)
-
-    _update_tracker('stock_fill_bonus', unweighted_stock_fill)
-    stock_fill_bonus = unweighted_stock_fill * config.get('w_stock_fill', 1.0)
+                stock_fill_bonus += (deficit / part['target_stock']) * (part_area / reference_area) * config.get('w_stock_fill', 1.0)
     
     has_required_parts = any(not p.get('is_optional_filler', False) for p in layout['placed_parts'])
-    has_optional_parts = any(p.get('is_optional_filler', False) for p in layout['placed_parts'])
-    if not has_required_parts and has_optional_parts and not is_stock_only_job:
+    if not has_required_parts and any(p.get('is_optional_filler', False) for p in layout['placed_parts']) and not is_stock_only_job:
         return -float('inf')
 
-    # --- Quantity Bonus (normalized by max quantity) ---
-    unweighted_quantity = float(sheet_info.get('quantity', 1)) if sheet_info.get('type') != 'Default' else 0.0
-    normalized_quantity = unweighted_quantity / max_offcut_quantity if max_offcut_quantity > 0 else 0.0
-    _update_tracker('quantity_bonus', normalized_quantity)
-    quantity_bonus = normalized_quantity * config.get('w_quantity', 0.1)
+    # --- Other Bonuses and Penalties ---
+    quantity_bonus = 0.0
+    if sheet_info.get('type') != 'Default' and max_offcut_quantity > 0:
+        quantity_bonus = (float(sheet_info.get('quantity', 1)) / max_offcut_quantity) * config.get('w_quantity', 0.1)
 
-    # --- Cuts Penalty (normalized by expected max cuts) ---
-    unweighted_cuts = float(len(layout['placed_parts']))
     expected_max_cuts = config.get('expected_max_cuts_per_sheet', 20.0)
-    normalized_cuts = unweighted_cuts / expected_max_cuts if expected_max_cuts > 0 else 0.0
-    _update_tracker('cuts_penalty', normalized_cuts)
-    cuts_penalty = normalized_cuts * config.get('w_cuts', 0.2)
+    cuts_penalty = (float(len(layout['placed_parts'])) / expected_max_cuts) * config.get('w_cuts', 0.2) if expected_max_cuts > 0 else 0
 
-    # --- Priority Bonus (already normalized as 0 or 1) ---
-    unweighted_priority = 0.0
+    priority_bonus = 0.0
     if sheet_info.get('type') == 'Offcut':
         offcut_id_str = str(sheet_info.get('id', '')).replace('offcut_', '')
         if offcut_id_str in config.get('prioritized_offcuts', []):
-            unweighted_priority = 1.0
-    _update_tracker('priority_bonus', unweighted_priority)
-    priority_bonus = unweighted_priority * config.get('w_priority_offcut', 10.0)
+            priority_bonus = config.get('w_priority_offcut', 10.0)
     
-    score = area_based_score + stock_fill_bonus + quantity_bonus - cuts_penalty + priority_bonus
-    _update_tracker('total_layout_score', score)
-    
-    return score
+    return area_based_score + stock_fill_bonus + quantity_bonus - cuts_penalty + priority_bonus
 
 
 # --- OPTIMIZED: This function is now JIT-compiled by Numba for a small speedup ---
@@ -422,6 +412,7 @@ def _calculate_bound(remaining_parts: list, current_score: float, config: Dict[s
     # Predict future layouts needed using the new simulation-based helper function.
     optimistic_new_layouts = _predict_number_of_new_sheet_layouts(remaining_parts, used_signatures, reference_area, config)
     optimistic_total_layouts = len(used_signatures) + optimistic_new_layouts
+    print(f"Predicted total layouts: {optimistic_total_layouts} ({len(used_signatures)} existing + {optimistic_new_layouts} new) for {len(remaining_parts)} remaining parts.")
     
     max_layouts = config.get('max_unique_layouts', 0)
     # Prune the branch if the predicted total layouts exceed the user-defined cap.
@@ -575,7 +566,10 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
                 continue
 
             if layout_sig not in layout_score_cache:
-                layout_score_cache[layout_sig] = calculate_layout_score(layout, layout['sheet_info'], config, config['min_offcut_dim'], reference_area, max_offcut_quantity, is_stock_only_job)
+                layout_score_cache[layout_sig] = calculate_layout_score(
+                    layout, layout['sheet_info'], config, config['min_offcut_dim'], reference_area, 
+                    max_offcut_quantity, is_stock_only_job, remaining_parts=list(current_parts.values())
+                )
             layout_score = layout_score_cache[layout_sig]
             
             placed_ids = {p['part_id'] for p in layout['placed_parts'] if p['part_id'] in current_parts}
