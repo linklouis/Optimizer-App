@@ -1,6 +1,7 @@
 class TreeVisualizer {
     constructor(svgId) {
         this.svg = document.getElementById(svgId);
+        this.svg.innerHTML = ''; // Wipes the SVG clean from any previous runs
         
         // Create a wrapper group for zoom and pan
         this.zoomWrapper = this.svg.appendChild(document.createElementNS('http://www.w3.org/2000/svg', 'g'));
@@ -11,16 +12,18 @@ class TreeVisualizer {
         this.pendingNodes = [];
         this.svgNodes = {};
         this.svgLinks = {};
-        this.processedNodeUpdates = new Set(); // Track processed updates
+        this.processedNodeUpdates = new Set();
         
         this.animationFrameId = null;
+        this.simulationLoopId = null; // ID for the fast simulation loop
+        this.simulationInterval = 4;  // Target ~250 ticks per second for the simulation
+
         this.solutionNodeId = null;
         this.lastAddedNodeId = null;
         this.minScore = Infinity;
         this.maxScore = -Infinity;
 
         this.framesSinceLastSpawn = 0;
-        this.spawnInterval = 5;
 
         // --- New properties for Zoom and Pan ---
         this.zoom = { x: 0, y: 0, scale: 1.0 };
@@ -40,15 +43,26 @@ class TreeVisualizer {
     start() {
         if (this.animationFrameId) return;
         this.clear();
+        this.simulationLoopId = setInterval(this._simulationLoop.bind(this), this.simulationInterval);
         this._animationLoop();
     }
 
     stop() {
-        // if (this.animationFrameId) {
-        //      cancelAnimationFrame(this.animationFrameId);
-        //      this.animationFrameId = null;
-        // }
-        this._introducePendingNodes(true);
+        if (this.simulationLoopId) {
+            clearInterval(this.simulationLoopId);
+            this.simulationLoopId = null;
+        }
+        // It's good practice to stop the animation frame when done.
+        // If you need to debug the final state, you can comment this out.
+        if (this.animationFrameId) {
+             cancelAnimationFrame(this.animationFrameId);
+             this.animationFrameId = null;
+        }
+        // Process any remaining nodes synchronously
+        while (this.pendingNodes.length > 0) {
+            const nodeData = this.pendingNodes.shift();
+            this._processSingleNode(nodeData);
+        }
         this._updatePositions(this._calculateChildCounts());
     }
     
@@ -57,11 +71,15 @@ class TreeVisualizer {
     }
 
     clear() {
+        if (this.simulationLoopId) {
+            clearInterval(this.simulationLoopId);
+            this.simulationLoopId = null;
+        }
         this.nodes = {};
         this.pendingNodes = [];
         this.svgNodes = {};
         this.svgLinks = {};
-        this.processedNodeUpdates = new Set(); // Reset tracker
+        this.processedNodeUpdates = new Set();
         this.solutionNodeId = null;
         this.lastAddedNodeId = null;
         this.minScore = Infinity;
@@ -77,80 +95,47 @@ class TreeVisualizer {
         return this.pendingNodes.length;
     }
 
-    // --- Navigation Handlers ---
+    // --- Navigation Handlers (Omitted for brevity, no changes) ---
+    _handleZoom(e) { e.preventDefault(); const zoomIntensity = 0.1; const wheel = e.deltaY < 0 ? 1 : -1; const newScale = this.zoom.scale * (1 + wheel * zoomIntensity); const point = new DOMPoint(e.clientX, e.clientY); const transformedPoint = point.matrixTransform(this.svg.getScreenCTM().inverse()); this.zoom.x = transformedPoint.x - (transformedPoint.x - this.zoom.x) * (newScale / this.zoom.scale); this.zoom.y = transformedPoint.y - (transformedPoint.y - this.zoom.y) * (newScale / this.zoom.scale); this.zoom.scale = newScale; }
+    _handlePanStart(e) { e.preventDefault(); this.isPanning = true; this.panStart.x = e.clientX; this.panStart.y = e.clientY; this.svg.style.cursor = 'grabbing'; }
+    _handlePanMove(e) { if (!this.isPanning) return; e.preventDefault(); const dx = (e.clientX - this.panStart.x) / this.zoom.scale; const dy = (e.clientY - this.panStart.y) / this.zoom.scale; this.zoom.x += dx; this.zoom.y += dy; this.panStart.x = e.clientX; this.panStart.y = e.clientY; }
+    _handlePanEnd(e) { this.isPanning = false; this.svg.style.cursor = 'grab'; }
 
-    _handleZoom(e) {
-        e.preventDefault();
-        const zoomIntensity = 0.1;
-        const wheel = e.deltaY < 0 ? 1 : -1;
-        const newScale = this.zoom.scale * (1 + wheel * zoomIntensity);
 
-        const point = new DOMPoint(e.clientX, e.clientY);
-        const transformedPoint = point.matrixTransform(this.svg.getScreenCTM().inverse());
+    // --- Loops ---
 
-        this.zoom.x = transformedPoint.x - (transformedPoint.x - this.zoom.x) * (newScale / this.zoom.scale);
-        this.zoom.y = transformedPoint.y - (transformedPoint.y - this.zoom.y) * (newScale / this.zoom.scale);
-        this.zoom.scale = newScale;
+    _simulationLoop() {
+        // This fast loop handles data processing and physics
+        this._introducePendingNodes();
+        const childCounts = this._calculateChildCounts();
+        this._runLayoutSimulation(childCounts);
     }
-
-    _handlePanStart(e) {
-        e.preventDefault();
-        this.isPanning = true;
-        this.panStart.x = e.clientX;
-        this.panStart.y = e.clientY;
-        this.svg.style.cursor = 'grabbing';
-    }
-
-    _handlePanMove(e) {
-        if (!this.isPanning) return;
-        e.preventDefault();
-        const dx = (e.clientX - this.panStart.x) / this.zoom.scale;
-        const dy = (e.clientY - this.panStart.y) / this.zoom.scale;
-        this.zoom.x += dx;
-        this.zoom.y += dy;
-        this.panStart.x = e.clientX;
-        this.panStart.y = e.clientY;
-    }
-
-    _handlePanEnd(e) {
-        this.isPanning = false;
-        this.svg.style.cursor = 'grab';
-    }
-
-    // --- Animation and Drawing Loop ---
 
     _animationLoop() {
+        // This smooth loop only handles rendering
         const { width, height } = this.svg.parentElement.getBoundingClientRect();
         if (width > 0 && height > 0) {
             this.svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
             this.zoomWrapper.setAttribute('transform', `translate(${this.zoom.x}, ${this.zoom.y}) scale(${this.zoom.scale})`);
             
             const childCounts = this._calculateChildCounts();
-            
-            this._introducePendingNodes();
-            this._runLayoutSimulation(childCounts);
             this._updatePositions(childCounts);
         }
         this.animationFrameId = requestAnimationFrame(() => this._animationLoop());
     }
 
-    _introducePendingNodes(introduceAll = false) {
-        if (introduceAll) {
-            this.pendingNodes.forEach(this._processSingleNode.bind(this));
-            this.pendingNodes = [];
+    // --- Processing and Drawing ---
+
+    _introducePendingNodes() {
+        const pendingCount = this.pendingNodes.length;
+        if (pendingCount === 0) {
             return;
         }
 
-        const pendingCount = this.pendingNodes.length;
-        if (pendingCount === 0) {
-            return; // No nodes to process
-        }
-
-        // Dynamically adjust the spawn interval based on the number of pending nodes.
-        const maxInterval = 5;       // Normal speed: 1 node every 5 frames
-        const minInterval = 0;       // Max speed: 1 node per frame
-        const lowerThreshold = 50;   // Below this count, use normal speed
-        const upperThreshold = 500;  // Above this count, use max speed
+        const maxInterval = 100;
+        const minInterval = 0;
+        const lowerThreshold = 50;
+        const upperThreshold = 500;
 
         let dynamicInterval;
         if (pendingCount <= lowerThreshold) {
@@ -158,9 +143,11 @@ class TreeVisualizer {
         } else if (pendingCount >= upperThreshold) {
             dynamicInterval = minInterval;
         } else {
-            // Smoothly decrease the interval as the pending count grows.
-            const progress = (pendingCount - lowerThreshold) / (upperThreshold - lowerThreshold);
-            dynamicInterval = maxInterval - progress * (maxInterval - minInterval);
+            // Calculate linear progress from 0.0 to 1.0
+            const linearProgress = (pendingCount - lowerThreshold) / (upperThreshold - lowerThreshold);
+            // Apply a cubic easing curve to create an exponential effect
+            const exponentialProgress = 1 - Math.pow(1 - linearProgress, 3);
+            dynamicInterval = maxInterval - exponentialProgress * (maxInterval - minInterval);
         }
         
         this.framesSinceLastSpawn++;
@@ -210,11 +197,11 @@ class TreeVisualizer {
                     let flow_dy = parentPos.y - grandparentPos.y;
                     const magnitude = Math.sqrt(flow_dx * flow_dx + flow_dy * flow_dy);
                     if (magnitude > 0.1) {
-                        initialX = parentPos.x + (flow_dx / magnitude) * spawn_distance + (Math.random() * 30 + 7);
+                        initialX = parentPos.x + (flow_dx / magnitude) * spawn_distance;
                         initialY = parentPos.y + (flow_dy / magnitude) * spawn_distance;
                     } else {
                         const angle = Math.random() * 2 * Math.PI;
-                        initialX = parentPos.x + Math.cos(angle) * spawn_distance + (Math.random() * 30 + 7);
+                        initialX = parentPos.x + Math.cos(angle) * spawn_distance;
                         initialY = parentPos.y + Math.sin(angle) * spawn_distance;
                     }
                 } else {
@@ -357,8 +344,8 @@ class TreeVisualizer {
         const kRepel = 2000;
         const kAttract = 2;
         const kAlign = 1;
-        const damping = 0.3; // Higher values mean less damping. 1 is no damping, 0 is full stop each frame.
-        const directionalForce = 7; // Encourages the tree to grow to the right
+        const damping = 0.3;
+        const directionalForce = 3;
 
         for (const n1 of nodes) {
             n1.fx = 0; n1.fy = 0;
@@ -402,13 +389,13 @@ class TreeVisualizer {
                     const nodeChildCount = childCounts[node.id] || 0;
                     const alignmentStrength = 1 + Math.log1p(nodeChildCount);
 
-                     node.fx += directionalForce * alignmentStrength; // Encourages the tree to grow to the right
+                     node.fx += directionalForce * alignmentStrength;
 
                     node.fx += (target_x - node.x) * kAlign * alignmentStrength;
                     node.fy += (target_y - node.y) * kAlign * alignmentStrength;
                 }
             } else {
-                node.fx += directionalForce; // Encourages the tree to grow to the right
+                node.fx += directionalForce;
             }
         }
         

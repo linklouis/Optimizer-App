@@ -341,7 +341,8 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
                              optional_stock_parts: Optional[List[Part]] = None, 
                              is_stock_only_job: bool = False,
                              progress_callback=None,
-                             max_offcut_quantity: float = 1.0) -> Tuple[List[Dict], List[Part], float]:
+                             max_offcut_quantity: float = 1.0,
+                             cancellation_event: Optional['threading.Event'] = None) -> Tuple[List[Dict], List[Part], float]:
     """
     Optimizes cutting stock using a time-limited Branch and Bound search.
     """
@@ -403,6 +404,9 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
 
     # --- Branch and Bound Loop ---
     while pq and (time_limit <= 0 or (time.time() - start_time) < time_limit):
+        if cancellation_event and cancellation_event.is_set():
+            break # Exit the loop if cancellation is requested
+        
         _, current_score, parent_node_id, current_parts, used_layouts, used_signatures = heapq.heappop(pq)
         
         tree_nodes[parent_node_id]["status"] = "explored"

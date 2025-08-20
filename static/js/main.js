@@ -86,6 +86,34 @@ document.addEventListener('DOMContentLoaded', function() {
             loadingOverlay.style.display = 'none';
         }
     }
+
+    async function handleCancelOptimization(taskId, eventSource) {
+        if (!taskId) return;
+
+        // 1. Immediately stop all client-side activity
+        if (eventSource) {
+            eventSource.close();
+        }
+        if (treeVisualizer) {
+            treeVisualizer.stop();
+        }
+        
+        // 2. Hide the loading overlay and switch back to the config tab
+        const loadingOverlay = document.getElementById('loading-overlay');
+        if (loadingOverlay) loadingOverlay.style.display = 'none';
+        
+        const configTabButton = document.querySelector('.tab-button[data-tab="config"]');
+        if (configTabButton) {
+            configTabButton.click();
+        }
+
+        // 3. Send the cancellation request to the server in the background
+        try {
+            await fetch(`/cancel_optimization/${taskId}`, { method: 'POST' });
+        } catch (error) {
+            console.error("Error sending cancellation request:", error);
+        }
+    }
         
     // --- Event Listeners and Initial Setup ---
     
@@ -185,6 +213,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 const { task_id } = await startResponse.json();
                 const eventSource = new EventSource(`/stream/${task_id}`);
                 let receivedDoneEvent = false;
+
+                // --- Attach Cancel Button Handler ---
+                const cancelBtn = document.getElementById('cancel-optimization-btn');
+                if (cancelBtn) {
+                    // Clone and replace to remove any old listeners from previous runs
+                    const newCancelBtn = cancelBtn.cloneNode(true);
+                    cancelBtn.parentNode.replaceChild(newCancelBtn, cancelBtn);
+                    newCancelBtn.addEventListener('click', () => handleCancelOptimization(task_id, eventSource));
+                }
 
                 eventSource.addEventListener('progress', (event) => {
                     const data = JSON.parse(event.data);

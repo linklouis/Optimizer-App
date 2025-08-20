@@ -38,11 +38,17 @@ def get_initial_optional_parts(stock_inv_df, config):
 def run_optimization_task(task_id, config):
     """The function that will run in a background thread."""
     try:
+        # Create a cancellation event and store it in the task dictionary
+        cancel_event = threading.Event()
+        with tasks_lock:
+            if task_id in tasks:
+                tasks[task_id]['cancel_event'] = cancel_event
+
         def progress_callback(progress_data):
             with tasks_lock:
                 if task_id in tasks:
                     tasks[task_id]['progress'] = progress_data
-
+        
         opt_start_time = time.time()
         
         # --- Corrected HHOS Data Processing ---
@@ -118,7 +124,8 @@ def run_optimization_task(task_id, config):
 
         layouts, remaining, score, final_tree_update = optimize_multiple_sheets(
             parts_to_cut, stock_sheets, config, optional_stock_parts, is_stock_only_job, progress_callback,
-            max_offcut_quantity=max_offcut_quantity
+            max_offcut_quantity=max_offcut_quantity,
+            cancellation_event=cancel_event # Pass the event to the optimizer
         )
         opt_elapsed_time = time.time() - opt_start_time
         
@@ -343,6 +350,14 @@ def restore_state():
     if not new_state or 'layouts' not in new_state or 'final_score' not in new_state:
         return jsonify({"error": "Invalid state data provided."}), 400
     return jsonify(new_state)
+
+@app.route('/cancel_optimization/<task_id>', methods=['POST'])
+def cancel_optimization(task_id):
+    """Signals the optimization thread to cancel."""
+    with tasks_lock:
+        if task_id in tasks and 'cancel_event' in tasks[task_id]:
+            tasks[task_id]['cancel_event'].set() # Set the event to signal cancellation
+    return jsonify({"message": "Cancellation requested."})
 
 
 if __name__ == '__main__':

@@ -652,3 +652,35 @@ input:checked + .slider:before { transform: translateX(20px); }
 #path-visualization-svg .link.on-active-path {
     stroke-width: 2px;
 }
+
+
+
+.loading-actions {
+    margin-top: auto; /* Pushes the button to the bottom of the flex container */
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.btn-cancel {
+    width: 100%;
+    padding: 0.75rem;
+    background-color: var(--danger);
+    color: white;
+    border: none;
+    border-radius: 0.5rem;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s, transform 0.1s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+body:not(.dark-mode) .btn-cancel:hover {
+    background-color: #c82333; /* Darker red for light mode */
+}
+body.dark-mode .btn-cancel:hover {
+    background-color: #dc2626; /* Slightly brighter red for dark mode */
+}
