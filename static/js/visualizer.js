@@ -141,8 +141,30 @@ class TreeVisualizer {
             return;
         }
 
+        const pendingCount = this.pendingNodes.length;
+        if (pendingCount === 0) {
+            return; // No nodes to process
+        }
+
+        // Dynamically adjust the spawn interval based on the number of pending nodes.
+        const maxInterval = 5;       // Normal speed: 1 node every 5 frames
+        const minInterval = 0;       // Max speed: 1 node per frame
+        const lowerThreshold = 50;   // Below this count, use normal speed
+        const upperThreshold = 500;  // Above this count, use max speed
+
+        let dynamicInterval;
+        if (pendingCount <= lowerThreshold) {
+            dynamicInterval = maxInterval;
+        } else if (pendingCount >= upperThreshold) {
+            dynamicInterval = minInterval;
+        } else {
+            // Smoothly decrease the interval as the pending count grows.
+            const progress = (pendingCount - lowerThreshold) / (upperThreshold - lowerThreshold);
+            dynamicInterval = maxInterval - progress * (maxInterval - minInterval);
+        }
+        
         this.framesSinceLastSpawn++;
-        if (this.pendingNodes.length > 0 && this.framesSinceLastSpawn >= this.spawnInterval) {
+        if (this.framesSinceLastSpawn >= dynamicInterval) {
             const nodeData = this.pendingNodes.shift();
             this._processSingleNode(nodeData);
             this.framesSinceLastSpawn = 0;
@@ -188,16 +210,16 @@ class TreeVisualizer {
                     let flow_dy = parentPos.y - grandparentPos.y;
                     const magnitude = Math.sqrt(flow_dx * flow_dx + flow_dy * flow_dy);
                     if (magnitude > 0.1) {
-                        initialX = parentPos.x + (flow_dx / magnitude) * spawn_distance;
+                        initialX = parentPos.x + (flow_dx / magnitude) * spawn_distance + (Math.random() * 30 + 7);
                         initialY = parentPos.y + (flow_dy / magnitude) * spawn_distance;
                     } else {
                         const angle = Math.random() * 2 * Math.PI;
-                        initialX = parentPos.x + Math.cos(angle) * spawn_distance;
+                        initialX = parentPos.x + Math.cos(angle) * spawn_distance + (Math.random() * 30 + 7);
                         initialY = parentPos.y + Math.sin(angle) * spawn_distance;
                     }
                 } else {
                     const angle = Math.random() * 2 * Math.PI;
-                    initialX = parentPos.x + Math.cos(angle) * spawn_distance;
+                    initialX = parentPos.x + Math.cos(angle) * spawn_distance + (Math.random() * 30 + 7);
                     initialY = parentPos.y + Math.sin(angle) * spawn_distance;
                 }
             } else {
@@ -336,6 +358,7 @@ class TreeVisualizer {
         const kAttract = 2;
         const kAlign = 1;
         const damping = 0.3; // Higher values mean less damping. 1 is no damping, 0 is full stop each frame.
+        const directionalForce = 7; // Encourages the tree to grow to the right
 
         for (const n1 of nodes) {
             n1.fx = 0; n1.fy = 0;
@@ -362,8 +385,6 @@ class TreeVisualizer {
             parent.fx -= dx_attract * kAttract;
             parent.fy -= dy_attract * kAttract;
 
-            node.fx += 2; // Encourages the tree to grow to the right
-
             const grandparent = this.nodes[parent.parent];
             if (grandparent) {
                 const flow_dx = parent.x - grandparent.x;
@@ -381,9 +402,13 @@ class TreeVisualizer {
                     const nodeChildCount = childCounts[node.id] || 0;
                     const alignmentStrength = 1 + Math.log1p(nodeChildCount);
 
+                     node.fx += directionalForce * alignmentStrength; // Encourages the tree to grow to the right
+
                     node.fx += (target_x - node.x) * kAlign * alignmentStrength;
                     node.fy += (target_y - node.y) * kAlign * alignmentStrength;
                 }
+            } else {
+                node.fx += directionalForce; // Encourages the tree to grow to the right
             }
         }
         
