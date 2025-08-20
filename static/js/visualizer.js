@@ -355,7 +355,7 @@ class TreeVisualizer {
                 const dy = n1.y - n2.y;
                 let distance = Math.sqrt(dx * dx + dy * dy);
                 if (distance < 1) distance = 1;
-                const force = kRepel / (distance * distance);
+                const force = kRepel / (Math.pow(distance, 1.8));
                 n1.fx += (dx / distance) * force;
                 n1.fy += (dy / distance) * force;
             }

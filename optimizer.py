@@ -69,7 +69,7 @@ def calculate_layout_score(layout: Dict[str, Any], sheet_info: Dict[str, Any], c
                            min_offcut_dim: float, reference_area: float, max_offcut_quantity: float, 
                            is_stock_only_job: bool = False, tracker: Optional[Dict] = None,
                            remaining_parts: Optional[List[Part]] = None) -> float:
-    """Calculates a score for a given layout. Higher is better."""
+    """Calculates a score for a given sheet layout. Higher is better."""
     
     def _update_tracker(component_name: str, value: float):
         """Helper to update the statistics for a score component."""
@@ -91,7 +91,7 @@ def calculate_layout_score(layout: Dict[str, Any], sheet_info: Dict[str, Any], c
     area_based_score = -(((sheet_area - used_area - offcut_area) / reference_area * config.get('w_waste', 1.0)) + 
                          ((offcut_area / reference_area) * config.get('w_offcut', 0.5)))
 
-    # --- NEW: Optimistic Score for Any In-Progress Sheet ---
+    # --- NEW: Investment-Aware Area Score for Any In-Progress Sheet ---
     # To solve the bias, we check if a layout is new and has room, regardless of sheet type.
     # If so, we optimistically assume the rest of the sheet will be filled perfectly.
     is_lightly_used = len(layout['placed_parts']) <= 2
@@ -121,8 +121,10 @@ def calculate_layout_score(layout: Dict[str, Any], sheet_info: Dict[str, Any], c
     if sheet_info.get('type') != 'Default' and max_offcut_quantity > 0:
         quantity_bonus = (float(sheet_info.get('quantity', 1)) / max_offcut_quantity) * config.get('w_quantity', 0.1)
 
+    unweighted_cuts = float(_count_guillotine_cuts(layout))
     expected_max_cuts = config.get('expected_max_cuts_per_sheet', 20.0)
-    cuts_penalty = (float(len(layout['placed_parts'])) / expected_max_cuts) * config.get('w_cuts', 0.2) if expected_max_cuts > 0 else 0
+    cuts_penalty = (unweighted_cuts / expected_max_cuts) * config.get('w_cuts', 0.2) if expected_max_cuts > 0 else 0
+    # print(unweighted_cuts)
 
     priority_bonus = 0.0
     if sheet_info.get('type') == 'Offcut':
@@ -257,6 +259,35 @@ def run_single_sheet_optimization(sheet_info: Dict, required_parts: List[Part], 
     
     return best_layout
 
+def _count_guillotine_cuts(layout: Dict[str, Any]) -> int:
+    """
+    Accurately counts the number of unique guillotine cuts by identifying all
+    unique internal horizontal and vertical cut lines.
+    """
+    sheet_info = layout['sheet_info']
+    placed_parts = layout.get('placed_parts', [])
+    if not placed_parts:
+        # print('a')
+        return 0
+
+    TOLERANCE = 1e-6
+    x_coords, y_coords = set(), set()
+
+    for part in placed_parts:
+        p_len = part['width'] if part.get('rotated') else part['length']
+        p_wid = part['length'] if part.get('rotated') else part['width']
+        x_coords.add(part['x'])
+        x_coords.add(part['x'] + p_wid)
+        y_coords.add(part['y'])
+        y_coords.add(part['y'] + p_len)
+        
+    # A cut is an internal line, so we filter out the sheet boundaries.
+    # We round to merge floating point values that are effectively the same cut.
+    unique_x_cuts = {round(x, 4) for x in x_coords if x > TOLERANCE and x < sheet_info['width'] - TOLERANCE}
+    unique_y_cuts = {round(y, 4) for y in y_coords if y > TOLERANCE and y < sheet_info['length'] - TOLERANCE}
+
+    return len(unique_x_cuts) + len(unique_y_cuts)
+
 def _get_min_cuts_for_parts(num_parts: int) -> int:
     """
     Calculates the mathematical minimum number of guillotine cuts required
@@ -267,66 +298,6 @@ def _get_min_cuts_for_parts(num_parts: int) -> int:
     rows = math.ceil(math.sqrt(num_parts))
     cols = math.ceil(num_parts / rows)
     return (rows - 1) + (cols - 1)
-
-# def _predict_number_of_new_sheet_layouts(remaining_parts: list, used_signatures: frozenset, reference_area: float) -> int:
-#     """
-#     Analyzes remaining part demand vs. production from existing layouts to predict
-#     how many new, unique layouts will be required.
-#     """
-#     # 1. Tally the demand for each unique part dimension among remaining parts.
-#     remaining_demand = Counter()
-#     dim_to_area_map = {}
-#     for part in remaining_parts:
-#         p_len, p_wid = (part['length'], part['width'])
-#         dim_tuple = tuple(sorted((f"{p_len:.3f}", f"{p_wid:.3f}")))
-#         remaining_demand[dim_tuple] += 1
-#         if dim_tuple not in dim_to_area_map:
-#             dim_to_area_map[dim_tuple] = p_len * p_wid
-
-#     # 2. Analyze the production "recipe" of each existing layout.
-#     layout_production = {}
-#     for sig in used_signatures:
-#         production_counter = Counter()
-#         for part_str in sig.split('|'):
-#             if part_str.startswith('part_'):
-#                 dims_str = part_str.split('_')[2]
-#                 p_len_str, p_wid_str = dims_str.split('x')
-#                 dim_tuple = tuple(sorted((p_len_str, p_wid_str)))
-#                 production_counter[dim_tuple] += 1
-#         layout_production[sig] = production_counter
-
-#     # 3. Calculate how many parts can be fulfilled by reusing existing layouts.
-#     fulfilled_parts = Counter()
-#     for sig, production in layout_production.items():
-#         if not production: continue
-
-#         usability = float('inf')
-#         for dim, count_produced in production.items():
-#             if remaining_demand[dim] > 0:
-#                 usability = min(usability, remaining_demand[dim] // count_produced)
-        
-#         if usability == float('inf') or usability == 0:
-#             continue
-
-#         for dim, count_produced in production.items():
-#             fulfilled_parts[dim] += usability * count_produced
-
-#     # 4. Identify the set of UNIQUE unfulfilled part types.
-#     unfulfilled_part_dims = set()
-#     for dim, total_needed in remaining_demand.items():
-#         if total_needed > fulfilled_parts.get(dim, 0):
-#             unfulfilled_part_dims.add(dim)
-
-#     # 5. Estimate new layouts needed based on the VARIETY of problem parts.
-#     if unfulfilled_part_dims:
-#         # Calculate the area required to make just ONE of each unique problem part.
-#         area_of_unique_problem_parts = sum(dim_to_area_map.get(dim, 0) for dim in unfulfilled_part_dims)
-        
-#         # Estimate how many sheets/layouts are needed to contain this variety.
-#         sheets_for_unique_parts = math.ceil(area_of_unique_problem_parts / reference_area) if reference_area > 0 else 0
-#         return sheets_for_unique_parts
-    
-#     return 0
 
 def _predict_number_of_new_sheet_layouts(remaining_parts: list, used_signatures: frozenset, 
                                         reference_area: float, config: Dict) -> int:
@@ -412,7 +383,7 @@ def _calculate_bound(remaining_parts: list, current_score: float, config: Dict[s
     # Predict future layouts needed using the new simulation-based helper function.
     optimistic_new_layouts = _predict_number_of_new_sheet_layouts(remaining_parts, used_signatures, reference_area, config)
     optimistic_total_layouts = len(used_signatures) + optimistic_new_layouts
-    print(f"Predicted total layouts: {optimistic_total_layouts} ({len(used_signatures)} existing + {optimistic_new_layouts} new) for {len(remaining_parts)} remaining parts.")
+    # print(f"Predicted total layouts: {optimistic_total_layouts} ({len(used_signatures)} existing + {optimistic_new_layouts} new) for {len(remaining_parts)} remaining parts.")
     
     max_layouts = config.get('max_unique_layouts', 0)
     # Prune the branch if the predicted total layouts exceed the user-defined cap.
@@ -433,7 +404,8 @@ def _calculate_bound(remaining_parts: list, current_score: float, config: Dict[s
 
     expected_max_cuts = config.get('expected_max_cuts_per_sheet', 20.0)
     optimistic_future_cuts = _get_min_cuts_for_parts(len(remaining_parts))
-    future_cuts_penalty = (optimistic_future_cuts / expected_max_cuts) * config.get('w_cuts', 0.2) if expected_max_cuts > 0 else 0
+    future_cuts_penalty = (optimistic_future_cuts / (expected_max_cuts)) * config.get('w_cuts', 0.2) if expected_max_cuts > 0 else 0
+    print(f'predicted cuts: {optimistic_future_cuts}')
     
     future_sheets_penalty = min_additional_sheets * normalized_sheet_penalty
 
