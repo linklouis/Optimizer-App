@@ -11,6 +11,7 @@ class TreeVisualizer {
         this.pendingNodes = [];
         this.svgNodes = {};
         this.svgLinks = {};
+        this.processedNodeUpdates = new Set(); // Track processed updates
         
         this.animationFrameId = null;
         this.solutionNodeId = null;
@@ -43,10 +44,10 @@ class TreeVisualizer {
     }
 
     stop() {
-        if (this.animationFrameId) {
-             cancelAnimationFrame(this.animationFrameId);
-             this.animationFrameId = null;
-        }
+        // if (this.animationFrameId) {
+        //      cancelAnimationFrame(this.animationFrameId);
+        //      this.animationFrameId = null;
+        // }
         this._introducePendingNodes(true);
         this._updatePositions(this._calculateChildCounts());
     }
@@ -60,6 +61,7 @@ class TreeVisualizer {
         this.pendingNodes = [];
         this.svgNodes = {};
         this.svgLinks = {};
+        this.processedNodeUpdates = new Set(); // Reset tracker
         this.solutionNodeId = null;
         this.lastAddedNodeId = null;
         this.minScore = Infinity;
@@ -69,6 +71,10 @@ class TreeVisualizer {
         this.framesSinceLastSpawn = 0;
         const { width, height } = this.svg.parentElement.getBoundingClientRect();
         this.zoom = { x: width / 2, y: height / 2, scale: 1.0 };
+    }
+
+    getPendingNodeCount() {
+        return this.pendingNodes.length;
     }
 
     // --- Navigation Handlers ---
@@ -144,6 +150,11 @@ class TreeVisualizer {
     }
 
     _processSingleNode(nodeData) {
+        const updateSignature = `${nodeData.id}-${nodeData.status}`;
+        if (this.processedNodeUpdates.has(updateSignature)) {
+            return; // Already processed this exact update, skip to prevent stalling.
+        }
+
         if (nodeData.score !== undefined) {
             this.minScore = Math.min(this.minScore, nodeData.score);
             this.maxScore = Math.max(this.maxScore, nodeData.score);
@@ -201,6 +212,8 @@ class TreeVisualizer {
                 this.solutionNodeId = nodeData.id;
             }
         }
+        
+        this.processedNodeUpdates.add(updateSignature);
     }
 
     _getActivePath() {
@@ -316,8 +329,8 @@ class TreeVisualizer {
 
         const kRepel = 2000;
         const kAttract = 2;
-        const kAlign = 0.1;
-        const damping = 0.3;
+        const kAlign = 1;
+        const damping = 0.3; // Higher values mean less damping. 1 is no damping, 0 is full stop each frame.
 
         for (const n1 of nodes) {
             n1.fx = 0; n1.fy = 0;
@@ -343,6 +356,8 @@ class TreeVisualizer {
             node.fy += dy_attract * kAttract;
             parent.fx -= dx_attract * kAttract;
             parent.fy -= dy_attract * kAttract;
+
+            node.fx += 1; // Encourages the tree to grow to the right
 
             const grandparent = this.nodes[parent.parent];
             if (grandparent) {

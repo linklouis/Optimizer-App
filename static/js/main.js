@@ -152,6 +152,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const nodesExploredValue = document.getElementById('nodes-explored-value');
             const bestScoreValue = document.getElementById('best-score-value');
             const sheetsUsedValue = document.getElementById('sheets-used-value');
+            const pendingUpdatesValue = document.getElementById('pending-updates-value');
 
             if (!loadingOverlay) return;
 
@@ -170,6 +171,7 @@ document.addEventListener('DOMContentLoaded', function() {
             nodesExploredValue.textContent = '0';
             bestScoreValue.textContent = '-';
             sheetsUsedValue.textContent = '-';
+            if (pendingUpdatesValue) pendingUpdatesValue.textContent = '0';
 
             try {
                 const formData = new FormData(configForm);
@@ -207,6 +209,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (data.tree_update && treeVisualizer) {
                         treeVisualizer.addOrUpdateNodes(data.tree_update);
                     }
+                    // --- Update Pending Count ---
+                    if (treeVisualizer && pendingUpdatesValue) {
+                        pendingUpdatesValue.textContent = treeVisualizer.getPendingNodeCount().toLocaleString();
+                    }
                 });
 
                 eventSource.addEventListener('done', (event) => {
@@ -218,8 +224,11 @@ document.addEventListener('DOMContentLoaded', function() {
                         if (result && result.final_tree_update) {
                             treeVisualizer.addOrUpdateNodes(result.final_tree_update);
                         }
-                        treeVisualizer.activePathIds.clear();
                         treeVisualizer.stop(); // Stop the animation and draw the final state
+                    }
+
+                    if (treeVisualizer && pendingUpdatesValue) {
+                        pendingUpdatesValue.textContent = treeVisualizer.getPendingNodeCount().toLocaleString();
                     }
 
                     currentState = result;
