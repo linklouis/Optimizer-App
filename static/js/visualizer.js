@@ -132,7 +132,7 @@ class TreeVisualizer {
             return;
         }
 
-        const maxInterval = 100;
+        const maxInterval = 10;
         const minInterval = 0;
         const lowerThreshold = 50;
         const upperThreshold = 500;

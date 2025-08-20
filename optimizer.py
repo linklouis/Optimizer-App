@@ -267,6 +267,17 @@ def run_single_sheet_optimization(sheet_info: Dict, required_parts: List[Part], 
     
     return best_layout
 
+def _get_min_cuts_for_parts(num_parts: int) -> int:
+    """
+    Calculates the mathematical minimum number of guillotine cuts required
+    to produce a given number of rectangular parts from a single sheet.
+    """
+    if num_parts <= 1:
+        return 0
+    rows = math.ceil(math.sqrt(num_parts))
+    cols = math.ceil(num_parts / rows)
+    return (rows - 1) + (cols - 1)
+
 def _predict_number_of_new_sheet_layouts(remaining_parts: list, used_signatures: frozenset, reference_area: float) -> int:
     """
     Analyzes remaining part demand vs. production from existing layouts to predict
@@ -299,7 +310,6 @@ def _predict_number_of_new_sheet_layouts(remaining_parts: list, used_signatures:
     for sig, production in layout_production.items():
         if not production: continue
 
-        # For each layout, find its maximum usability based on the part that's least needed (the "limiting factor").
         usability = float('inf')
         for dim, count_produced in production.items():
             if remaining_demand[dim] > 0:
@@ -308,22 +318,23 @@ def _predict_number_of_new_sheet_layouts(remaining_parts: list, used_signatures:
         if usability == float('inf') or usability == 0:
             continue
 
-        # Tally the parts that will be fulfilled by reusing this layout.
         for dim, count_produced in production.items():
             fulfilled_parts[dim] += usability * count_produced
 
-    # 4. Identify unfulfilled parts and calculate their total area.
-    problem_parts_area = 0.0
+    # 4. Identify the set of UNIQUE unfulfilled part types.
+    unfulfilled_part_dims = set()
     for dim, total_needed in remaining_demand.items():
-        unfulfilled_count = total_needed - fulfilled_parts.get(dim, 0)
-        if unfulfilled_count > 0:
-            part_area = dim_to_area_map.get(dim, 0)
-            problem_parts_area += unfulfilled_count * part_area
+        if total_needed > fulfilled_parts.get(dim, 0):
+            unfulfilled_part_dims.add(dim)
 
-    # 5. Predict new layouts needed ONLY for the true problem parts.
-    if problem_parts_area > 0:
-        sheets_for_problem_parts = math.ceil(problem_parts_area / reference_area) if reference_area > 0 else 0
-        return math.ceil(sheets_for_problem_parts / 2.0)
+    # 5. Estimate new layouts needed based on the VARIETY of problem parts.
+    if unfulfilled_part_dims:
+        # Calculate the area required to make just ONE of each unique problem part.
+        area_of_unique_problem_parts = sum(dim_to_area_map.get(dim, 0) for dim in unfulfilled_part_dims)
+        
+        # Estimate how many sheets/layouts are needed to contain this variety.
+        sheets_for_unique_parts = math.ceil(area_of_unique_problem_parts / reference_area) if reference_area > 0 else 0
+        return sheets_for_unique_parts
     
     return 0
 
@@ -333,36 +344,37 @@ def _calculate_bound(remaining_parts: list, current_score: float, config: Dict[s
     Calculates a more sophisticated upper bound on the final score for a partial solution.
     This bound is optimistic, assuming the best possible outcome for the remaining parts.
     """
-    optimistic_new_layouts = 0
-    
     if not remaining_parts:
         return current_score
-    
+
     # Predict future layouts needed using the new helper function.
     optimistic_new_layouts = _predict_number_of_new_sheet_layouts(remaining_parts, used_signatures, reference_area)
+    optimistic_total_layouts = len(used_signatures) + optimistic_new_layouts
+    # print(f"Predicted total layouts: {optimistic_total_layouts} ({len(used_signatures)} existing + {optimistic_new_layouts} new) for {len(remaining_parts)} remaining parts.")
     
     max_layouts = config.get('max_unique_layouts', 0)
-    # Prune the branch if the predicted layouts exceed the user-defined cap.
-    if len(used_signatures) + optimistic_new_layouts > max_layouts > 0:
+    # Prune the branch if the predicted total layouts exceed the user-defined cap.
+    if optimistic_total_layouts > max_layouts > 0:
         return -float('inf')
 
     remaining_area = sum(p['length'] * p['width'] for p in remaining_parts)
     min_additional_sheets = math.ceil(remaining_area / reference_area) if reference_area > 0 else float('inf')
     
-    optimistic_area_score = 0
-    optimistic_stock_fill_bonus = 0
-    w_stock_fill = config.get('w_stock_fill', 1.0)
+    optimistic_area_score = 0   # Assumes we can place all remaining parts in the best possible way, with no waste or offcuts.
+    optimistic_stock_fill_bonus = 0 # Assumes we use no unrequired stock parts in the future layouts, and therefore get no bonuses for utilizing new low-inventory stock parts.
     for part in remaining_parts:
         if part.get('is_stock_part', False):
             deficit = part.get('target_stock', 1) - part.get('current_stock', 0)
             if part.get('target_stock', 0) > 0 and deficit > 0:
                 part_area = part['length'] * part['width']
-                optimistic_stock_fill_bonus += (deficit / part['target_stock']) * (part_area / reference_area) * w_stock_fill
+                optimistic_stock_fill_bonus += (deficit / part['target_stock']) * (part_area / reference_area) * config.get('w_stock_fill', 1.0)
 
     expected_max_cuts = config.get('expected_max_cuts_per_sheet', 20.0)
-    w_cuts = config.get('w_cuts', 0.2)
-    future_cuts_penalty = (len(remaining_parts) / expected_max_cuts) * w_cuts if expected_max_cuts > 0 else 0
+    optimistic_future_cuts = _get_min_cuts_for_parts(len(remaining_parts))
+    future_cuts_penalty = (optimistic_future_cuts / expected_max_cuts) * config.get('w_cuts', 0.2) if expected_max_cuts > 0 else 0
+    
     future_sheets_penalty = min_additional_sheets * normalized_sheet_penalty
+    
     future_layouts_penalty = optimistic_new_layouts * normalized_layouts_penalty
 
     upper_bound = (
