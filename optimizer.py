@@ -360,6 +360,21 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
     tree_update_batch = {0: tree_nodes[0].copy()}
     last_best_sol_node = None
 
+    # --- NEW: Logging Helper for Tree Updates ---
+    def update_node_status(node_id, new_status, reason):
+        """Helper to update node status and log potential redundancies."""
+        # Check if this update is redundant before applying it
+        if node_id in tree_nodes and tree_nodes[node_id].get("status") == new_status:
+            print(f"DEBUG: Redundant update detected in optimizer for Node {node_id} to status '{new_status}'. Reason: {reason}")
+        
+        if node_id in tree_nodes:
+            tree_nodes[node_id]["status"] = new_status
+            tree_update_batch[node_id] = tree_nodes[node_id].copy()
+        else: # Handle new node creation
+            # This branch might not be strictly necessary if all nodes are created before update
+            # but it's safer. The status will be set in the 'new_node' dict.
+            pass
+
     # --- Initial State Setup ---
     part_id_counter = 0
     initial_parts_dict: Dict[int, Part] = {}
@@ -405,11 +420,11 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
     while pq and (time_limit <= 0 or (time.time() - start_time) < time_limit):
         _, current_score, parent_node_id, current_parts, used_layouts, used_signatures = heapq.heappop(pq)
         
-        tree_nodes[parent_node_id]["status"] = "explored"
-        tree_update_batch[parent_node_id] = tree_nodes[parent_node_id].copy()
+        update_node_status(parent_node_id, "explored", "Popped from priority queue")
 
         current_time = time.time()
-        if progress_callback and (current_time - last_update_time > 0.2):
+        batch_size_limit = 500
+        if progress_callback and ((current_time - last_update_time > 0.2) or len(tree_update_batch) >= batch_size_limit):
             progress_data = {
                 "part_progress": int(((total_initial_parts - len(current_parts)) / total_initial_parts) * 100 if total_initial_parts > 0 else 100),
                 "elapsed_time": current_time - start_time,
@@ -464,27 +479,23 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
             current_node_id = node_counter
             new_node = {"id": current_node_id, "parent": parent_node_id, "score": child_score, "status": "exploring"}
             tree_nodes[current_node_id] = new_node
-            tree_update_batch[current_node_id] = new_node.copy()
+            tree_update_batch[current_node_id] = new_node.copy() # Direct add for new node
             node_counter += 1
 
             if not child_parts:
                 if child_score > best_score:
                     best_score = child_score
                     best_solution = (child_layouts, [])
-                    tree_nodes[current_node_id]["status"] = "solution"
-                    tree_update_batch[current_node_id] = tree_nodes[current_node_id].copy()
+                    update_node_status(current_node_id, "solution", "New best solution")
                     if last_best_sol_node is not None and last_best_sol_node in tree_nodes:
-                        tree_nodes[last_best_sol_node]["status"] = "explored"
-                        tree_update_batch[last_best_sol_node] = tree_nodes[last_best_sol_node].copy()
+                        update_node_status(last_best_sol_node, "explored", "Demoted from best solution")
                     last_best_sol_node = current_node_id
             else:
                 child_bound = _calculate_bound(list(child_parts.values()), child_score, config, reference_area, child_signatures)
                 if child_bound > best_score:
                     heapq.heappush(pq, (-child_bound, child_score, current_node_id, child_parts, child_layouts, child_signatures))
                 else:
-                    tree_nodes[current_node_id]["status"] = "pruned_bound"
-                    tree_update_batch[current_node_id] = tree_nodes[current_node_id].copy()
+                    update_node_status(current_node_id, "pruned_bound", "Pruned by bound")
     
     final_layouts, remaining_parts = best_solution
-    # Return the final batch of nodes so the frontend can sync before the final render.
     return final_layouts, remaining_parts, best_score, list(tree_update_batch.values())

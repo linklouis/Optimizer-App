@@ -152,7 +152,12 @@ class TreeVisualizer {
     _processSingleNode(nodeData) {
         const updateSignature = `${nodeData.id}-${nodeData.status}`;
         if (this.processedNodeUpdates.has(updateSignature)) {
-            return; // Already processed this exact update, skip to prevent stalling.
+            const existingNode = this.nodes[nodeData.id];
+            console.warn(`Visualizer skipped redundant update for Node ${nodeData.id}.`, { 
+                "Incoming Update": { status: nodeData.status, score: nodeData.score },
+                "Existing Node State": existingNode ? { ...existingNode } : '!! NODE DOES NOT EXIST IN VISUALIZER YET !!' 
+            });
+            return;
         }
 
         if (nodeData.score !== undefined) {
@@ -357,7 +362,7 @@ class TreeVisualizer {
             parent.fx -= dx_attract * kAttract;
             parent.fy -= dy_attract * kAttract;
 
-            node.fx += 1; // Encourages the tree to grow to the right
+            node.fx += 2; // Encourages the tree to grow to the right
 
             const grandparent = this.nodes[parent.parent];
             if (grandparent) {

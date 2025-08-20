@@ -244,12 +244,17 @@ def start_optimization():
 def stream(task_id):
     def event_stream():
         while True:
+            progress_data = None
             with tasks_lock:
                 task = tasks.get(task_id)
                 if not task:
                     break
                 
-                progress_data = task['progress']
+                # Atomically get and clear the progress data to prevent re-sending
+                if 'progress' in task and task['progress']:
+                    progress_data = task['progress']
+                    task['progress'] = {} # Clear it after reading
+                
                 status = task['status']
 
             if progress_data:
