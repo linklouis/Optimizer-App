@@ -267,21 +267,22 @@ def run_single_sheet_optimization(sheet_info: Dict, required_parts: List[Part], 
     
     return best_layout
 
-def _calculate_bound(remaining_parts: list, current_score: float, config: Dict[str, Any], reference_area: float, used_signatures: frozenset) -> float:
+def _calculate_bound(remaining_parts: list, current_score: float, config: Dict[str, Any], reference_area: float, used_signatures: frozenset,
+                     normalized_sheet_penalty: float, normalized_layouts_penalty: float) -> float:
     """
     Calculates a more sophisticated upper bound on the final score for a partial solution.
     This bound is optimistic, assuming the best possible outcome for the remaining parts.
     """
     max_layouts = config.get('max_unique_layouts', 0)
-    if max_layouts > 0 and remaining_parts:
-        # --- NEW HEURISTIC BASED ON YOUR SUGGESTION ---
+    optimistic_new_layouts = 0  # Initialize to 0
+
+    if max_layouts > 0 and remaining_parts:  # TODO: This can probably be removed from the if statement, so we predict the number of new layouts even if there's no cap, right/
         # 1. Find which part types (l x w) can be made with existing layouts.
         producible_part_dims = set()
         for sig in used_signatures:
-            # This is a bit of a hack to parse the signature string, but it's fast.
             for part_str in sig.split('|'):
                 if part_str.startswith('part_'):
-                    dims = part_str.split('_')[2] # e.g., "48.000x24.000"
+                    dims = part_str.split('_')[2]
                     producible_part_dims.add(dims)
 
         # 2. Identify "problem parts" that cannot be made with existing layouts.
@@ -296,7 +297,6 @@ def _calculate_bound(remaining_parts: list, current_score: float, config: Dict[s
         # 3. Predict new layouts needed ONLY for the problem parts.
         if problem_parts_area > 0:
             sheets_for_problem_parts = math.ceil(problem_parts_area / reference_area) if reference_area > 0 else 0
-            # Be optimistic: assume one new layout for every two sheets of these problem parts.
             optimistic_new_layouts = math.ceil(sheets_for_problem_parts / 2.0)
             
             if len(used_signatures) + optimistic_new_layouts > max_layouts:
@@ -305,7 +305,6 @@ def _calculate_bound(remaining_parts: list, current_score: float, config: Dict[s
     if not remaining_parts:
         return current_score
 
-    # --- The rest of the function remains the same ---
     remaining_area = sum(p['length'] * p['width'] for p in remaining_parts)
     min_additional_sheets = math.ceil(remaining_area / reference_area) if reference_area > 0 else float('inf')
     
@@ -322,8 +321,8 @@ def _calculate_bound(remaining_parts: list, current_score: float, config: Dict[s
     expected_max_cuts = config.get('expected_max_cuts_per_sheet', 20.0)
     w_cuts = config.get('w_cuts', 0.2)
     future_cuts_penalty = (len(remaining_parts) / expected_max_cuts) * w_cuts if expected_max_cuts > 0 else 0
-    future_sheets_penalty = min_additional_sheets * config.get('w_sheets', 1.0)
-    future_layouts_penalty = 0
+    future_sheets_penalty = min_additional_sheets * normalized_sheet_penalty
+    future_layouts_penalty = optimistic_new_layouts * normalized_layouts_penalty
 
     upper_bound = (
         current_score 
@@ -394,7 +393,7 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
     normalized_layouts_penalty = config.get('w_unique_layouts', 0.5) * penalty_normalizer
 
     initial_used_signatures = frozenset()
-    initial_bound = -_calculate_bound(list(initial_parts_dict.values()), 0, config, reference_area, initial_used_signatures)
+    initial_bound = -_calculate_bound(list(initial_parts_dict.values()), 0, config, reference_area, initial_used_signatures, normalized_sheet_penalty, normalized_layouts_penalty)
     
     node_counter = 1 
     pq = [ (initial_bound, 0.0, 0, initial_parts_dict, [], initial_used_signatures) ]
@@ -427,7 +426,7 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
             tree_update_batch.clear()
             last_update_time = current_time
         
-        if _calculate_bound(list(current_parts.values()), current_score, config, reference_area, used_signatures) < best_score:
+        if _calculate_bound(list(current_parts.values()), current_score, config, reference_area, used_signatures, normalized_sheet_penalty, normalized_layouts_penalty) < best_score:
             continue
 
         remaining_primary_parts = list(current_parts.values())
@@ -483,7 +482,7 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
                         tree_update_batch[last_best_sol_node] = tree_nodes[last_best_sol_node].copy()
                     last_best_sol_node = current_node_id
             else:
-                child_bound = _calculate_bound(list(child_parts.values()), child_score, config, reference_area, child_signatures)
+                child_bound = _calculate_bound(list(child_parts.values()), child_score, config, reference_area, child_signatures, normalized_sheet_penalty, normalized_layouts_penalty)
                 if child_bound > best_score:
                     heapq.heappush(pq, (-child_bound, child_score, current_node_id, child_parts, child_layouts, child_signatures))
                 else:

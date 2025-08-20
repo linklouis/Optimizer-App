@@ -21,7 +21,7 @@
     "search_time_limit": 0.0,
     "branching_factor": 1,
     "expected_max_cuts_per_sheet": 10.0,
-    "max_unique_layouts": 13,
+    "max_unique_layouts": 20,
     "selected_stock_parts": [
         "OSB-15-126126",
         "OSB-15-140126",
@@ -66,7 +66,7 @@
     "w_quantity": 0.3,
     "w_sheets": 0.5,
     "w_stock_fill": 3.0,
-    "w_unique_layouts": 0.5,
+    "w_unique_layouts": 5.0,
     "standardize_stock_layouts": true,
     "selected_offcuts": [
         "0",
