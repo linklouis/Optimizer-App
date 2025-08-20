@@ -278,20 +278,81 @@ def _get_min_cuts_for_parts(num_parts: int) -> int:
     cols = math.ceil(num_parts / rows)
     return (rows - 1) + (cols - 1)
 
-def _predict_number_of_new_sheet_layouts(remaining_parts: list, used_signatures: frozenset, reference_area: float) -> int:
+# def _predict_number_of_new_sheet_layouts(remaining_parts: list, used_signatures: frozenset, reference_area: float) -> int:
+#     """
+#     Analyzes remaining part demand vs. production from existing layouts to predict
+#     how many new, unique layouts will be required.
+#     """
+#     # 1. Tally the demand for each unique part dimension among remaining parts.
+#     remaining_demand = Counter()
+#     dim_to_area_map = {}
+#     for part in remaining_parts:
+#         p_len, p_wid = (part['length'], part['width'])
+#         dim_tuple = tuple(sorted((f"{p_len:.3f}", f"{p_wid:.3f}")))
+#         remaining_demand[dim_tuple] += 1
+#         if dim_tuple not in dim_to_area_map:
+#             dim_to_area_map[dim_tuple] = p_len * p_wid
+
+#     # 2. Analyze the production "recipe" of each existing layout.
+#     layout_production = {}
+#     for sig in used_signatures:
+#         production_counter = Counter()
+#         for part_str in sig.split('|'):
+#             if part_str.startswith('part_'):
+#                 dims_str = part_str.split('_')[2]
+#                 p_len_str, p_wid_str = dims_str.split('x')
+#                 dim_tuple = tuple(sorted((p_len_str, p_wid_str)))
+#                 production_counter[dim_tuple] += 1
+#         layout_production[sig] = production_counter
+
+#     # 3. Calculate how many parts can be fulfilled by reusing existing layouts.
+#     fulfilled_parts = Counter()
+#     for sig, production in layout_production.items():
+#         if not production: continue
+
+#         usability = float('inf')
+#         for dim, count_produced in production.items():
+#             if remaining_demand[dim] > 0:
+#                 usability = min(usability, remaining_demand[dim] // count_produced)
+        
+#         if usability == float('inf') or usability == 0:
+#             continue
+
+#         for dim, count_produced in production.items():
+#             fulfilled_parts[dim] += usability * count_produced
+
+#     # 4. Identify the set of UNIQUE unfulfilled part types.
+#     unfulfilled_part_dims = set()
+#     for dim, total_needed in remaining_demand.items():
+#         if total_needed > fulfilled_parts.get(dim, 0):
+#             unfulfilled_part_dims.add(dim)
+
+#     # 5. Estimate new layouts needed based on the VARIETY of problem parts.
+#     if unfulfilled_part_dims:
+#         # Calculate the area required to make just ONE of each unique problem part.
+#         area_of_unique_problem_parts = sum(dim_to_area_map.get(dim, 0) for dim in unfulfilled_part_dims)
+        
+#         # Estimate how many sheets/layouts are needed to contain this variety.
+#         sheets_for_unique_parts = math.ceil(area_of_unique_problem_parts / reference_area) if reference_area > 0 else 0
+#         return sheets_for_unique_parts
+    
+#     return 0
+
+def _predict_number_of_new_sheet_layouts(remaining_parts: list, used_signatures: frozenset, 
+                                        reference_area: float, config: Dict) -> int:
     """
-    Analyzes remaining part demand vs. production from existing layouts to predict
-    how many new, unique layouts will be required.
+    Analyzes remaining part demand vs. production from existing layouts and runs a fast,
+    optimistic simulation to predict how many new, unique layouts will be required.
     """
     # 1. Tally the demand for each unique part dimension among remaining parts.
     remaining_demand = Counter()
-    dim_to_area_map = {}
+    dim_to_part_map = {} # Store a representative part for each dimension
     for part in remaining_parts:
         p_len, p_wid = (part['length'], part['width'])
         dim_tuple = tuple(sorted((f"{p_len:.3f}", f"{p_wid:.3f}")))
         remaining_demand[dim_tuple] += 1
-        if dim_tuple not in dim_to_area_map:
-            dim_to_area_map[dim_tuple] = p_len * p_wid
+        if dim_tuple not in dim_to_part_map:
+            dim_to_part_map[dim_tuple] = part
 
     # 2. Analyze the production "recipe" of each existing layout.
     layout_production = {}
@@ -309,32 +370,43 @@ def _predict_number_of_new_sheet_layouts(remaining_parts: list, used_signatures:
     fulfilled_parts = Counter()
     for sig, production in layout_production.items():
         if not production: continue
-
         usability = float('inf')
         for dim, count_produced in production.items():
             if remaining_demand[dim] > 0:
                 usability = min(usability, remaining_demand[dim] // count_produced)
-        
-        if usability == float('inf') or usability == 0:
-            continue
-
+        if usability == float('inf') or usability == 0: continue
         for dim, count_produced in production.items():
             fulfilled_parts[dim] += usability * count_produced
 
-    # 4. Identify the set of UNIQUE unfulfilled part types.
-    unfulfilled_part_dims = set()
+    # 4. Get a list of unique, unfulfilled "problem parts".
+    unique_problem_parts = []
     for dim, total_needed in remaining_demand.items():
         if total_needed > fulfilled_parts.get(dim, 0):
-            unfulfilled_part_dims.add(dim)
+            unique_problem_parts.append(dim_to_part_map[dim])
 
-    # 5. Estimate new layouts needed based on the VARIETY of problem parts.
-    if unfulfilled_part_dims:
-        # Calculate the area required to make just ONE of each unique problem part.
-        area_of_unique_problem_parts = sum(dim_to_area_map.get(dim, 0) for dim in unfulfilled_part_dims)
+    # 5. Run a greedy simulation to pack the unique problem parts.
+    if unique_problem_parts:
+        parts_to_simulate = sorted(unique_problem_parts, key=lambda p: p['length'] * p['width'], reverse=True)
+        layouts_needed = 0
         
-        # Estimate how many sheets/layouts are needed to contain this variety.
-        sheets_for_unique_parts = math.ceil(area_of_unique_problem_parts / reference_area) if reference_area > 0 else 0
-        return sheets_for_unique_parts
+        while parts_to_simulate:
+            layouts_needed += 1
+            sheet_sim = {'length': config['default_length'], 'width': config['default_width']}
+            initial_rects = [{'x': 0, 'y': 0, 'length': sheet_sim['length'], 'width': sheet_sim['width']}]
+            
+            placed_in_sim, _ = _place_parts_in_rects(
+                parts_to_simulate, initial_rects, config['kerf'], config['allow_rotation']
+            )
+            
+            if not placed_in_sim: # Could not place even one part on a fresh sheet
+                # This case is tricky; it implies a part is larger than the sheet.
+                # A safe bet is to assume one layout per remaining unique part.
+                return layouts_needed + len(parts_to_simulate)
+
+            placed_dims = {tuple(sorted((f"{p['length']:.3f}", f"{p['width']:.3f}"))) for p in placed_in_sim}
+            parts_to_simulate = [p for p in parts_to_simulate if tuple(sorted((f"{p['length']:.3f}", f"{p['width']:.3f}"))) not in placed_dims]
+            
+        return layouts_needed
     
     return 0
 
@@ -347,10 +419,9 @@ def _calculate_bound(remaining_parts: list, current_score: float, config: Dict[s
     if not remaining_parts:
         return current_score
 
-    # Predict future layouts needed using the new helper function.
-    optimistic_new_layouts = _predict_number_of_new_sheet_layouts(remaining_parts, used_signatures, reference_area)
+    # Predict future layouts needed using the new simulation-based helper function.
+    optimistic_new_layouts = _predict_number_of_new_sheet_layouts(remaining_parts, used_signatures, reference_area, config)
     optimistic_total_layouts = len(used_signatures) + optimistic_new_layouts
-    # print(f"Predicted total layouts: {optimistic_total_layouts} ({len(used_signatures)} existing + {optimistic_new_layouts} new) for {len(remaining_parts)} remaining parts.")
     
     max_layouts = config.get('max_unique_layouts', 0)
     # Prune the branch if the predicted total layouts exceed the user-defined cap.
@@ -374,7 +445,7 @@ def _calculate_bound(remaining_parts: list, current_score: float, config: Dict[s
     future_cuts_penalty = (optimistic_future_cuts / expected_max_cuts) * config.get('w_cuts', 0.2) if expected_max_cuts > 0 else 0
     
     future_sheets_penalty = min_additional_sheets * normalized_sheet_penalty
-    
+
     future_layouts_penalty = optimistic_new_layouts * normalized_layouts_penalty
 
     upper_bound = (
