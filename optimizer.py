@@ -604,7 +604,7 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
     normalized_sheet_penalty = config.get('w_sheets', 1.0) * penalty_normalizer
     normalized_layouts_penalty = config.get('w_unique_layouts', 0.5) * penalty_normalizer
     
-    cuts_per_part_heuristic = config.get('cuts_per_part_heuristic', 4.0)
+    cuts_per_part_heuristic = 1.5 # Estimated average number of cuts per part
     total_cuts_normalizer = total_initial_parts * cuts_per_part_heuristic
 
     initial_used_signatures = frozenset()
