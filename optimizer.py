@@ -410,17 +410,13 @@ def _calculate_optimistic_stock_bonus(remaining_parts: list, hypothetical_leftov
             target_stock = part_template.get('target_stock', 0)
             if target_stock <= 0 or part_area <= 0: continue
             
-            # Density is now high for small parts, prioritizing what's easy to fit
-            density = (1 / part_area) if part_area > 0 else float('inf')
-
             for i in range(current_deficit):
                 deficit_level = current_deficit - i
                 item_bonus = (deficit_level / target_stock) * flat_bonus_unit
-                # We sort by area (asc) as a tie-breaker for items with the same deficit level
                 all_bonus_items.append({'bonus': item_bonus, 'area': part_area, 'deficit': deficit_level, 'ref': ref})
         
-        # Sort to prioritize items that are easiest to fit (smallest)
-        all_bonus_items.sort(key=lambda p: p['area'])
+        # Sort by value density (bonus per unit of area) to prioritize the most valuable parts for the space they occupy.
+        all_bonus_items.sort(key=lambda p: p['bonus'] / p['area'] if p['area'] > 0 else float('inf'), reverse=True)
         
         bins = sorted(hypothetical_leftover_areas)
 
