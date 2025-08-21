@@ -261,7 +261,6 @@ def _count_guillotine_cuts(layout: Dict[str, Any]) -> int:
     sheet_info = layout['sheet_info']
     placed_parts = layout.get('placed_parts', [])
     if not placed_parts:
-        # print('a')
         return 0
 
     TOLERANCE = 1e-6
@@ -282,6 +281,72 @@ def _count_guillotine_cuts(layout: Dict[str, Any]) -> int:
 
     return len(unique_x_cuts) + len(unique_y_cuts)
 
+
+def _predict_leftover_area(remaining_parts: list, reference_area: float) -> float:
+    """Predicts the total leftover area assuming each remaining part uses one new default sheet."""
+    total_hypothetical_leftover_area = 0.0
+    if not remaining_parts:
+        return total_hypothetical_leftover_area
+
+    for part in remaining_parts:
+        part_area = part['length'] * part['width']
+        leftover_on_this_sheet = max(0, reference_area - part_area)
+        total_hypothetical_leftover_area += leftover_on_this_sheet
+    return total_hypothetical_leftover_area
+
+
+def _calculate_optimistic_stock_bonus(total_hypothetical_leftover_area: float, optional_parts_for_bound: list, 
+                                      reference_area: float, live_stock_counts: Counter) -> float:
+    """
+    Calculates the maximum possible raw (unweighted) stock fill bonus for the remaining parts using a fractional knapsack approach.
+    """
+    if total_hypothetical_leftover_area <= 0 or not optional_parts_for_bound or reference_area <= 0:
+        return 0.0
+
+    parts_with_density = []
+    optional_parts_by_ref = {}
+    for part in optional_parts_for_bound:
+        ref = part.get('internal_ref')
+        if ref:
+            optional_parts_by_ref.setdefault(ref, []).append(part)
+
+    for ref, parts in optional_parts_by_ref.items():
+        part_template = parts[0]
+        part_area = part_template['length'] * part_template['width']
+        if part_area <= 0: continue
+        
+        initial_deficit = part_template.get('target_stock', 1) - part_template.get('current_stock', 0)
+        target_stock = part_template.get('target_stock', 0)
+        if target_stock <= 0: continue
+
+        count_already_made = live_stock_counts.get(ref, 0)
+        live_deficit = initial_deficit - count_already_made
+        if live_deficit <= 0: continue
+
+        # Return a raw, unweighted value based on normalized area and deficit
+        base_bonus_unit = (part_area / reference_area)
+        bonus_for_next_part = (live_deficit / target_stock) * base_bonus_unit
+        
+        for _ in range(len(parts)):
+            parts_with_density.append({
+                'bonus': bonus_for_next_part,
+                'area': part_area,
+                'density': bonus_for_next_part / part_area if part_area > 0 else 0
+            })
+    
+    parts_with_density.sort(key=lambda p: p['density'], reverse=True)
+    
+    optimistic_stock_fill_bonus = 0.0
+    for item in parts_with_density:
+        if total_hypothetical_leftover_area <= 0: break
+        area_to_take = min(item['area'], total_hypothetical_leftover_area)
+        fraction_of_item = area_to_take / item['area']
+        optimistic_stock_fill_bonus += item['bonus'] * fraction_of_item
+        total_hypothetical_leftover_area -= area_to_take
+        
+    return optimistic_stock_fill_bonus
+
+
 def _get_min_cuts_for_parts(num_parts: int) -> int:
     """
     Calculates the mathematical minimum number of guillotine cuts required
@@ -292,6 +357,14 @@ def _get_min_cuts_for_parts(num_parts: int) -> int:
     rows = math.ceil(math.sqrt(num_parts))
     cols = math.ceil(num_parts / rows)
     return (rows - 1) + (cols - 1)
+
+
+def _get_min_sheets_for_parts(remaining_parts: list, reference_area: float) -> int:
+    """ Calculates the minimum number of sheets required to produce the remaining parts,
+    assuming perfect packing and no waste. """
+    remaining_area = sum(p['length'] * p['width'] for p in remaining_parts)
+    return math.ceil(remaining_area / reference_area) if reference_area > 0 else int('inf')
+
 
 def _predict_number_of_new_sheet_layouts(remaining_parts: list, used_signatures: frozenset, 
                                         reference_area: float, config: Dict) -> int:
@@ -365,6 +438,7 @@ def _predict_number_of_new_sheet_layouts(remaining_parts: list, used_signatures:
     
     return 0
 
+
 def _calculate_bound(remaining_parts: list, current_score: float, config: Dict[str, Any], reference_area: float, used_signatures: frozenset,
                      normalized_sheet_penalty: float, normalized_layouts_penalty: float, total_cuts_normalizer: float,
                      optional_parts_for_bound: list, live_stock_counts: Counter) -> float:
@@ -374,66 +448,25 @@ def _calculate_bound(remaining_parts: list, current_score: float, config: Dict[s
     if not remaining_parts:
         return current_score
 
-    total_hypothetical_leftover_area = 0
-    default_sheet_area = config.get('default_length', 96) * config.get('default_width', 48)
+    # Get raw predictive values first
+    total_hypothetical_leftover_area = _predict_leftover_area(remaining_parts, reference_area)
+    raw_optimistic_stock_fill = _calculate_optimistic_stock_bonus(
+        total_hypothetical_leftover_area, optional_parts_for_bound, reference_area, live_stock_counts
+    )
 
-    for part in remaining_parts:
-        part_area = part['length'] * part['width']
-        leftover_on_this_sheet = max(0, default_sheet_area - part_area)
-        total_hypothetical_leftover_area += leftover_on_this_sheet
-
-    optimistic_stock_fill_bonus = 0
-    if total_hypothetical_leftover_area > 0 and optional_parts_for_bound and reference_area > 0:
-        parts_with_density = []
-        # Group optional parts by their reference ID to handle deficits correctly
-        optional_parts_by_ref = {}
-        for part in optional_parts_for_bound:
-            ref = part.get('internal_ref')
-            if ref:
-                optional_parts_by_ref.setdefault(ref, []).append(part)
-
-        for ref, parts in optional_parts_by_ref.items():
-            part_template = parts[0]
-            part_area = part_template['length'] * part_template['width']
-            if part_area <= 0: continue
-            
-            initial_deficit = part_template.get('target_stock', 1) - part_template.get('current_stock', 0)
-            target_stock = part_template.get('target_stock', 0)
-            if target_stock <= 0: continue
-
-            count_already_made = live_stock_counts.get(ref, 0)
-            live_deficit = initial_deficit - count_already_made
-            if live_deficit <= 0: continue
-
-            # The bonus for the *next* part is based on the current live deficit
-            base_bonus_unit = (part_area / reference_area) * config.get('w_stock_fill', 1.0)
-            bonus_for_next_part = (live_deficit / target_stock) * base_bonus_unit
-            
-            # Add one item to the knapsack list for each remaining instance
-            for _ in range(len(parts)):
-                parts_with_density.append({
-                    'bonus': bonus_for_next_part,
-                    'area': part_area,
-                    'density': bonus_for_next_part / part_area if part_area > 0 else 0
-                })
-        
-        parts_with_density.sort(key=lambda p: p['density'], reverse=True)
-        
-        for item in parts_with_density:
-            if total_hypothetical_leftover_area <= 0: break
-            area_to_take = min(item['area'], total_hypothetical_leftover_area)
-            fraction_of_item = area_to_take / item['area']
-            optimistic_stock_fill_bonus += item['bonus'] * fraction_of_item
-            total_hypothetical_leftover_area -= area_to_take
-
-    future_sheets_penalty = len(remaining_parts) * normalized_sheet_penalty
-    optimistic_new_layouts = _predict_number_of_new_sheet_layouts(remaining_parts, used_signatures, reference_area, config)
-    future_layouts_penalty = optimistic_new_layouts * normalized_layouts_penalty
     optimistic_future_cuts = _get_min_cuts_for_parts(len(remaining_parts))
-    future_cuts_penalty = (optimistic_future_cuts / total_cuts_normalizer) * config.get('w_cuts', 0.2) if total_cuts_normalizer > 0 else 0
-    
-    optimistic_area_score = 0
 
+    min_additional_sheets = _get_min_sheets_for_parts(remaining_parts, reference_area)
+
+    optimistic_new_layouts = _predict_number_of_new_sheet_layouts(remaining_parts, used_signatures, reference_area, config)
+    
+    # Apply weights to the raw values
+    optimistic_area_score = 0
+    optimistic_stock_fill_bonus = raw_optimistic_stock_fill * config.get('w_stock_fill', 1.0)
+    future_cuts_penalty = (optimistic_future_cuts / total_cuts_normalizer) * config.get('w_cuts', 0.2) if total_cuts_normalizer > 0 else 0
+    future_sheets_penalty = min_additional_sheets * normalized_sheet_penalty
+    future_layouts_penalty = optimistic_new_layouts * normalized_layouts_penalty
+    
     upper_bound = (
         current_score
         + optimistic_area_score
