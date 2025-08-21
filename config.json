@@ -62,10 +62,10 @@
     "dark_mode": true,
     "w_waste": 1.0,
     "w_offcut": 0.5,
-    "w_cuts": 20.0,
+    "w_cuts": 0.2,
     "w_quantity": 0.3,
     "w_sheets": 0.5,
-    "w_stock_fill": 0.0,
+    "w_stock_fill": 0.609375,
     "w_unique_layouts": 0.5,
     "standardize_stock_layouts": true,
     "selected_offcuts": [
@@ -99,7 +99,7 @@
         "27"
     ],
     "prioritized_offcuts": [],
-    "w_priority_offcut": 0.0,
+    "w_priority_offcut": 15.0,
     "selected_hhos_parts": [
         "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv:::0",
         "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv:::1",

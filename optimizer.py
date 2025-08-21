@@ -108,9 +108,11 @@ def calculate_layout_score(layout: Dict[str, Any], sheet_info: Dict[str, Any], c
     for part in layout['placed_parts']:
         if part.get('is_stock_part', False):
             deficit = part.get('target_stock', 1) - part.get('current_stock', 0)
-            if part.get('target_stock', 0) > 0 and deficit > 0:
+            target_stock = part.get('target_stock', 0)
+            if target_stock > 0 and deficit > 0:
                 part_area = part['length'] * part['width']
-                stock_fill_bonus += (deficit / part['target_stock']) * (part_area / reference_area) * config.get('w_stock_fill', 1.0)
+                stock_fill_bonus += (1 / target_stock) * (part_area / reference_area) * config.get('w_stock_fill', 1.0)
+    # print(stock_fill_bonus)
     
     has_required_parts = any(not p.get('is_optional_filler', False) for p in layout['placed_parts'])
     if not has_required_parts and any(p.get('is_optional_filler', False) for p in layout['placed_parts']) and not is_stock_only_job:
@@ -367,51 +369,72 @@ def _predict_number_of_new_sheet_layouts(remaining_parts: list, used_signatures:
     return 0
 
 def _calculate_bound(remaining_parts: list, current_score: float, config: Dict[str, Any], reference_area: float, used_signatures: frozenset,
-                     normalized_sheet_penalty: float, normalized_layouts_penalty: float, total_cuts_normalizer: float) -> float:
+                     normalized_sheet_penalty: float, normalized_layouts_penalty: float, total_cuts_normalizer: float,
+                     optional_parts_for_bound: list) -> float:
     """
-    Calculates a more sophisticated upper bound on the final score for a partial solution.
-    This bound is optimistic, assuming the best possible outcome for the remaining parts.
+    Calculates a sophisticated upper bound by building a concrete, optimistic future scenario.
     """
     if not remaining_parts:
         return current_score
 
-    # Predict future layouts needed using the new simulation-based helper function.
-    optimistic_new_layouts = _predict_number_of_new_sheet_layouts(remaining_parts, used_signatures, reference_area, config)
-    optimistic_total_layouts = len(used_signatures) + optimistic_new_layouts
-    
-    max_layouts = config.get('max_unique_layouts', 0)
-    # Prune the branch if the predicted total layouts exceed the user-defined cap.
-    if optimistic_total_layouts > max_layouts > 0:
-        return -float('inf')
+    # --- Step 1 & 2: Build the hypothetical scenario ---
+    # Assume each remaining part goes on its own new default sheet to maximize leftover space.
+    total_hypothetical_leftover_area = 0
+    default_sheet_area = config.get('default_length', 96) * config.get('default_width', 48)
 
-    remaining_area = sum(p['length'] * p['width'] for p in remaining_parts)
-    min_additional_sheets = math.ceil(remaining_area / reference_area) if reference_area > 0 else float('inf')
-    
-    optimistic_area_score = 0   # Assumes we can place all remaining parts in the best possible way, with no waste or offcuts.
-    optimistic_stock_fill_bonus = 0 # Assumes we use no unrequired stock parts in the future layouts, and therefore get no bonuses for utilizing new low-inventory stock parts.
     for part in remaining_parts:
-        if part.get('is_stock_part', False):
-            deficit = part.get('target_stock', 1) - part.get('current_stock', 0)
-            if part.get('target_stock', 0) > 0 and deficit > 0:
-                part_area = part['length'] * part['width']
-                optimistic_stock_fill_bonus += (deficit / part['target_stock']) * (part_area / reference_area) * config.get('w_stock_fill', 1.0)
+        part_area = part['length'] * part['width']
+        # Ensure leftover area is not negative if a part is larger than the sheet
+        leftover_on_this_sheet = max(0, default_sheet_area - part_area)
+        total_hypothetical_leftover_area += leftover_on_this_sheet
 
+    # --- Step 3: Use a fractional knapsack model to calculate the max possible bonus ---
+    optimistic_stock_fill_bonus = 0
+    if total_hypothetical_leftover_area > 0 and optional_parts_for_bound and reference_area > 0:
+        parts_with_density = []
+        for part in optional_parts_for_bound:
+            part_area = part['length'] * part['width']
+            if part_area > 0:
+                target_stock = part.get('target_stock', 0)
+                if target_stock > 0:
+                    bonus = (1 / target_stock) * (part_area / reference_area) * config.get('w_stock_fill', 1.0)
+                    parts_with_density.append({
+                        'bonus': bonus,
+                        'area': part_area,
+                        'density': bonus / part_area
+                    })
+        
+        # Sort by most "valuable" parts first
+        parts_with_density.sort(key=lambda p: p['density'], reverse=True)
+        
+        # Fill the "knapsack" of leftover area
+        for item in parts_with_density:
+            if total_hypothetical_leftover_area <= 0:
+                break
+            area_to_take = min(item['area'], total_hypothetical_leftover_area)
+            fraction_of_item = area_to_take / item['area']
+            optimistic_stock_fill_bonus += item['bonus'] * fraction_of_item
+            total_hypothetical_leftover_area -= area_to_take
+
+    # --- Step 4: Calculate penalties for the optimistic scenario ---
+    future_sheets_penalty = len(remaining_parts) * normalized_sheet_penalty
+    optimistic_new_layouts = _predict_number_of_new_sheet_layouts(remaining_parts, used_signatures, reference_area, config)
+    future_layouts_penalty = optimistic_new_layouts * normalized_layouts_penalty
     optimistic_future_cuts = _get_min_cuts_for_parts(len(remaining_parts))
     future_cuts_penalty = (optimistic_future_cuts / total_cuts_normalizer) * config.get('w_cuts', 0.2) if total_cuts_normalizer > 0 else 0
     
-    future_sheets_penalty = min_additional_sheets * normalized_sheet_penalty
-
-    future_layouts_penalty = optimistic_new_layouts * normalized_layouts_penalty
+    # Area score is assumed to be 0, as the waste is implicitly part of the knapsack calculation
+    optimistic_area_score = 0
 
     upper_bound = (
-        current_score 
-        + optimistic_area_score 
-        + optimistic_stock_fill_bonus 
+        current_score
+        + optimistic_area_score
+        + optimistic_stock_fill_bonus
         - future_cuts_penalty
         - future_sheets_penalty
         - future_layouts_penalty
     )
-    
+
     return upper_bound
 
 def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict], config: Dict, 
@@ -430,15 +453,12 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
     last_update_time = start_time
     
     max_layouts = config.get('max_unique_layouts', 0)
-    score_component_tracker = {}
     layout_score_cache = {}
 
-    # --- Tree Visualization Data ---
     tree_nodes = {0: {"id": 0, "parent": None, "score": 0, "status": "exploring"}}
     tree_update_batch = {0: tree_nodes[0].copy()}
     last_best_sol_node = None
 
-    # --- Initial State Setup ---
     part_id_counter = 0
     initial_parts_dict: Dict[int, Part] = {}
     primary_parts_list = parts_to_cut if not is_stock_only_job else (optional_stock_parts or [])
@@ -470,12 +490,14 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
     normalized_sheet_penalty = config.get('w_sheets', 1.0) * penalty_normalizer
     normalized_layouts_penalty = config.get('w_unique_layouts', 0.5) * penalty_normalizer
     
-    # --- NEW: Global normalizer for total cuts penalty ---
     cuts_per_part_heuristic = config.get('cuts_per_part_heuristic', 4.0)
     total_cuts_normalizer = total_initial_parts * cuts_per_part_heuristic
 
     initial_used_signatures = frozenset()
-    initial_bound = -_calculate_bound(list(initial_parts_dict.values()), 0, config, reference_area, initial_used_signatures, normalized_sheet_penalty, normalized_layouts_penalty, total_cuts_normalizer)
+    initial_bound = -_calculate_bound(
+        list(initial_parts_dict.values()), 0, config, reference_area, initial_used_signatures, 
+        normalized_sheet_penalty, normalized_layouts_penalty, total_cuts_normalizer, optional_parts_list
+    )
     
     node_counter = 1 
     pq = [ (initial_bound, 0.0, 0, initial_parts_dict, [], initial_used_signatures) ]
@@ -483,10 +505,9 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
     best_solution = ([], list(initial_parts_dict.values()))
     best_score = -float('inf')
 
-    # --- Branch and Bound Loop ---
     while pq and (time_limit <= 0 or (time.time() - start_time) < time_limit):
         if cancellation_event and cancellation_event.is_set():
-            break # Exit the loop if cancellation is requested
+            break
         
         _, current_score, parent_node_id, current_parts, used_layouts, used_signatures = heapq.heappop(pq)
         
@@ -508,7 +529,11 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
             tree_update_batch.clear()
             last_update_time = current_time
         
-        if _calculate_bound(list(current_parts.values()), current_score, config, reference_area, used_signatures, normalized_sheet_penalty, normalized_layouts_penalty, total_cuts_normalizer) < best_score:
+        bound_check = _calculate_bound(
+            list(current_parts.values()), current_score, config, reference_area, used_signatures, 
+            normalized_sheet_penalty, normalized_layouts_penalty, total_cuts_normalizer, optional_parts_list
+        )
+        if bound_check < best_score:
             continue
 
         remaining_primary_parts = list(current_parts.values())
@@ -520,6 +545,7 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
                 layout_attempt = run_single_sheet_optimization(sheet_tpl, remaining_primary_parts, config, reference_area, max_offcut_quantity, optional_parts_list)
                 if any(p.get('part_id') in current_parts for p in layout_attempt['placed_parts']):
                     candidate_actions.append({'type': 'generate', 'layout': layout_attempt})
+        
         unique_layouts_in_path = {get_layout_signature(l): l for l in used_layouts}.values()
         for existing_layout in unique_layouts_in_path:
             if any(p['part_id'] in current_parts for p in existing_layout['placed_parts'] if 'part_id' in p):
@@ -545,7 +571,6 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
 
             layouts_penalty = normalized_layouts_penalty if action['type'] == 'generate' and is_new_signature else 0
             
-            # --- NEW: Apply global cuts penalty ---
             unweighted_cuts = float(_count_guillotine_cuts(layout))
             cuts_penalty = (unweighted_cuts / total_cuts_normalizer) * config.get('w_cuts', 0.2) if total_cuts_normalizer > 0 else 0
             
@@ -572,7 +597,10 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
                         tree_update_batch[last_best_sol_node] = tree_nodes[last_best_sol_node].copy()
                     last_best_sol_node = current_node_id
             else:
-                child_bound = _calculate_bound(list(child_parts.values()), child_score, config, reference_area, child_signatures, normalized_sheet_penalty, normalized_layouts_penalty, total_cuts_normalizer)
+                child_bound = _calculate_bound(
+                    list(child_parts.values()), child_score, config, reference_area, child_signatures, 
+                    normalized_sheet_penalty, normalized_layouts_penalty, total_cuts_normalizer, optional_parts_list
+                )
                 if child_bound > best_score:
                     heapq.heappush(pq, (-child_bound, child_score, current_node_id, child_parts, child_layouts, child_signatures))
                 else:
