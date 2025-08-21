@@ -12,6 +12,56 @@ import numpy as np
 Part = Dict[str, Any]
 Rect = Dict[str, float]
 
+
+# --- DEBUGGING CLASS (Easily Removable) ---
+DEBUG_SCORES = True # Set to False to disable logging
+
+class ScoreDebugger:
+    def __init__(self):
+        self.true_components = {
+            'area_score': [], 'stock_bonus': [], 'quantity_bonus': [],
+            'priority_bonus': [], 'sheets_penalty': [], 'layouts_penalty': [],
+            'cuts_penalty': []
+        }
+        self.predicted_components = {
+            'stock_bonus': [], 'sheets_penalty': [], 'layouts_penalty': [],
+            'cuts_penalty': []
+        }
+
+    def _log_component(self, store, key, value):
+        if value is not None:
+            store[key].append(value)
+
+    def log_true_scores(self, components: Dict[str, float]):
+        for key, value in components.items():
+            self._log_component(self.true_components, key, value)
+
+    def log_predicted_scores(self, components: Dict[str, float]):
+        for key, value in components.items():
+            self._log_component(self.predicted_components, key, value)
+
+    def _format_stats(self, key: str, values: List[float]) -> str:
+        if not values:
+            return f"  - {key:<15}: N/A"
+        np_values = np.array(values)
+        return (f"  - {key:<15}: "
+                f"Min={np.min(np_values):>8.3f}, "
+                f"Avg={np.mean(np_values):>8.3f}, "
+                f"Max={np.max(np_values):>8.3f}, "
+                f"Count={len(values)}")
+
+    def print_stats(self, title: str = "Periodic Score Component Stats"):
+        print(f"\n--- {title} ---")
+        print("True (Actual) Scores:")
+        for key, values in self.true_components.items():
+            print(self._format_stats(key, values))
+        print("\nPredicted (Bound) Scores:")
+        for key, values in self.predicted_components.items():
+            print(self._format_stats(key, values))
+        print("--- End of Report ---\n")
+
+# --- End of Debugging Class ---
+
 # --- Consolidated & Optimized Helper Functions ---
 
 def get_layout_signature(layout: Dict[str, Any], required_only: bool = False) -> str:
@@ -69,7 +119,8 @@ def calculate_layout_score(layout: Dict[str, Any], sheet_info: Dict[str, Any], c
                            min_offcut_dim: float, reference_area: float, max_offcut_quantity: float,
                            is_stock_only_job: bool = False,
                            remaining_parts: Optional[List[Part]] = None,
-                           live_stock_counts: Optional[Counter] = None) -> float:
+                           live_stock_counts: Optional[Counter] = None,
+                           debugger: Optional['ScoreDebugger'] = None) -> float:
     """Calculates a score for a given sheet layout using a diminishing returns model for stock parts."""
     sheet_area = sheet_info['length'] * sheet_info['width']
     if sheet_area == 0 or reference_area == 0:
@@ -125,6 +176,14 @@ def calculate_layout_score(layout: Dict[str, Any], sheet_info: Dict[str, Any], c
         offcut_id_str = str(sheet_info.get('id', '')).replace('offcut_', '')
         if offcut_id_str in config.get('prioritized_offcuts', []):
             priority_bonus = config.get('w_priority_offcut', 10.0)
+    
+    if debugger:
+        debugger.log_true_scores({
+            'area_score': area_based_score,
+            'stock_bonus': stock_fill_bonus,
+            'quantity_bonus': quantity_bonus,
+            'priority_bonus': priority_bonus
+        })
     
     return area_based_score + stock_fill_bonus + quantity_bonus + priority_bonus
 
@@ -202,7 +261,8 @@ def _place_parts_in_rects(parts_to_place: List[Part], initial_rects: List[Rect],
 def run_single_sheet_optimization(sheet_info: Dict, required_parts: List[Part], config: Dict, 
                                   reference_area: float, max_offcut_quantity: float, 
                                   optional_stock_parts: Optional[List[Part]] = None,
-                                  tracker: Optional[Dict] = None) -> Dict:
+                                  live_stock_counts: Optional[Counter] = None,
+                                  debugger: Optional['ScoreDebugger'] = None) -> Dict:
     """
     Finds the best layout for a single sheet.
     """
@@ -221,7 +281,7 @@ def run_single_sheet_optimization(sheet_info: Dict, required_parts: List[Part], 
         "sheet_info": sheet_info,
         "total_placed_area": sum(p['length'] * p['width'] for p in placed_job_parts)
     }
-    best_score = calculate_layout_score(best_layout, sheet_info, config, config['min_offcut_dim'], reference_area, max_offcut_quantity, is_stock_only_job, tracker)
+    best_score = calculate_layout_score(best_layout, sheet_info, config, config['min_offcut_dim'], reference_area, max_offcut_quantity, is_stock_only_job=is_stock_only_job, live_stock_counts=live_stock_counts, debugger=debugger)
 
     if optional_stock_parts and remaining_rects_after_job:
         sorted_stock_parts = sorted(optional_stock_parts, key=lambda p: p.get('target_stock', 1) - p.get('current_stock', 0), reverse=True)
@@ -244,7 +304,7 @@ def run_single_sheet_optimization(sheet_info: Dict, required_parts: List[Part], 
                 "sheet_info": sheet_info,
                 "total_placed_area": sum(p['length'] * p['width'] for p in candidate_placed_parts)
             }
-            candidate_score = calculate_layout_score(candidate_layout, sheet_info, config, config['min_offcut_dim'], reference_area, max_offcut_quantity, is_stock_only_job, tracker)
+            candidate_score = calculate_layout_score(candidate_layout, sheet_info, config, config['min_offcut_dim'], reference_area, max_offcut_quantity, is_stock_only_job=is_stock_only_job, live_stock_counts=live_stock_counts, debugger=debugger)
 
             if candidate_score > best_score:
                 best_score = candidate_score
@@ -441,7 +501,8 @@ def _predict_number_of_new_sheet_layouts(remaining_parts: list, used_signatures:
 
 def _calculate_bound(remaining_parts: list, current_score: float, config: Dict[str, Any], reference_area: float, used_signatures: frozenset,
                      normalized_sheet_penalty: float, normalized_layouts_penalty: float, total_cuts_normalizer: float,
-                     optional_parts_for_bound: list, live_stock_counts: Counter) -> float:
+                     optional_parts_for_bound: list, live_stock_counts: Counter,
+                     debugger: Optional['ScoreDebugger'] = None) -> float:
     """
     Calculates a sophisticated upper bound that is aware of the live stock part deficit.
     """
@@ -476,6 +537,14 @@ def _calculate_bound(remaining_parts: list, current_score: float, config: Dict[s
         - future_layouts_penalty
     )
 
+    if debugger:
+        debugger.log_predicted_scores({
+            'stock_bonus': optimistic_stock_fill_bonus,
+            'sheets_penalty': -future_sheets_penalty,
+            'layouts_penalty': -future_layouts_penalty,
+            'cuts_penalty': -future_cuts_penalty
+        })
+
     return upper_bound
 
 def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict], config: Dict,
@@ -493,6 +562,10 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
     reference_area = config.get('default_length', 96) * config.get('default_width', 48)
     last_update_time = start_time
     
+    debugger = ScoreDebugger() if DEBUG_SCORES else None
+    last_debug_print_time = start_time
+    debug_print_interval = 10.0  # Print debug stats every 2 seconds
+
     max_layouts = config.get('max_unique_layouts', 0)
     layout_score_cache = {}
 
@@ -539,7 +612,7 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
     initial_bound = -_calculate_bound(
         list(initial_parts_dict.values()), 0, config, reference_area, initial_used_signatures,
         normalized_sheet_penalty, normalized_layouts_penalty, total_cuts_normalizer, optional_parts_list,
-        initial_stock_counts
+        initial_stock_counts, debugger=debugger
     )
     
     node_counter = 1
@@ -558,24 +631,32 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
         tree_update_batch[parent_node_id] = tree_nodes[parent_node_id].copy()
 
         current_time = time.time()
+
+        # New, separate block for less frequent debug printing
+        if debugger and (current_time - last_debug_print_time > debug_print_interval):
+            debugger.print_stats()
+            last_debug_print_time = current_time
+
         batch_size_limit = 500
-        if progress_callback and ((current_time - last_update_time > 0.2) or len(tree_update_batch) >= batch_size_limit):
-            progress_data = {
-                "part_progress": int(((total_initial_parts - len(current_parts)) / total_initial_parts) * 100 if total_initial_parts > 0 else 100),
-                "elapsed_time": current_time - start_time,
-                "time_limit": time_limit, "nodes_explored": node_counter,
-                "current_best_score": best_score if best_score > -float('inf') else None,
-                "sheets_in_best_solution": len(best_solution[0]) if best_solution[0] else None,
-                "tree_update": list(tree_update_batch.values())
-            }
-            progress_callback(progress_data)
+        if (current_time - last_update_time > 0.2) or len(tree_update_batch) >= batch_size_limit:
+            if progress_callback:
+                progress_data = {
+                    "part_progress": int(((total_initial_parts - len(current_parts)) / total_initial_parts) * 100 if total_initial_parts > 0 else 100),
+                    "elapsed_time": current_time - start_time,
+                    "time_limit": time_limit, "nodes_explored": node_counter,
+                    "current_best_score": best_score if best_score > -float('inf') else None,
+                    "sheets_in_best_solution": len(best_solution[0]) if best_solution[0] else None,
+                    "tree_update": list(tree_update_batch.values())
+                }
+                progress_callback(progress_data)
+            
             tree_update_batch.clear()
             last_update_time = current_time
         
         bound_check = _calculate_bound(
             list(current_parts.values()), current_score, config, reference_area, used_signatures,
             normalized_sheet_penalty, normalized_layouts_penalty, total_cuts_normalizer, optional_parts_list,
-            live_stock_counts
+            live_stock_counts, debugger=debugger
         )
         if bound_check < best_score:
             continue
@@ -586,7 +667,10 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
         unique_sheets = {f"{s['length']}x{s['width']}_{s.get('type', 'Default')}": s for s in stock_sheets}.values()
         for sheet_tpl in unique_sheets:
             for _ in range(branching_factor):
-                layout_attempt = run_single_sheet_optimization(sheet_tpl, remaining_primary_parts, config, reference_area, max_offcut_quantity, optional_parts_list)
+                layout_attempt = run_single_sheet_optimization(
+                    sheet_tpl, remaining_primary_parts, config, reference_area, max_offcut_quantity,
+                    optional_parts_list, live_stock_counts, debugger
+                )
                 if any(p.get('part_id') in current_parts for p in layout_attempt['placed_parts']):
                     candidate_actions.append({'type': 'generate', 'layout': layout_attempt})
         
@@ -603,15 +687,14 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
             if is_new_signature and max_layouts > 0 and len(used_signatures) >= max_layouts:
                 continue
 
-            # We use a tuple of the signature and the live counts for caching
-            # to ensure we re-calculate the score if the state changes.
             cache_key = (layout_sig, tuple(sorted(live_stock_counts.items())))
             if cache_key not in layout_score_cache:
                 layout_score_cache[cache_key] = calculate_layout_score(
                     layout, layout['sheet_info'], config, config['min_offcut_dim'], reference_area,
                     max_offcut_quantity, is_stock_only_job,
                     remaining_parts=list(current_parts.values()),
-                    live_stock_counts=live_stock_counts
+                    live_stock_counts=live_stock_counts,
+                    debugger=debugger
                 )
             layout_score = layout_score_cache[cache_key]
             
@@ -619,17 +702,21 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
             if not placed_ids: continue
 
             layouts_penalty = normalized_layouts_penalty if action['type'] == 'generate' and is_new_signature else 0
-            
             unweighted_cuts = float(_count_guillotine_cuts(layout))
             cuts_penalty = (unweighted_cuts / total_cuts_normalizer) * config.get('w_cuts', 0.2) if total_cuts_normalizer > 0 else 0
             
-            child_score = current_score + layout_score - normalized_sheet_penalty - layouts_penalty - cuts_penalty
+            if debugger:
+                debugger.log_true_scores({
+                    'sheets_penalty': -normalized_sheet_penalty,
+                    'layouts_penalty': -layouts_penalty,
+                    'cuts_penalty': -cuts_penalty
+                })
             
+            child_score = current_score + layout_score - normalized_sheet_penalty - layouts_penalty - cuts_penalty
             child_parts = {pid: p for pid, p in current_parts.items() if pid not in placed_ids}
             child_layouts = used_layouts + [layout]
             child_signatures = used_signatures.union({layout_sig})
 
-            # Create the next state's live stock counts
             child_stock_counts = live_stock_counts.copy()
             for part in layout['placed_parts']:
                 if part.get('is_stock_part'):
@@ -655,7 +742,7 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
                 child_bound = _calculate_bound(
                     list(child_parts.values()), child_score, config, reference_area, child_signatures,
                     normalized_sheet_penalty, normalized_layouts_penalty, total_cuts_normalizer, optional_parts_list,
-                    child_stock_counts
+                    child_stock_counts, debugger=debugger
                 )
                 if child_bound > best_score:
                     heapq.heappush(pq, (-child_bound, child_score, current_node_id, child_parts, child_layouts, child_signatures, child_stock_counts))
@@ -663,5 +750,8 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
                     tree_nodes[current_node_id]["status"] = "pruned_bound"
                     tree_update_batch[current_node_id] = tree_nodes[current_node_id].copy()
     
+    if debugger:
+        debugger.print_stats("Final Score Component Stats")
+
     final_layouts, remaining_parts = best_solution
     return final_layouts, remaining_parts, best_score, list(tree_update_batch.values())
