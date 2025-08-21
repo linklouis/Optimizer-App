@@ -48,16 +48,16 @@ class TreeVisualizer {
     }
 
     stop() {
-        if (this.simulationLoopId) {
-            clearInterval(this.simulationLoopId);
-            this.simulationLoopId = null;
-        }
-        // It's good practice to stop the animation frame when done.
-        // If you need to debug the final state, you can comment this out.
-        if (this.animationFrameId) {
-             cancelAnimationFrame(this.animationFrameId);
-             this.animationFrameId = null;
-        }
+        // if (this.simulationLoopId) {
+        //     clearInterval(this.simulationLoopId);
+        //     this.simulationLoopId = null;
+        // }
+        // // It's good practice to stop the animation frame when done.
+        // // If you need to debug the final state, you can comment this out.
+        // if (this.animationFrameId) {
+        //      cancelAnimationFrame(this.animationFrameId);
+        //      this.animationFrameId = null;
+        // }
         // Process any remaining nodes synchronously
         while (this.pendingNodes.length > 0) {
             const nodeData = this.pendingNodes.shift();
@@ -344,8 +344,8 @@ class TreeVisualizer {
         const kRepel = 2000;
         const kAttract = 2;
         const kAlign = 1;
-        const damping = 0.3;
-        const directionalForce = 3;
+        const damping = 0.1;
+        const directionalForce = 20;
 
         for (const n1 of nodes) {
             n1.fx = 0; n1.fy = 0;
@@ -389,14 +389,14 @@ class TreeVisualizer {
                     const nodeChildCount = childCounts[node.id] || 0;
                     const alignmentStrength = 1 + Math.log1p(nodeChildCount);
 
-                     node.fx += directionalForce * alignmentStrength;
-
                     node.fx += (target_x - node.x) * kAlign * alignmentStrength;
                     node.fy += (target_y - node.y) * kAlign * alignmentStrength;
                 }
-            } else {
-                node.fx += directionalForce;
             }
+
+            const dist_from_center = Math.sqrt(node.x * node.x + node.y * node.y) + 1;
+            node.fx += node.x * directionalForce / dist_from_center;
+            node.fy += node.y * directionalForce / dist_from_center;
         }
         
         const rootNode = this.nodes[0];

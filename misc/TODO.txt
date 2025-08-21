@@ -78,6 +78,7 @@ FEATURES
         - Sort sheet layouts by size
         - Parts on the Results tab should always be displayed at the same size
         - Hovering over a part should highlight it in red, so it's obvious clicking will delete it.
+        - ---------> Display the lines for the cuts
 
 CODE
     - ✓ Start separating some of the big files (index, app)
@@ -194,3 +195,4 @@ General Rules: Only include code from files that have actually been modified. If
 - Consider how many times a layout can be reused when scoring it?
 
 - Make springs stronger when they're more stretched? (would resist tretching better without pulling already close nodes even closer)
+- When spawning in a node, run one tick of only it being affected. (at least when doing spawn all)

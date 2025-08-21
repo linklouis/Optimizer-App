@@ -121,18 +121,13 @@ def calculate_layout_score(layout: Dict[str, Any], sheet_info: Dict[str, Any], c
     if sheet_info.get('type') != 'Default' and max_offcut_quantity > 0:
         quantity_bonus = (float(sheet_info.get('quantity', 1)) / max_offcut_quantity) * config.get('w_quantity', 0.1)
 
-    unweighted_cuts = float(_count_guillotine_cuts(layout))
-    expected_max_cuts = config.get('expected_max_cuts_per_sheet', 20.0)
-    cuts_penalty = (unweighted_cuts / expected_max_cuts) * config.get('w_cuts', 0.2) if expected_max_cuts > 0 else 0
-    # print(unweighted_cuts)
-
     priority_bonus = 0.0
     if sheet_info.get('type') == 'Offcut':
         offcut_id_str = str(sheet_info.get('id', '')).replace('offcut_', '')
         if offcut_id_str in config.get('prioritized_offcuts', []):
             priority_bonus = config.get('w_priority_offcut', 10.0)
     
-    return area_based_score + stock_fill_bonus + quantity_bonus - cuts_penalty + priority_bonus
+    return area_based_score + stock_fill_bonus + quantity_bonus + priority_bonus
 
 
 # --- OPTIMIZED: This function is now JIT-compiled by Numba for a small speedup ---
@@ -372,7 +367,7 @@ def _predict_number_of_new_sheet_layouts(remaining_parts: list, used_signatures:
     return 0
 
 def _calculate_bound(remaining_parts: list, current_score: float, config: Dict[str, Any], reference_area: float, used_signatures: frozenset,
-                     normalized_sheet_penalty: float, normalized_layouts_penalty: float) -> float:
+                     normalized_sheet_penalty: float, normalized_layouts_penalty: float, total_cuts_normalizer: float) -> float:
     """
     Calculates a more sophisticated upper bound on the final score for a partial solution.
     This bound is optimistic, assuming the best possible outcome for the remaining parts.
@@ -383,7 +378,6 @@ def _calculate_bound(remaining_parts: list, current_score: float, config: Dict[s
     # Predict future layouts needed using the new simulation-based helper function.
     optimistic_new_layouts = _predict_number_of_new_sheet_layouts(remaining_parts, used_signatures, reference_area, config)
     optimistic_total_layouts = len(used_signatures) + optimistic_new_layouts
-    # print(f"Predicted total layouts: {optimistic_total_layouts} ({len(used_signatures)} existing + {optimistic_new_layouts} new) for {len(remaining_parts)} remaining parts.")
     
     max_layouts = config.get('max_unique_layouts', 0)
     # Prune the branch if the predicted total layouts exceed the user-defined cap.
@@ -402,10 +396,8 @@ def _calculate_bound(remaining_parts: list, current_score: float, config: Dict[s
                 part_area = part['length'] * part['width']
                 optimistic_stock_fill_bonus += (deficit / part['target_stock']) * (part_area / reference_area) * config.get('w_stock_fill', 1.0)
 
-    expected_max_cuts = config.get('expected_max_cuts_per_sheet', 20.0)
     optimistic_future_cuts = _get_min_cuts_for_parts(len(remaining_parts))
-    future_cuts_penalty = (optimistic_future_cuts / (expected_max_cuts)) * config.get('w_cuts', 0.2) if expected_max_cuts > 0 else 0
-    print(f'predicted cuts: {optimistic_future_cuts}')
+    future_cuts_penalty = (optimistic_future_cuts / total_cuts_normalizer) * config.get('w_cuts', 0.2) if total_cuts_normalizer > 0 else 0
     
     future_sheets_penalty = min_additional_sheets * normalized_sheet_penalty
 
@@ -477,9 +469,13 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
     
     normalized_sheet_penalty = config.get('w_sheets', 1.0) * penalty_normalizer
     normalized_layouts_penalty = config.get('w_unique_layouts', 0.5) * penalty_normalizer
+    
+    # --- NEW: Global normalizer for total cuts penalty ---
+    cuts_per_part_heuristic = config.get('cuts_per_part_heuristic', 4.0)
+    total_cuts_normalizer = total_initial_parts * cuts_per_part_heuristic
 
     initial_used_signatures = frozenset()
-    initial_bound = -_calculate_bound(list(initial_parts_dict.values()), 0, config, reference_area, initial_used_signatures, normalized_sheet_penalty, normalized_layouts_penalty)
+    initial_bound = -_calculate_bound(list(initial_parts_dict.values()), 0, config, reference_area, initial_used_signatures, normalized_sheet_penalty, normalized_layouts_penalty, total_cuts_normalizer)
     
     node_counter = 1 
     pq = [ (initial_bound, 0.0, 0, initial_parts_dict, [], initial_used_signatures) ]
@@ -512,7 +508,7 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
             tree_update_batch.clear()
             last_update_time = current_time
         
-        if _calculate_bound(list(current_parts.values()), current_score, config, reference_area, used_signatures, normalized_sheet_penalty, normalized_layouts_penalty) < best_score:
+        if _calculate_bound(list(current_parts.values()), current_score, config, reference_area, used_signatures, normalized_sheet_penalty, normalized_layouts_penalty, total_cuts_normalizer) < best_score:
             continue
 
         remaining_primary_parts = list(current_parts.values())
@@ -548,7 +544,12 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
             if not placed_ids: continue
 
             layouts_penalty = normalized_layouts_penalty if action['type'] == 'generate' and is_new_signature else 0
-            child_score = current_score + layout_score - normalized_sheet_penalty - layouts_penalty
+            
+            # --- NEW: Apply global cuts penalty ---
+            unweighted_cuts = float(_count_guillotine_cuts(layout))
+            cuts_penalty = (unweighted_cuts / total_cuts_normalizer) * config.get('w_cuts', 0.2) if total_cuts_normalizer > 0 else 0
+            
+            child_score = current_score + layout_score - normalized_sheet_penalty - layouts_penalty - cuts_penalty
             
             child_parts = {pid: p for pid, p in current_parts.items() if pid not in placed_ids}
             child_layouts = used_layouts + [layout]
@@ -571,7 +572,7 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
                         tree_update_batch[last_best_sol_node] = tree_nodes[last_best_sol_node].copy()
                     last_best_sol_node = current_node_id
             else:
-                child_bound = _calculate_bound(list(child_parts.values()), child_score, config, reference_area, child_signatures, normalized_sheet_penalty, normalized_layouts_penalty)
+                child_bound = _calculate_bound(list(child_parts.values()), child_score, config, reference_area, child_signatures, normalized_sheet_penalty, normalized_layouts_penalty, total_cuts_normalizer)
                 if child_bound > best_score:
                     heapq.heappush(pq, (-child_bound, child_score, current_node_id, child_parts, child_layouts, child_signatures))
                 else:
