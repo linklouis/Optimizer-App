@@ -24,7 +24,8 @@ class ScoreDebugger:
             'cuts_penalty': []
         }
         self.predicted_components = {
-            'stock_bonus': [], 'sheets_penalty': [], 'layouts_penalty': [],
+            'area_score': [], 'stock_bonus': [], 'quantity_bonus': [],
+            'priority_bonus': [], 'sheets_penalty': [], 'layouts_penalty': [],
             'cuts_penalty': []
         }
 
@@ -355,56 +356,75 @@ def _predict_leftover_area(remaining_parts: list, reference_area: float) -> floa
     return total_hypothetical_leftover_area
 
 
-def _calculate_optimistic_stock_bonus(total_hypothetical_leftover_area: float, optional_parts_for_bound: list, 
-                                      reference_area: float, live_stock_counts: Counter) -> float:
+def _calculate_optimistic_stock_bonus(remaining_parts: list, total_hypothetical_leftover_area: float, 
+                                      optional_parts_for_bound: list, reference_area: float, 
+                                      live_stock_counts: Counter) -> float:
     """
-    Calculates the maximum possible raw (unweighted) stock fill bonus for the remaining parts using a fractional knapsack approach.
+    Calculates the maximum possible raw (unweighted) stock fill bonus.
+    It calculates a guaranteed bonus for required stock parts and then uses a
+    fractional knapsack approach for optional parts in the leftover space.
     """
-    if total_hypothetical_leftover_area <= 0 or not optional_parts_for_bound or reference_area <= 0:
+    if reference_area <= 0:
         return 0.0
 
-    parts_with_density = []
-    optional_parts_by_ref = {}
-    for part in optional_parts_for_bound:
-        ref = part.get('internal_ref')
-        if ref:
-            optional_parts_by_ref.setdefault(ref, []).append(part)
+    # 1. Calculate the guaranteed bonus from required stock parts that must be placed.
+    required_parts_bonus = 0.0
+    for part in remaining_parts:
+        if part.get('is_stock_part'):
+            part_area = part['length'] * part['width']
+            initial_deficit = part.get('target_stock', 1) - part.get('current_stock', 0)
+            target_stock = part.get('target_stock', 0)
+            if target_stock <= 0: continue
 
-    for ref, parts in optional_parts_by_ref.items():
-        part_template = parts[0]
-        part_area = part_template['length'] * part_template['width']
-        if part_area <= 0: continue
-        
-        initial_deficit = part_template.get('target_stock', 1) - part_template.get('current_stock', 0)
-        target_stock = part_template.get('target_stock', 0)
-        if target_stock <= 0: continue
+            count_already_made = live_stock_counts.get(part['internal_ref'], 0)
+            live_deficit = initial_deficit - count_already_made
+            if live_deficit <= 0: continue
+            
+            base_bonus_unit = part_area / reference_area
+            required_parts_bonus += (live_deficit / target_stock) * base_bonus_unit
 
-        count_already_made = live_stock_counts.get(ref, 0)
-        live_deficit = initial_deficit - count_already_made
-        if live_deficit <= 0: continue
+    # 2. Calculate the potential bonus from optional parts filling the leftover area.
+    optional_parts_bonus = 0.0
+    if total_hypothetical_leftover_area > 0 and optional_parts_for_bound:
+        parts_with_density = []
+        optional_parts_by_ref = {}
+        for part in optional_parts_for_bound:
+            ref = part.get('internal_ref')
+            if ref:
+                optional_parts_by_ref.setdefault(ref, []).append(part)
 
-        # Return a raw, unweighted value based on normalized area and deficit
-        base_bonus_unit = (part_area / reference_area)
-        bonus_for_next_part = (live_deficit / target_stock) * base_bonus_unit
+        for ref, parts in optional_parts_by_ref.items():
+            part_template = parts[0]
+            part_area = part_template['length'] * part_template['width']
+            if part_area <= 0: continue
+            
+            initial_deficit = part_template.get('target_stock', 1) - part_template.get('current_stock', 0)
+            target_stock = part_template.get('target_stock', 0)
+            if target_stock <= 0: continue
+
+            count_already_made = live_stock_counts.get(ref, 0)
+            live_deficit = initial_deficit - count_already_made
+            if live_deficit <= 0: continue
+
+            base_bonus_unit = (part_area / reference_area)
+            bonus_for_next_part = (live_deficit / target_stock) * base_bonus_unit
+            
+            for _ in range(len(parts)):
+                parts_with_density.append({
+                    'bonus': bonus_for_next_part, 'area': part_area,
+                    'density': bonus_for_next_part / part_area if part_area > 0 else 0
+                })
         
-        for _ in range(len(parts)):
-            parts_with_density.append({
-                'bonus': bonus_for_next_part,
-                'area': part_area,
-                'density': bonus_for_next_part / part_area if part_area > 0 else 0
-            })
-    
-    parts_with_density.sort(key=lambda p: p['density'], reverse=True)
-    
-    optimistic_stock_fill_bonus = 0.0
-    for item in parts_with_density:
-        if total_hypothetical_leftover_area <= 0: break
-        area_to_take = min(item['area'], total_hypothetical_leftover_area)
-        fraction_of_item = area_to_take / item['area']
-        optimistic_stock_fill_bonus += item['bonus'] * fraction_of_item
-        total_hypothetical_leftover_area -= area_to_take
+        parts_with_density.sort(key=lambda p: p['density'], reverse=True)
         
-    return optimistic_stock_fill_bonus
+        for item in parts_with_density:
+            if total_hypothetical_leftover_area <= 0: break
+            area_to_take = min(item['area'], total_hypothetical_leftover_area)
+            fraction_of_item = area_to_take / item['area']
+            optional_parts_bonus += item['bonus'] * fraction_of_item
+            total_hypothetical_leftover_area -= area_to_take
+            
+    return required_parts_bonus + optional_parts_bonus
 
 
 def _get_min_cuts_for_parts(num_parts: int) -> int:
@@ -512,17 +532,16 @@ def _calculate_bound(remaining_parts: list, current_score: float, config: Dict[s
     # Get raw predictive values first
     total_hypothetical_leftover_area = _predict_leftover_area(remaining_parts, reference_area)
     raw_optimistic_stock_fill = _calculate_optimistic_stock_bonus(
-        total_hypothetical_leftover_area, optional_parts_for_bound, reference_area, live_stock_counts
+        remaining_parts, total_hypothetical_leftover_area, optional_parts_for_bound, reference_area, live_stock_counts
     )
-
     optimistic_future_cuts = _get_min_cuts_for_parts(len(remaining_parts))
-
     min_additional_sheets = _get_min_sheets_for_parts(remaining_parts, reference_area)
-
     optimistic_new_layouts = _predict_number_of_new_sheet_layouts(remaining_parts, used_signatures, reference_area, config)
     
     # Apply weights to the raw values
-    optimistic_area_score = 0
+    optimistic_area_score = 0.0 # Assume perfect packing for the bound
+    optimistic_quantity_bonus = 0.0 # Too complex to predict which offcuts will be used
+    optimistic_priority_bonus = 0.0 # Same as above
     optimistic_stock_fill_bonus = raw_optimistic_stock_fill * config.get('w_stock_fill', 1.0)
     future_cuts_penalty = (optimistic_future_cuts / total_cuts_normalizer) * config.get('w_cuts', 0.2) if total_cuts_normalizer > 0 else 0
     future_sheets_penalty = min_additional_sheets * normalized_sheet_penalty
@@ -539,7 +558,10 @@ def _calculate_bound(remaining_parts: list, current_score: float, config: Dict[s
 
     if debugger:
         debugger.log_predicted_scores({
+            'area_score': optimistic_area_score,
             'stock_bonus': optimistic_stock_fill_bonus,
+            'quantity_bonus': optimistic_quantity_bonus,
+            'priority_bonus': optimistic_priority_bonus,
             'sheets_penalty': -future_sheets_penalty,
             'layouts_penalty': -future_layouts_penalty,
             'cuts_penalty': -future_cuts_penalty
