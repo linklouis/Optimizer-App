@@ -61,6 +61,10 @@ class ScoreDebugger:
             print(self._format_stats(key, values))
         print("--- End of Report ---\n")
 
+    def log_context_switch(self, bound: float, score: float, depth: int, remaining_parts: int, node_id: int):
+        """Logs the details of the new most promising node being explored."""
+        # print(f"[DEBUG] Switching to Node {node_id}: Predicted Score={bound:.3f}, Current Score={score:.3f}, Depth={depth}, Parts Left={remaining_parts}")
+
 # --- End of Debugging Class ---
 
 # --- Consolidated & Optimized Helper Functions ---
@@ -122,7 +126,7 @@ def calculate_layout_score(layout: Dict[str, Any], sheet_info: Dict[str, Any], c
                            remaining_parts: Optional[List[Part]] = None,
                            live_stock_counts: Optional[Counter] = None,
                            debugger: Optional['ScoreDebugger'] = None) -> float:
-    """Calculates a score for a given sheet layout using a diminishing returns model for stock parts."""
+    """Calculates a score for a given sheet layout based on its own merits (waste, offcuts, etc.)."""
     sheet_area = sheet_info['length'] * sheet_info['width']
     if sheet_area == 0 or reference_area == 0:
         return -float('inf')
@@ -140,30 +144,7 @@ def calculate_layout_score(layout: Dict[str, Any], sheet_info: Dict[str, Any], c
         if can_fit_more:
             area_based_score = 0.0
 
-    # --- Diminishing Returns Stock Fill Bonus ---
-    stock_fill_bonus = 0
-    if live_stock_counts is not None:
-        parts_on_this_layout = Counter(p['internal_ref'] for p in layout['placed_parts'] if p.get('is_stock_part'))
-        
-        for ref, count_on_sheet in parts_on_this_layout.items():
-            part_template = next(p for p in layout['placed_parts'] if p.get('internal_ref') == ref)
-            initial_deficit = part_template.get('target_stock', 1) - part_template.get('current_stock', 0)
-            target_stock = part_template.get('target_stock', 0)
-            
-            if target_stock <= 0: continue
-
-            part_area = part_template['length'] * part_template['width']
-            base_bonus_unit = (part_area / reference_area) * config.get('w_stock_fill', 1.0)
-            count_already_made = live_stock_counts.get(ref, 0)
-
-            for i in range(count_on_sheet):
-                # The deficit diminishes for each part we place
-                live_deficit = initial_deficit - (count_already_made + i)
-                if live_deficit <= 0:
-                    continue
-                
-                stock_fill_bonus += (live_deficit / target_stock) * base_bonus_unit
-
+    # This check prevents creating layouts that only have optional filler parts in a mixed job.
     has_required_parts = any(not p.get('is_optional_filler', False) for p in layout['placed_parts'])
     if not has_required_parts and any(p.get('is_optional_filler', False) for p in layout['placed_parts']) and not is_stock_only_job:
         return -float('inf')
@@ -181,12 +162,11 @@ def calculate_layout_score(layout: Dict[str, Any], sheet_info: Dict[str, Any], c
     if debugger:
         debugger.log_true_scores({
             'area_score': area_based_score,
-            'stock_bonus': stock_fill_bonus,
             'quantity_bonus': quantity_bonus,
             'priority_bonus': priority_bonus
         })
     
-    return area_based_score + stock_fill_bonus + quantity_bonus + priority_bonus
+    return area_based_score + quantity_bonus + priority_bonus
 
 
 # --- OPTIMIZED: This function is now JIT-compiled by Numba for a small speedup ---
@@ -343,86 +323,128 @@ def _count_guillotine_cuts(layout: Dict[str, Any]) -> int:
     return len(unique_x_cuts) + len(unique_y_cuts)
 
 
-def _predict_leftover_area(remaining_parts: list, reference_area: float) -> float:
-    """Predicts the total leftover area assuming each remaining part uses one new default sheet."""
-    total_hypothetical_leftover_area = 0.0
-    if not remaining_parts:
-        return total_hypothetical_leftover_area
+def _predict_leftover_area(remaining_parts: list, reference_area: float, config: Dict) -> float:
+    """
+    Predicts leftover area by running a fast, optimistic simulation of packing
+    the remaining parts. This provides a tighter, admissible upper bound than the
+    one-part-per-sheet assumption.
+    """
+    if not remaining_parts or reference_area <= 0:
+        return 0.0
 
-    for part in remaining_parts:
-        part_area = part['length'] * part['width']
-        leftover_on_this_sheet = max(0, reference_area - part_area)
-        total_hypothetical_leftover_area += leftover_on_this_sheet
+    # We need kerf and rotation settings for the simulation
+    kerf = config.get('kerf', 0.125)
+    allow_rotation = config.get('allow_rotation', True)
+    sheet_sim_info = {'length': config.get('default_length', 96), 'width': config.get('default_width', 48)}
+
+    # Create a mutable list of parts for the simulation
+    parts_to_simulate = sorted(remaining_parts, key=lambda p: p['length'] * p['width'], reverse=True)
+    total_hypothetical_leftover_area = 0.0
+
+    while parts_to_simulate:
+        # Define a fresh sheet for each iteration of the simulation
+        initial_rects = [{'x': 0, 'y': 0, 'length': sheet_sim_info['length'], 'width': sheet_sim_info['width']}]
+        
+        # Run the placement algorithm on the remaining simulated parts
+        placed_in_sim, _ = _place_parts_in_rects(
+            parts_to_simulate, initial_rects, kerf, allow_rotation
+        )
+
+        if not placed_in_sim:
+            # If even one part cannot be placed on a fresh sheet, fallback to the original
+            # safe but loose heuristic for the remaining parts to avoid infinite loops.
+            for part in parts_to_simulate:
+                total_hypothetical_leftover_area += max(0, reference_area - (part['length'] * part['width']))
+            break # Exit the loop
+
+        # Calculate the area used on this simulated sheet
+        area_used_in_sim = sum(p['length'] * p['width'] for p in placed_in_sim)
+        
+        # Add the leftover from this sheet to the total
+        total_hypothetical_leftover_area += reference_area - area_used_in_sim
+
+        # Update the list of parts for the next simulated sheet
+        placed_ids = {p['part_id'] for p in placed_in_sim}
+        parts_to_simulate = [p for p in parts_to_simulate if p['part_id'] not in placed_ids]
+
     return total_hypothetical_leftover_area
 
 
-def _calculate_optimistic_stock_bonus(remaining_parts: list, total_hypothetical_leftover_area: float, 
-                                      optional_parts_for_bound: list, reference_area: float, 
+def _calculate_optimistic_stock_bonus(remaining_parts: list, total_hypothetical_leftover_area: float,
+                                      optional_parts_for_bound: list, reference_area: float,
                                       live_stock_counts: Counter) -> float:
     """
-    Calculates the maximum possible raw (unweighted) stock fill bonus.
-    It calculates a guaranteed bonus for required stock parts and then uses a
-    fractional knapsack approach for optional parts in the leftover space.
+    Calculates the maximum possible raw (unweighted) stock fill bonus by simulating
+    packing the most valuable optional parts into fragmented leftover spaces.
+    This provides a tighter, admissible upper bound.
     """
     if reference_area <= 0:
         return 0.0
 
-    # 1. Calculate the guaranteed bonus from required stock parts that must be placed.
+    # Initialize a deficit tracker based on the current state (live_stock_counts)
+    live_deficit_tracker = Counter()
+    all_stock_parts = remaining_parts + optional_parts_for_bound
+    for part in all_stock_parts:
+        if part.get('is_stock_part'):
+            ref = part['internal_ref']
+            if ref not in live_deficit_tracker:
+                initial_deficit = part.get('target_stock', 1) - part.get('current_stock', 0)
+                count_already_made = live_stock_counts.get(ref, 0)
+                live_deficit_tracker[ref] = initial_deficit - count_already_made
+
+    # 1. Calculate the guaranteed bonus from required parts that are also stock parts.
+    # This portion of the bonus is not speculative.
     required_parts_bonus = 0.0
     for part in remaining_parts:
         if part.get('is_stock_part'):
-            part_area = part['length'] * part['width']
-            initial_deficit = part.get('target_stock', 1) - part.get('current_stock', 0)
-            target_stock = part.get('target_stock', 0)
-            if target_stock <= 0: continue
+            ref = part['internal_ref']
+            if live_deficit_tracker[ref] > 0:
+                part_area = part['length'] * part['width']
+                target_stock = part.get('target_stock', 0)
+                if target_stock <= 0: continue
+                
+                base_bonus_unit = part_area / reference_area
+                required_parts_bonus += (live_deficit_tracker[ref] / target_stock) * base_bonus_unit
+                live_deficit_tracker[ref] -= 1
 
-            count_already_made = live_stock_counts.get(part['internal_ref'], 0)
-            live_deficit = initial_deficit - count_already_made
-            if live_deficit <= 0: continue
-            
-            base_bonus_unit = part_area / reference_area
-            required_parts_bonus += (live_deficit / target_stock) * base_bonus_unit
-
-    # 2. Calculate the potential bonus from optional parts filling the leftover area.
+    # 2. Calculate the speculative bonus from filling leftover space with optional parts.
     optional_parts_bonus = 0.0
     if total_hypothetical_leftover_area > 0 and optional_parts_for_bound:
-        parts_with_density = []
-        optional_parts_by_ref = {}
-        for part in optional_parts_for_bound:
-            ref = part.get('internal_ref')
-            if ref:
-                optional_parts_by_ref.setdefault(ref, []).append(part)
+        # 2a. Generate all possible "bonus items" from optional parts.
+        # Each item represents making one copy of a part at a specific deficit level.
+        optional_parts_by_ref = {p['internal_ref']: p for p in optional_parts_for_bound if p.get('internal_ref')}
+        
+        all_bonus_items = []
+        for ref, part_template in optional_parts_by_ref.items():
+            current_deficit = live_deficit_tracker.get(ref, 0)
+            if current_deficit <= 0: continue
 
-        for ref, parts in optional_parts_by_ref.items():
-            part_template = parts[0]
             part_area = part_template['length'] * part_template['width']
-            if part_area <= 0: continue
-            
-            initial_deficit = part_template.get('target_stock', 1) - part_template.get('current_stock', 0)
             target_stock = part_template.get('target_stock', 0)
-            if target_stock <= 0: continue
-
-            count_already_made = live_stock_counts.get(ref, 0)
-            live_deficit = initial_deficit - count_already_made
-            if live_deficit <= 0: continue
-
-            base_bonus_unit = (part_area / reference_area)
-            bonus_for_next_part = (live_deficit / target_stock) * base_bonus_unit
+            if target_stock <= 0 or part_area <= 0: continue
             
-            for _ in range(len(parts)):
-                parts_with_density.append({
-                    'bonus': bonus_for_next_part, 'area': part_area,
-                    'density': bonus_for_next_part / part_area if part_area > 0 else 0
-                })
-        
-        parts_with_density.sort(key=lambda p: p['density'], reverse=True)
-        
-        for item in parts_with_density:
-            if total_hypothetical_leftover_area <= 0: break
-            area_to_take = min(item['area'], total_hypothetical_leftover_area)
-            fraction_of_item = area_to_take / item['area']
-            optional_parts_bonus += item['bonus'] * fraction_of_item
-            total_hypothetical_leftover_area -= area_to_take
+            base_bonus_unit = part_area / reference_area
+            item_density = base_bonus_unit / part_area
+
+            # Create an item for each level of deficit we can fill for this part type
+            for i in range(current_deficit):
+                deficit_level = current_deficit - i
+                item_bonus = (deficit_level / target_stock) * base_bonus_unit
+                all_bonus_items.append({'bonus': item_bonus, 'area': part_area, 'density': item_density * (deficit_level / target_stock)})
+
+        all_bonus_items.sort(key=lambda p: p['density'], reverse=True)
+
+        # 2b. Sum all hypothetical leftover area into a single "bin" for an optimistic calculation.
+        remaining_capacity = total_hypothetical_leftover_area
+
+        # 2c. Greedily "pack" the highest-density bonus items into the total available area.
+        # This is a 0/1 knapsack-style fill, which is more realistic than fractional filling.
+        for item in all_bonus_items:
+            if remaining_capacity >= item['area']:
+                optional_parts_bonus += item['bonus']
+                remaining_capacity -= item['area']
+            if remaining_capacity <= 1e-6:
+                break
             
     return required_parts_bonus + optional_parts_bonus
 
@@ -530,7 +552,7 @@ def _calculate_bound(remaining_parts: list, current_score: float, config: Dict[s
         return current_score
 
     # Get raw predictive values first
-    total_hypothetical_leftover_area = _predict_leftover_area(remaining_parts, reference_area)
+    total_hypothetical_leftover_area = _predict_leftover_area(remaining_parts, reference_area, config)
     raw_optimistic_stock_fill = _calculate_optimistic_stock_bonus(
         remaining_parts, total_hypothetical_leftover_area, optional_parts_for_bound, reference_area, live_stock_counts
     )
@@ -586,7 +608,7 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
     
     debugger = ScoreDebugger() if DEBUG_SCORES else None
     last_debug_print_time = start_time
-    debug_print_interval = 10.0  # Print debug stats every 2 seconds
+    debug_print_interval = 2.0  # Print debug stats every 2 seconds
 
     max_layouts = config.get('max_unique_layouts', 0)
     layout_score_cache = {}
@@ -626,7 +648,7 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
     normalized_sheet_penalty = config.get('w_sheets', 1.0) * penalty_normalizer
     normalized_layouts_penalty = config.get('w_unique_layouts', 0.5) * penalty_normalizer
     
-    cuts_per_part_heuristic = 1.5 # Estimated average number of cuts per part
+    cuts_per_part_heuristic = config.get('cuts_per_part_heuristic', 1.5) # Reduced from 4.0
     total_cuts_normalizer = total_initial_parts * cuts_per_part_heuristic
 
     initial_used_signatures = frozenset()
@@ -647,14 +669,16 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
         if cancellation_event and cancellation_event.is_set():
             break
         
-        _, current_score, parent_node_id, current_parts, used_layouts, used_signatures, live_stock_counts = heapq.heappop(pq)
+        bound, current_score, parent_node_id, current_parts, used_layouts, used_signatures, live_stock_counts = heapq.heappop(pq)
+        
+        if debugger:
+            debugger.log_context_switch(-bound, current_score, len(used_layouts), len(current_parts), parent_node_id)
         
         tree_nodes[parent_node_id]["status"] = "explored"
         tree_update_batch[parent_node_id] = tree_nodes[parent_node_id].copy()
 
         current_time = time.time()
 
-        # New, separate block for less frequent debug printing
         if debugger and (current_time - last_debug_print_time > debug_print_interval):
             debugger.print_stats()
             last_debug_print_time = current_time
@@ -709,32 +733,51 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
             if is_new_signature and max_layouts > 0 and len(used_signatures) >= max_layouts:
                 continue
 
-            cache_key = (layout_sig, tuple(sorted(live_stock_counts.items())))
-            if cache_key not in layout_score_cache:
-                layout_score_cache[cache_key] = calculate_layout_score(
+            if layout_sig not in layout_score_cache:
+                layout_score_cache[layout_sig] = calculate_layout_score(
                     layout, layout['sheet_info'], config, config['min_offcut_dim'], reference_area,
                     max_offcut_quantity, is_stock_only_job,
                     remaining_parts=list(current_parts.values()),
                     live_stock_counts=live_stock_counts,
                     debugger=debugger
                 )
-            layout_score = layout_score_cache[cache_key]
+            layout_score = layout_score_cache[layout_sig]
             
             placed_ids = {p['part_id'] for p in layout['placed_parts'] if p['part_id'] in current_parts}
             if not placed_ids: continue
 
+            # --- NEW: Calculate True Stock Bonus Here ---
+            stock_fill_bonus = 0.0
+            parts_on_this_layout = Counter(p['internal_ref'] for p in layout['placed_parts'] if p.get('is_stock_part'))
+            if parts_on_this_layout:
+                for ref, count_on_sheet in parts_on_this_layout.items():
+                    part_template = next(p for p in layout['placed_parts'] if p.get('internal_ref') == ref)
+                    initial_deficit = part_template.get('target_stock', 1) - part_template.get('current_stock', 0)
+                    target_stock = part_template.get('target_stock', 0)
+                    if target_stock <= 0: continue
+
+                    part_area = part_template['length'] * part_template['width']
+                    base_bonus_unit = (part_area / reference_area) * config.get('w_stock_fill', 1.0)
+                    count_already_made = live_stock_counts.get(ref, 0)
+
+                    for i in range(count_on_sheet):
+                        live_deficit = initial_deficit - (count_already_made + i)
+                        if live_deficit <= 0: continue
+                        stock_fill_bonus += (live_deficit / target_stock) * base_bonus_unit
+            
             layouts_penalty = normalized_layouts_penalty if action['type'] == 'generate' and is_new_signature else 0
             unweighted_cuts = float(_count_guillotine_cuts(layout))
             cuts_penalty = (unweighted_cuts / total_cuts_normalizer) * config.get('w_cuts', 0.2) if total_cuts_normalizer > 0 else 0
             
             if debugger:
                 debugger.log_true_scores({
+                    'stock_bonus': stock_fill_bonus,
                     'sheets_penalty': -normalized_sheet_penalty,
                     'layouts_penalty': -layouts_penalty,
                     'cuts_penalty': -cuts_penalty
                 })
             
-            child_score = current_score + layout_score - normalized_sheet_penalty - layouts_penalty - cuts_penalty
+            child_score = current_score + layout_score + stock_fill_bonus - normalized_sheet_penalty - layouts_penalty - cuts_penalty
             child_parts = {pid: p for pid, p in current_parts.items() if pid not in placed_ids}
             child_layouts = used_layouts + [layout]
             child_signatures = used_signatures.union({layout_sig})
