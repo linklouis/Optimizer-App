@@ -65,21 +65,12 @@ def find_best_fit(part_length: float, part_width: float, empty_rects_np: np.ndar
     return best_fit_index
 
 
-def calculate_layout_score(layout: Dict[str, Any], sheet_info: Dict[str, Any], config: Dict[str, Any], 
-                           min_offcut_dim: float, reference_area: float, max_offcut_quantity: float, 
-                           is_stock_only_job: bool = False, tracker: Optional[Dict] = None,
-                           remaining_parts: Optional[List[Part]] = None) -> float:
-    """Calculates a score for a given sheet layout. Higher is better."""
-    
-    def _update_tracker(component_name: str, value: float):
-        """Helper to update the statistics for a score component."""
-        if tracker is not None:
-            stats = tracker.setdefault(component_name, {'min': float('inf'), 'max': -float('inf'), 'sum': 0, 'count': 0})
-            stats['min'] = min(stats['min'], value)
-            stats['max'] = max(stats['max'], value)
-            stats['sum'] += value
-            stats['count'] += 1
-
+def calculate_layout_score(layout: Dict[str, Any], sheet_info: Dict[str, Any], config: Dict[str, Any],
+                           min_offcut_dim: float, reference_area: float, max_offcut_quantity: float,
+                           is_stock_only_job: bool = False,
+                           remaining_parts: Optional[List[Part]] = None,
+                           live_stock_counts: Optional[Counter] = None) -> float:
+    """Calculates a score for a given sheet layout using a diminishing returns model for stock parts."""
     sheet_area = sheet_info['length'] * sheet_info['width']
     if sheet_area == 0 or reference_area == 0:
         return -float('inf')
@@ -88,37 +79,43 @@ def calculate_layout_score(layout: Dict[str, Any], sheet_info: Dict[str, Any], c
     usable_offcuts = [o for o in layout['offcuts'] if o['length'] >= min_offcut_dim and o['width'] >= min_offcut_dim]
     offcut_area = sum(o['length'] * o['width'] for o in usable_offcuts)
     
-    area_based_score = -(((sheet_area - used_area - offcut_area) / reference_area * config.get('w_waste', 1.0)) + 
+    area_based_score = -(((sheet_area - used_area - offcut_area) / reference_area * config.get('w_waste', 1.0)) +
                          ((offcut_area / reference_area) * config.get('w_offcut', 0.5)))
 
-    # --- NEW: Investment-Aware Area Score for Any In-Progress Sheet ---
-    # To solve the bias, we check if a layout is new and has room, regardless of sheet type.
-    # If so, we optimistically assume the rest of the sheet will be filled perfectly.
     is_lightly_used = len(layout['placed_parts']) <= 2
-    
-    # This logic only runs when called from the main search loop (where remaining_parts is known).
     if is_lightly_used and remaining_parts:
-        # Check if it's even possible for any remaining part to fit in the future.
         can_fit_more = any(p['length'] * p['width'] < (sheet_area - used_area) for p in remaining_parts)
         if can_fit_more:
-            area_based_score = 0.0 # Waive the area penalty entirely for a truly optimistic bound.
-    
-    # --- Stock Fill Bonus ---
+            area_based_score = 0.0
+
+    # --- Diminishing Returns Stock Fill Bonus ---
     stock_fill_bonus = 0
-    for part in layout['placed_parts']:
-        if part.get('is_stock_part', False):
-            deficit = part.get('target_stock', 1) - part.get('current_stock', 0)
-            target_stock = part.get('target_stock', 0)
-            if target_stock > 0 and deficit > 0:
-                part_area = part['length'] * part['width']
-                stock_fill_bonus += (1 / target_stock) * (part_area / reference_area) * config.get('w_stock_fill', 1.0)
-    # print(stock_fill_bonus)
-    
+    if live_stock_counts is not None:
+        parts_on_this_layout = Counter(p['internal_ref'] for p in layout['placed_parts'] if p.get('is_stock_part'))
+        
+        for ref, count_on_sheet in parts_on_this_layout.items():
+            part_template = next(p for p in layout['placed_parts'] if p.get('internal_ref') == ref)
+            initial_deficit = part_template.get('target_stock', 1) - part_template.get('current_stock', 0)
+            target_stock = part_template.get('target_stock', 0)
+            
+            if target_stock <= 0: continue
+
+            part_area = part_template['length'] * part_template['width']
+            base_bonus_unit = (part_area / reference_area) * config.get('w_stock_fill', 1.0)
+            count_already_made = live_stock_counts.get(ref, 0)
+
+            for i in range(count_on_sheet):
+                # The deficit diminishes for each part we place
+                live_deficit = initial_deficit - (count_already_made + i)
+                if live_deficit <= 0:
+                    continue
+                
+                stock_fill_bonus += (live_deficit / target_stock) * base_bonus_unit
+
     has_required_parts = any(not p.get('is_optional_filler', False) for p in layout['placed_parts'])
     if not has_required_parts and any(p.get('is_optional_filler', False) for p in layout['placed_parts']) and not is_stock_only_job:
         return -float('inf')
 
-    # --- Other Bonuses and Penalties ---
     quantity_bonus = 0.0
     if sheet_info.get('type') != 'Default' and max_offcut_quantity > 0:
         quantity_bonus = (float(sheet_info.get('quantity', 1)) / max_offcut_quantity) * config.get('w_quantity', 0.1)
@@ -370,60 +367,71 @@ def _predict_number_of_new_sheet_layouts(remaining_parts: list, used_signatures:
 
 def _calculate_bound(remaining_parts: list, current_score: float, config: Dict[str, Any], reference_area: float, used_signatures: frozenset,
                      normalized_sheet_penalty: float, normalized_layouts_penalty: float, total_cuts_normalizer: float,
-                     optional_parts_for_bound: list) -> float:
+                     optional_parts_for_bound: list, live_stock_counts: Counter) -> float:
     """
-    Calculates a sophisticated upper bound by building a concrete, optimistic future scenario.
+    Calculates a sophisticated upper bound that is aware of the live stock part deficit.
     """
     if not remaining_parts:
         return current_score
 
-    # --- Step 1 & 2: Build the hypothetical scenario ---
-    # Assume each remaining part goes on its own new default sheet to maximize leftover space.
     total_hypothetical_leftover_area = 0
     default_sheet_area = config.get('default_length', 96) * config.get('default_width', 48)
 
     for part in remaining_parts:
         part_area = part['length'] * part['width']
-        # Ensure leftover area is not negative if a part is larger than the sheet
         leftover_on_this_sheet = max(0, default_sheet_area - part_area)
         total_hypothetical_leftover_area += leftover_on_this_sheet
 
-    # --- Step 3: Use a fractional knapsack model to calculate the max possible bonus ---
     optimistic_stock_fill_bonus = 0
     if total_hypothetical_leftover_area > 0 and optional_parts_for_bound and reference_area > 0:
         parts_with_density = []
+        # Group optional parts by their reference ID to handle deficits correctly
+        optional_parts_by_ref = {}
         for part in optional_parts_for_bound:
-            part_area = part['length'] * part['width']
-            if part_area > 0:
-                target_stock = part.get('target_stock', 0)
-                if target_stock > 0:
-                    bonus = (1 / target_stock) * (part_area / reference_area) * config.get('w_stock_fill', 1.0)
-                    parts_with_density.append({
-                        'bonus': bonus,
-                        'area': part_area,
-                        'density': bonus / part_area
-                    })
+            ref = part.get('internal_ref')
+            if ref:
+                optional_parts_by_ref.setdefault(ref, []).append(part)
+
+        for ref, parts in optional_parts_by_ref.items():
+            part_template = parts[0]
+            part_area = part_template['length'] * part_template['width']
+            if part_area <= 0: continue
+            
+            initial_deficit = part_template.get('target_stock', 1) - part_template.get('current_stock', 0)
+            target_stock = part_template.get('target_stock', 0)
+            if target_stock <= 0: continue
+
+            count_already_made = live_stock_counts.get(ref, 0)
+            live_deficit = initial_deficit - count_already_made
+            if live_deficit <= 0: continue
+
+            # The bonus for the *next* part is based on the current live deficit
+            base_bonus_unit = (part_area / reference_area) * config.get('w_stock_fill', 1.0)
+            bonus_for_next_part = (live_deficit / target_stock) * base_bonus_unit
+            
+            # Add one item to the knapsack list for each remaining instance
+            for _ in range(len(parts)):
+                parts_with_density.append({
+                    'bonus': bonus_for_next_part,
+                    'area': part_area,
+                    'density': bonus_for_next_part / part_area if part_area > 0 else 0
+                })
         
-        # Sort by most "valuable" parts first
         parts_with_density.sort(key=lambda p: p['density'], reverse=True)
         
-        # Fill the "knapsack" of leftover area
         for item in parts_with_density:
-            if total_hypothetical_leftover_area <= 0:
-                break
+            if total_hypothetical_leftover_area <= 0: break
             area_to_take = min(item['area'], total_hypothetical_leftover_area)
             fraction_of_item = area_to_take / item['area']
             optimistic_stock_fill_bonus += item['bonus'] * fraction_of_item
             total_hypothetical_leftover_area -= area_to_take
 
-    # --- Step 4: Calculate penalties for the optimistic scenario ---
     future_sheets_penalty = len(remaining_parts) * normalized_sheet_penalty
     optimistic_new_layouts = _predict_number_of_new_sheet_layouts(remaining_parts, used_signatures, reference_area, config)
     future_layouts_penalty = optimistic_new_layouts * normalized_layouts_penalty
     optimistic_future_cuts = _get_min_cuts_for_parts(len(remaining_parts))
     future_cuts_penalty = (optimistic_future_cuts / total_cuts_normalizer) * config.get('w_cuts', 0.2) if total_cuts_normalizer > 0 else 0
     
-    # Area score is assumed to be 0, as the waste is implicitly part of the knapsack calculation
     optimistic_area_score = 0
 
     upper_bound = (
@@ -437,8 +445,8 @@ def _calculate_bound(remaining_parts: list, current_score: float, config: Dict[s
 
     return upper_bound
 
-def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict], config: Dict, 
-                             optional_stock_parts: Optional[List[Part]] = None, 
+def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict], config: Dict,
+                             optional_stock_parts: Optional[List[Part]] = None,
                              is_stock_only_job: bool = False,
                              progress_callback=None,
                              max_offcut_quantity: float = 1.0,
@@ -494,13 +502,15 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
     total_cuts_normalizer = total_initial_parts * cuts_per_part_heuristic
 
     initial_used_signatures = frozenset()
+    initial_stock_counts = Counter()
     initial_bound = -_calculate_bound(
-        list(initial_parts_dict.values()), 0, config, reference_area, initial_used_signatures, 
-        normalized_sheet_penalty, normalized_layouts_penalty, total_cuts_normalizer, optional_parts_list
+        list(initial_parts_dict.values()), 0, config, reference_area, initial_used_signatures,
+        normalized_sheet_penalty, normalized_layouts_penalty, total_cuts_normalizer, optional_parts_list,
+        initial_stock_counts
     )
     
-    node_counter = 1 
-    pq = [ (initial_bound, 0.0, 0, initial_parts_dict, [], initial_used_signatures) ]
+    node_counter = 1
+    pq = [(initial_bound, 0.0, 0, initial_parts_dict, [], initial_used_signatures, initial_stock_counts)]
     
     best_solution = ([], list(initial_parts_dict.values()))
     best_score = -float('inf')
@@ -509,7 +519,7 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
         if cancellation_event and cancellation_event.is_set():
             break
         
-        _, current_score, parent_node_id, current_parts, used_layouts, used_signatures = heapq.heappop(pq)
+        _, current_score, parent_node_id, current_parts, used_layouts, used_signatures, live_stock_counts = heapq.heappop(pq)
         
         tree_nodes[parent_node_id]["status"] = "explored"
         tree_update_batch[parent_node_id] = tree_nodes[parent_node_id].copy()
@@ -530,8 +540,9 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
             last_update_time = current_time
         
         bound_check = _calculate_bound(
-            list(current_parts.values()), current_score, config, reference_area, used_signatures, 
-            normalized_sheet_penalty, normalized_layouts_penalty, total_cuts_normalizer, optional_parts_list
+            list(current_parts.values()), current_score, config, reference_area, used_signatures,
+            normalized_sheet_penalty, normalized_layouts_penalty, total_cuts_normalizer, optional_parts_list,
+            live_stock_counts
         )
         if bound_check < best_score:
             continue
@@ -559,12 +570,17 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
             if is_new_signature and max_layouts > 0 and len(used_signatures) >= max_layouts:
                 continue
 
-            if layout_sig not in layout_score_cache:
-                layout_score_cache[layout_sig] = calculate_layout_score(
-                    layout, layout['sheet_info'], config, config['min_offcut_dim'], reference_area, 
-                    max_offcut_quantity, is_stock_only_job, remaining_parts=list(current_parts.values())
+            # We use a tuple of the signature and the live counts for caching
+            # to ensure we re-calculate the score if the state changes.
+            cache_key = (layout_sig, tuple(sorted(live_stock_counts.items())))
+            if cache_key not in layout_score_cache:
+                layout_score_cache[cache_key] = calculate_layout_score(
+                    layout, layout['sheet_info'], config, config['min_offcut_dim'], reference_area,
+                    max_offcut_quantity, is_stock_only_job,
+                    remaining_parts=list(current_parts.values()),
+                    live_stock_counts=live_stock_counts
                 )
-            layout_score = layout_score_cache[layout_sig]
+            layout_score = layout_score_cache[cache_key]
             
             placed_ids = {p['part_id'] for p in layout['placed_parts'] if p['part_id'] in current_parts}
             if not placed_ids: continue
@@ -579,6 +595,12 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
             child_parts = {pid: p for pid, p in current_parts.items() if pid not in placed_ids}
             child_layouts = used_layouts + [layout]
             child_signatures = used_signatures.union({layout_sig})
+
+            # Create the next state's live stock counts
+            child_stock_counts = live_stock_counts.copy()
+            for part in layout['placed_parts']:
+                if part.get('is_stock_part'):
+                    child_stock_counts[part['internal_ref']] += 1
 
             current_node_id = node_counter
             new_node = {"id": current_node_id, "parent": parent_node_id, "score": child_score, "status": "exploring"}
@@ -598,11 +620,12 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
                     last_best_sol_node = current_node_id
             else:
                 child_bound = _calculate_bound(
-                    list(child_parts.values()), child_score, config, reference_area, child_signatures, 
-                    normalized_sheet_penalty, normalized_layouts_penalty, total_cuts_normalizer, optional_parts_list
+                    list(child_parts.values()), child_score, config, reference_area, child_signatures,
+                    normalized_sheet_penalty, normalized_layouts_penalty, total_cuts_normalizer, optional_parts_list,
+                    child_stock_counts
                 )
                 if child_bound > best_score:
-                    heapq.heappush(pq, (-child_bound, child_score, current_node_id, child_parts, child_layouts, child_signatures))
+                    heapq.heappush(pq, (-child_bound, child_score, current_node_id, child_parts, child_layouts, child_signatures, child_stock_counts))
                 else:
                     tree_nodes[current_node_id]["status"] = "pruned_bound"
                     tree_update_batch[current_node_id] = tree_nodes[current_node_id].copy()
