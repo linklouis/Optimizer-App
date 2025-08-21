@@ -323,65 +323,57 @@ def _count_guillotine_cuts(layout: Dict[str, Any]) -> int:
     return len(unique_x_cuts) + len(unique_y_cuts)
 
 
-def _predict_leftover_area(remaining_parts: list, reference_area: float, config: Dict) -> float:
+def _predict_leftover_area(remaining_parts: list, reference_area: float, config: Dict) -> List[float]:
     """
     Predicts leftover area by running a fast, optimistic simulation of packing
-    the remaining parts. This provides a tighter, admissible upper bound than the
-    one-part-per-sheet assumption.
+    the remaining parts. Returns a list of leftover areas, one for each
+    simulated sheet, to account for fragmentation.
     """
     if not remaining_parts or reference_area <= 0:
-        return 0.0
+        return []
 
-    # We need kerf and rotation settings for the simulation
     kerf = config.get('kerf', 0.125)
     allow_rotation = config.get('allow_rotation', True)
     sheet_sim_info = {'length': config.get('default_length', 96), 'width': config.get('default_width', 48)}
 
-    # Create a mutable list of parts for the simulation
     parts_to_simulate = sorted(remaining_parts, key=lambda p: p['length'] * p['width'], reverse=True)
-    total_hypothetical_leftover_area = 0.0
+    hypothetical_leftover_areas = []
 
     while parts_to_simulate:
-        # Define a fresh sheet for each iteration of the simulation
         initial_rects = [{'x': 0, 'y': 0, 'length': sheet_sim_info['length'], 'width': sheet_sim_info['width']}]
         
-        # Run the placement algorithm on the remaining simulated parts
         placed_in_sim, _ = _place_parts_in_rects(
             parts_to_simulate, initial_rects, kerf, allow_rotation
         )
 
         if not placed_in_sim:
-            # If even one part cannot be placed on a fresh sheet, fallback to the original
-            # safe but loose heuristic for the remaining parts to avoid infinite loops.
             for part in parts_to_simulate:
-                total_hypothetical_leftover_area += max(0, reference_area - (part['length'] * part['width']))
-            break # Exit the loop
+                leftover = max(0, reference_area - (part['length'] * part['width']))
+                hypothetical_leftover_areas.append(leftover)
+            break
 
-        # Calculate the area used on this simulated sheet
         area_used_in_sim = sum(p['length'] * p['width'] for p in placed_in_sim)
-        
-        # Add the leftover from this sheet to the total
-        total_hypothetical_leftover_area += reference_area - area_used_in_sim
+        hypothetical_leftover_areas.append(reference_area - area_used_in_sim)
 
-        # Update the list of parts for the next simulated sheet
         placed_ids = {p['part_id'] for p in placed_in_sim}
         parts_to_simulate = [p for p in parts_to_simulate if p['part_id'] not in placed_ids]
 
-    return total_hypothetical_leftover_area
+    return hypothetical_leftover_areas
 
 
-def _calculate_optimistic_stock_bonus(remaining_parts: list, total_hypothetical_leftover_area: float,
+def _calculate_optimistic_stock_bonus(remaining_parts: list, hypothetical_leftover_areas: List[float],
                                       optional_parts_for_bound: list, reference_area: float,
-                                      live_stock_counts: Counter) -> float:
+                                      live_stock_counts: Counter, config: Dict) -> float:
     """
-    Calculates the maximum possible raw (unweighted) stock fill bonus by simulating
-    packing the most valuable optional parts into fragmented leftover spaces.
-    This provides a tighter, admissible upper bound.
+    Calculates the maximum possible stock fill bonus using a flat-rate-per-item
+    bonus to avoid bias towards large, un-placeable parts.
     """
     if reference_area <= 0:
         return 0.0
+    
+    # NEW: Flat bonus per item placed, taken from config
+    flat_bonus_unit = config.get('w_stock_fill_item_bonus', 0.05)
 
-    # Initialize a deficit tracker based on the current state (live_stock_counts)
     live_deficit_tracker = Counter()
     all_stock_parts = remaining_parts + optional_parts_for_bound
     for part in all_stock_parts:
@@ -392,26 +384,21 @@ def _calculate_optimistic_stock_bonus(remaining_parts: list, total_hypothetical_
                 count_already_made = live_stock_counts.get(ref, 0)
                 live_deficit_tracker[ref] = initial_deficit - count_already_made
 
-    # 1. Calculate the guaranteed bonus from required parts that are also stock parts.
-    # This portion of the bonus is not speculative.
+    # Bonus for required parts that are also stock parts
     required_parts_bonus = 0.0
     for part in remaining_parts:
         if part.get('is_stock_part'):
             ref = part['internal_ref']
             if live_deficit_tracker[ref] > 0:
-                part_area = part['length'] * part['width']
                 target_stock = part.get('target_stock', 0)
                 if target_stock <= 0: continue
                 
-                base_bonus_unit = part_area / reference_area
-                required_parts_bonus += (live_deficit_tracker[ref] / target_stock) * base_bonus_unit
+                required_parts_bonus += (live_deficit_tracker[ref] / target_stock) * flat_bonus_unit
                 live_deficit_tracker[ref] -= 1
 
-    # 2. Calculate the speculative bonus from filling leftover space with optional parts.
+    # Speculative bonus for optional parts
     optional_parts_bonus = 0.0
-    if total_hypothetical_leftover_area > 0 and optional_parts_for_bound:
-        # 2a. Generate all possible "bonus items" from optional parts.
-        # Each item represents making one copy of a part at a specific deficit level.
+    if hypothetical_leftover_areas and optional_parts_for_bound:
         optional_parts_by_ref = {p['internal_ref']: p for p in optional_parts_for_bound if p.get('internal_ref')}
         
         all_bonus_items = []
@@ -423,29 +410,37 @@ def _calculate_optimistic_stock_bonus(remaining_parts: list, total_hypothetical_
             target_stock = part_template.get('target_stock', 0)
             if target_stock <= 0 or part_area <= 0: continue
             
-            base_bonus_unit = part_area / reference_area
-            item_density = base_bonus_unit / part_area
+            # Density is now high for small parts, prioritizing what's easy to fit
+            density = (1 / part_area) if part_area > 0 else float('inf')
 
-            # Create an item for each level of deficit we can fill for this part type
             for i in range(current_deficit):
                 deficit_level = current_deficit - i
-                item_bonus = (deficit_level / target_stock) * base_bonus_unit
-                all_bonus_items.append({'bonus': item_bonus, 'area': part_area, 'density': item_density * (deficit_level / target_stock)})
+                item_bonus = (deficit_level / target_stock) * flat_bonus_unit
+                # We sort by area (asc) as a tie-breaker for items with the same deficit level
+                all_bonus_items.append({'bonus': item_bonus, 'area': part_area, 'deficit': deficit_level, 'ref': ref})
+        
+        # Sort to prioritize items that are easiest to fit (smallest)
+        all_bonus_items.sort(key=lambda p: p['area'])
+        
+        bins = sorted(hypothetical_leftover_areas)
 
-        all_bonus_items.sort(key=lambda p: p['density'], reverse=True)
-
-        # 2b. Sum all hypothetical leftover area into a single "bin" for an optimistic calculation.
-        remaining_capacity = total_hypothetical_leftover_area
-
-        # 2c. Greedily "pack" the highest-density bonus items into the total available area.
-        # This is a 0/1 knapsack-style fill, which is more realistic than fractional filling.
         for item in all_bonus_items:
-            if remaining_capacity >= item['area']:
-                optional_parts_bonus += item['bonus']
-                remaining_capacity -= item['area']
-            if remaining_capacity <= 1e-6:
-                break
+            best_bin_idx = -1
+            # Find smallest bin it fits in
+            import bisect
+            # Find the insertion point for the item's area in the sorted bins
+            insertion_point = bisect.bisect_left(bins, item['area'])
+            if insertion_point < len(bins):
+                 best_bin_idx = insertion_point
             
+            if best_bin_idx != -1:
+                optional_parts_bonus += item['bonus']
+                bins[best_bin_idx] -= item['area']
+                
+                # Efficiently update the sorted list of bins
+                updated_capacity = bins.pop(best_bin_idx)
+                bisect.insort_left(bins, updated_capacity)
+
     return required_parts_bonus + optional_parts_bonus
 
 
@@ -552,9 +547,9 @@ def _calculate_bound(remaining_parts: list, current_score: float, config: Dict[s
         return current_score
 
     # Get raw predictive values first
-    total_hypothetical_leftover_area = _predict_leftover_area(remaining_parts, reference_area, config)
+    hypothetical_leftover_areas = _predict_leftover_area(remaining_parts, reference_area, config)
     raw_optimistic_stock_fill = _calculate_optimistic_stock_bonus(
-        remaining_parts, total_hypothetical_leftover_area, optional_parts_for_bound, reference_area, live_stock_counts
+        remaining_parts, hypothetical_leftover_areas, optional_parts_for_bound, reference_area, live_stock_counts, config
     )
     optimistic_future_cuts = _get_min_cuts_for_parts(len(remaining_parts))
     min_additional_sheets = _get_min_sheets_for_parts(remaining_parts, reference_area)
@@ -748,6 +743,9 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
 
             # --- NEW: Calculate True Stock Bonus Here ---
             stock_fill_bonus = 0.0
+            flat_bonus_unit = config.get('w_stock_fill_item_bonus', 0.05)
+            w_stock_fill = config.get('w_stock_fill', 1.0) # Global weight for the component
+            
             parts_on_this_layout = Counter(p['internal_ref'] for p in layout['placed_parts'] if p.get('is_stock_part'))
             if parts_on_this_layout:
                 for ref, count_on_sheet in parts_on_this_layout.items():
@@ -756,14 +754,13 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
                     target_stock = part_template.get('target_stock', 0)
                     if target_stock <= 0: continue
 
-                    part_area = part_template['length'] * part_template['width']
-                    base_bonus_unit = (part_area / reference_area) * config.get('w_stock_fill', 1.0)
                     count_already_made = live_stock_counts.get(ref, 0)
 
                     for i in range(count_on_sheet):
                         live_deficit = initial_deficit - (count_already_made + i)
                         if live_deficit <= 0: continue
-                        stock_fill_bonus += (live_deficit / target_stock) * base_bonus_unit
+                        # Bonus is now based on a flat rate scaled by need, not area
+                        stock_fill_bonus += (live_deficit / target_stock) * flat_bonus_unit * w_stock_fill
             
             layouts_penalty = normalized_layouts_penalty if action['type'] == 'generate' and is_new_signature else 0
             unweighted_cuts = float(_count_guillotine_cuts(layout))
