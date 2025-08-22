@@ -333,10 +333,6 @@
                                     <span class="stat-label"><i class="fa-solid fa-file-invoice"></i> Sheets in Solution</span>
                                     <span class="stat-value" id="sheets-used-value">-</span>
                                 </div>
-                                <div class="stat-card">
-                                    <span class="stat-label"><i class="fa-solid fa-layer-group"></i> Pending Updates</span>
-                                    <span class="stat-value" id="pending-updates-value">0</span>
-                                </div>
                             </div>
                             
                             <p class="loading-tip">
@@ -349,7 +345,14 @@
                         </div>
                         <div class="loading-panel-right">
                             <div class="path-visualizer">
-                                <span class="path-visualizer-title"><i class="fa-solid fa-code-branch"></i> Optimizer Search Path</span>
+                                <div class="path-visualizer-header">
+                                    <span class="path-visualizer-title"><i class="fa-solid fa-code-branch"></i> Optimizer Search Path</span>
+                                    <div class="path-visualizer-stats">
+                                        <span>Nodes: <strong id="viz-nodes-rendered">0</strong></span>
+                                        <span>Pending: <strong id="viz-pending-updates">0</strong></span>
+                                        <span>Ticks/s: <strong id="viz-tick-rate">0</strong></span>
+                                    </div>
+                                </div>
                                 <div class="path-svg-container">
                                     <svg id="path-visualization-svg"></svg>
                                 </div>

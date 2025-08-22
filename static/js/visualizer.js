@@ -1,3 +1,4 @@
+const RENDER_THRESHOLD = 0.1; // Min pixels a node must move to trigger a DOM update
 class TreeVisualizer {
     constructor(svgId) {
         this.svg = document.getElementById(svgId);
@@ -28,6 +29,14 @@ class TreeVisualizer {
         this.childCounts = {};
         this.activePathNodeIds = null;
         this.bestPathNodeIds = null;
+        this.needsGlobalColorUpdate = true;
+
+        this.tickCounter = 0;
+        this.tickRate = 0;
+        this.tickRateIntervalId = null;
+
+        this.nodeList = [];
+        this.isNodeListDirty = true;
 
         // --- New properties for Zoom and Pan ---
         this.zoom = { x: 0, y: 0, scale: 1.0 };
@@ -48,10 +57,18 @@ class TreeVisualizer {
         if (this.animationFrameId) return;
         this.clear();
         this.simulationLoopId = setInterval(this._simulationLoop.bind(this), this.simulationInterval);
+        this.tickRateIntervalId = setInterval(() => {
+            this.tickRate = this.tickCounter; // Ticks per second
+            this.tickCounter = 0;
+        }, 1000);
         this._animationLoop();
     }
 
     stop() {
+        if (this.tickRateIntervalId) {
+            clearInterval(this.tickRateIntervalId);
+            this.tickRateIntervalId = null;
+        }
         // if (this.simulationLoopId) {
         //     clearInterval(this.simulationLoopId);
         //     this.simulationLoopId = null;
@@ -79,6 +96,12 @@ class TreeVisualizer {
             clearInterval(this.simulationLoopId);
             this.simulationLoopId = null;
         }
+        if (this.tickRateIntervalId) {
+            clearInterval(this.tickRateIntervalId);
+            this.tickRateIntervalId = null;
+        }
+        this.tickCounter = 0;
+        this.tickRate = 0;
         this.nodes = {};
         this.pendingNodes = [];
         this.svgNodes = {};
@@ -99,6 +122,22 @@ class TreeVisualizer {
         return this.pendingNodes.length;
     }
 
+    getRenderedNodeCount() {
+        return Object.keys(this.nodes).length;
+    }
+
+    getTickRate() {
+        return this.tickRate;
+    }
+
+    _getNodeList() {
+        if (this.isNodeListDirty) {
+            this.nodeList = Object.values(this.nodes);
+            this.isNodeListDirty = false;
+        }
+        return this.nodeList;
+    }
+
     // --- Navigation Handlers (Omitted for brevity, no changes) ---
     _handleZoom(e) { e.preventDefault(); const zoomIntensity = 0.1; const wheel = e.deltaY < 0 ? 1 : -1; const newScale = this.zoom.scale * (1 + wheel * zoomIntensity); const point = new DOMPoint(e.clientX, e.clientY); const transformedPoint = point.matrixTransform(this.svg.getScreenCTM().inverse()); this.zoom.x = transformedPoint.x - (transformedPoint.x - this.zoom.x) * (newScale / this.zoom.scale); this.zoom.y = transformedPoint.y - (transformedPoint.y - this.zoom.y) * (newScale / this.zoom.scale); this.zoom.scale = newScale; }
     _handlePanStart(e) { e.preventDefault(); this.isPanning = true; this.panStart.x = e.clientX; this.panStart.y = e.clientY; this.svg.style.cursor = 'grabbing'; }
@@ -110,6 +149,7 @@ class TreeVisualizer {
 
     _simulationLoop() {
         // This fast loop handles data processing and physics
+        this.tickCounter++;
         this._introducePendingNodes();
         this.childCounts = this._calculateChildCounts();
         this._runLayoutSimulation(this.childCounts);
@@ -173,8 +213,12 @@ class TreeVisualizer {
         }
 
         if (nodeData.score !== undefined) {
-            this.minScore = Math.min(this.minScore, nodeData.score);
-            this.maxScore = Math.max(this.maxScore, nodeData.score);
+            const scoreChanged = this.minScore > nodeData.score || this.maxScore < nodeData.score;
+            if (scoreChanged) {
+                this.minScore = Math.min(this.minScore, nodeData.score);
+                this.maxScore = Math.max(this.maxScore, nodeData.score);
+                this.needsGlobalColorUpdate = true;
+            }
         }
 
         if (this.solutionNodeId === nodeData.id && nodeData.status !== 'solution') {
@@ -223,7 +267,8 @@ class TreeVisualizer {
                 x: existingNode?.x ?? initialX, 
                 y: existingNode?.y ?? initialY,
                 vx: 0, vy: 0,
-                fx: 0, fy: 0
+                fx: 0, fy: 0,
+                cachedColor: (existingNode && existingNode.score === nodeData.score) ? existingNode.cachedColor : null
             };
             
             this.lastAddedNodeId = nodeData.id;
@@ -234,6 +279,7 @@ class TreeVisualizer {
 
             this.activePathNodeIds = null;
             this.bestPathNodeIds = null;
+            this.isNodeListDirty = true;
         }
         
         this.processedNodeUpdates.add(updateSignature);
@@ -259,7 +305,14 @@ class TreeVisualizer {
             this.activePathNodeIds = this._getActivePath();
         }
 
-        Object.values(this.nodes).forEach(node => {
+        if (this.needsGlobalColorUpdate) {
+            for (const node of this._getNodeList()) {
+                node.cachedColor = null;
+            }
+            this.needsGlobalColorUpdate = false;
+        }
+
+        this._getNodeList().forEach(node => {
             let g = this.svgNodes[node.id];
             if (!g) {
                 g = this._createNodeElement();
@@ -286,12 +339,23 @@ class TreeVisualizer {
             
             const circle = g.querySelector('circle');
             if (!isRoot && !isHighBranching && node.status !== 'solution') {
-                circle.setAttribute('style', `fill: ${this._getScoreColor(node.score)}`);
+                if (!node.cachedColor) {
+                    node.cachedColor = this._getScoreColor(node.score);
+                }
+                if (circle.style.fill !== node.cachedColor) {
+                    circle.style.fill = node.cachedColor;
+                }
             } else {
                 circle.removeAttribute('style');
             }
 
-            g.setAttribute('transform', `translate(${node.x}, ${node.y})`);
+            const lastX = parseFloat(g.dataset.x || -9999);
+            const lastY = parseFloat(g.dataset.y || -9999);
+            if (Math.abs(node.x - lastX) > RENDER_THRESHOLD || Math.abs(node.y - lastY) > RENDER_THRESHOLD) {
+                g.setAttribute('transform', `translate(${node.x}, ${node.y})`);
+                g.dataset.x = node.x;
+                g.dataset.y = node.y;
+            }
 
             const parent = this.nodes[node.parent];
             if (parent) {
@@ -309,10 +373,22 @@ class TreeVisualizer {
                     link.setAttribute('class', newLinkClassName);
                     link.dataset.currentClass = newLinkClassName;
                 }
-                link.setAttribute('x1', parent.x);
-                link.setAttribute('y1', parent.y);
-                link.setAttribute('x2', node.x);
-                link.setAttribute('y2', node.y);
+                
+                const lastP_X = parseFloat(link.dataset.x1 || -9999);
+                const lastP_Y = parseFloat(link.dataset.y1 || -9999);
+                const lastN_X = parseFloat(link.dataset.x2 || -9999);
+                const lastN_Y = parseFloat(link.dataset.y2 || -9999);
+                if (Math.abs(parent.x - lastP_X) > RENDER_THRESHOLD || Math.abs(parent.y - lastP_Y) > RENDER_THRESHOLD ||
+                    Math.abs(node.x - lastN_X) > RENDER_THRESHOLD || Math.abs(node.y - lastN_Y) > RENDER_THRESHOLD) {
+                    link.setAttribute('x1', parent.x);
+                    link.setAttribute('y1', parent.y);
+                    link.setAttribute('x2', node.x);
+                    link.setAttribute('y2', node.y);
+                    link.dataset.x1 = parent.x;
+                    link.dataset.y1 = parent.y;
+                    link.dataset.x2 = node.x;
+                    link.dataset.y2 = node.y;
+                }
             }
         });
     }
@@ -339,7 +415,7 @@ class TreeVisualizer {
     _calculateChildCounts() {
         const childCounts = {};
         for (const nodeId in this.nodes) childCounts[nodeId] = 0;
-        for (const node of Object.values(this.nodes)) {
+        for (const node of this._getNodeList()) {
             if (node.parent !== null && childCounts.hasOwnProperty(node.parent)) {
                 childCounts[node.parent]++;
             }
@@ -360,7 +436,7 @@ class TreeVisualizer {
     }
 
     _runLayoutSimulation(childCounts) {
-        const nodes = Object.values(this.nodes);
+        const nodes = this._getNodeList();
         if (nodes.length < 2) return;
 
         const kRepel = 2000;
@@ -371,7 +447,8 @@ class TreeVisualizer {
 
         // 1. Repulsion Force Calculation.
         // Assumes forces were reset to 0 at the end of the last tick.
-        for (let i = 0; i < nodes.length; i++) {
+        // We don't need to worry about the root node (id=0) since it's fixed at the center, and a constant repulsion is already applied later.
+        for (let i = 1; i < nodes.length; i++) {
             const n1 = nodes[i];
             for (let j = i + 1; j < nodes.length; j++) {
                 const n2 = nodes[j];
@@ -381,9 +458,12 @@ class TreeVisualizer {
                 let distance = Math.sqrt(dx * dx + dy * dy);
                 if (distance < 1) distance = 1;
 
-                const force = kRepel / (Math.pow(distance, 1.8));
-                const forceX = (dx / distance) * force;
-                const forceY = (dy / distance) * force;
+                // const force = kRepel / (Math.pow(distance, 1.8));
+                // const forceX = (dx / distance) * force;
+                // const forceY = (dy / distance) * force;
+                const force = kRepel / (Math.pow(distance, 2.8));
+                const forceX = dx * force;
+                const forceY = dy * force;
                 
                 n1.fx += forceX;
                 n1.fy += forceY;
@@ -393,15 +473,16 @@ class TreeVisualizer {
         }
 
         // 2. Attraction, Alignment, and Directional Forces.
+        const desired_distance = 20;
         for (const node of nodes) {
             const parent = this.nodes[node.parent];
             if (parent) {
-                const dx_attract = parent.x - node.x;
-                const dy_attract = parent.y - node.y;
-                node.fx += dx_attract * kAttract;
-                node.fy += dy_attract * kAttract;
-                parent.fx -= dx_attract * kAttract;
-                parent.fy -= dy_attract * kAttract;
+                const dx_attract = (parent.x - node.x) * kAttract;
+                const dy_attract = (parent.y - node.y) * kAttract;
+                node.fx += dx_attract;
+                node.fy += dy_attract;
+                parent.fx -= dx_attract;
+                parent.fy -= dy_attract;
 
                 const grandparent = this.nodes[parent.parent];
                 if (grandparent) {
@@ -410,7 +491,6 @@ class TreeVisualizer {
                     const flow_magnitude = Math.sqrt(flow_dx * flow_dx + flow_dy * flow_dy);
 
                     if (flow_magnitude > 0.1) {
-                        const desired_distance = 20;
                         const norm_flow_dx = (flow_dx / flow_magnitude) * desired_distance;
                         const norm_flow_dy = (flow_dy / flow_magnitude) * desired_distance;
                         const target_x = parent.x + norm_flow_dx;
@@ -431,19 +511,14 @@ class TreeVisualizer {
         }
         
         // 3. Update Velocities/Positions AND Reset Forces for the next tick.
-        const rootNode = this.nodes[0];
-        for (const node of nodes) {
-            if (node === rootNode) {
-                node.x = 0; 
-                node.y = 0; 
-            } else {
-                node.vx = (node.vx || 0) * damping + node.fx * 0.02;
-                node.vy = (node.vy || 0) * damping + node.fy * 0.02;
-                node.x += node.vx;
-                node.y += node.vy;
-            }
+        for (let i = 1; i < nodes.length; i++) {
+            const node = nodes[i];
 
-            // Reset forces for the next simulation tick.
+            node.vx = (node.vx || 0) * damping + node.fx * 0.02;
+            node.vy = (node.vy || 0) * damping + node.fy * 0.02;
+            node.x += node.vx;
+            node.y += node.vy;
+
             node.fx = 0;
             node.fy = 0;
         }

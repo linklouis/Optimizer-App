@@ -684,3 +684,30 @@ body:not(.dark-mode) .btn-cancel:hover {
 body.dark-mode .btn-cancel:hover {
     background-color: #dc2626; /* Slightly brighter red for dark mode */
 }
+
+
+.path-visualizer-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+    padding: 0 0.25rem;
+}
+
+.path-visualizer-title {
+    font-weight: 500;
+    font-size: 0.9rem;
+}
+
+.path-visualizer-stats {
+    display: flex;
+    gap: 1rem;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    font-family: monospace;
+}
+
+.path-visualizer-stats strong {
+    color: var(--text-primary);
+    font-weight: 600;
+}

@@ -98,6 +98,9 @@ document.addEventListener('DOMContentLoaded', function() {
             treeVisualizer.stop();
         }
         
+        const tickRateValue = document.getElementById('viz-tick-rate');
+        if (tickRateValue) tickRateValue.textContent = '0';
+        
         // 2. Hide the loading overlay and switch back to the config tab
         const loadingOverlay = document.getElementById('loading-overlay');
         if (loadingOverlay) loadingOverlay.style.display = 'none';
@@ -180,7 +183,9 @@ document.addEventListener('DOMContentLoaded', function() {
             const nodesExploredValue = document.getElementById('nodes-explored-value');
             const bestScoreValue = document.getElementById('best-score-value');
             const sheetsUsedValue = document.getElementById('sheets-used-value');
-            const pendingUpdatesValue = document.getElementById('pending-updates-value');
+            const nodesRenderedValue = document.getElementById('viz-nodes-rendered');
+            const pendingUpdatesValue = document.getElementById('viz-pending-updates');
+            const tickRateValue = document.getElementById('viz-tick-rate');
 
             if (!loadingOverlay) return;
 
@@ -246,9 +251,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (data.tree_update && treeVisualizer) {
                         treeVisualizer.addOrUpdateNodes(data.tree_update);
                     }
-                    // --- Update Pending Count ---
-                    if (treeVisualizer && pendingUpdatesValue) {
-                        pendingUpdatesValue.textContent = treeVisualizer.getPendingNodeCount().toLocaleString();
+                    // --- Update Visualizer Stats ---
+                    if (treeVisualizer) {
+                        if (nodesRenderedValue) nodesRenderedValue.textContent = treeVisualizer.getRenderedNodeCount().toLocaleString();
+                        if (pendingUpdatesValue) pendingUpdatesValue.textContent = treeVisualizer.getPendingNodeCount().toLocaleString();
+                        if (tickRateValue) tickRateValue.textContent = treeVisualizer.getTickRate().toLocaleString();
                     }
                 });
 
@@ -262,10 +269,6 @@ document.addEventListener('DOMContentLoaded', function() {
                             treeVisualizer.addOrUpdateNodes(result.final_tree_update);
                         }
                         treeVisualizer.stop(); // Stop the animation and draw the final state
-                    }
-
-                    if (treeVisualizer && pendingUpdatesValue) {
-                        pendingUpdatesValue.textContent = treeVisualizer.getPendingNodeCount().toLocaleString();
                     }
 
                     currentState = result;
