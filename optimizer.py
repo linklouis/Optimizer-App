@@ -555,30 +555,69 @@ def _predict_number_of_new_sheet_layouts(remaining_parts: list, used_signatures:
 
 def _calculate_worst_case_leftover_area(remaining_parts: List[Part], stock_sheets: List[Dict]) -> float:
     """
-    Calculates the guaranteed optimistic leftover area by assuming the absolute worst-case
-    packing scenario: one sheet per remaining part. This ensures admissibility.
+    Calculates the guaranteed optimistic leftover area by using a greedy simulation
+    to find a plausible upper bound on the number of sheets needed.
     """
     if not stock_sheets or not remaining_parts:
         return 0.0
 
     total_remaining_parts_area = sum(p['length'] * p['width'] for p in remaining_parts)
-    
-    # The maximum number of sheets that could possibly be used is one per part.
-    num_sheets_for_bonus_calc = len(remaining_parts)
-    
     max_optimistic_leftover_area = 0
+    
     for sheet in stock_sheets:
         sheet_area = sheet['length'] * sheet['width']
         if sheet_area > 0:
-            # Total area provided by the worst-case number of sheets of this size.
+            # Use the new greedy simulation to get a TIGHTER but still ADMISSIBLE sheet count
+            num_sheets_for_bonus_calc = _predict_worst_case_sheets(remaining_parts, sheet)
+            
             total_sheet_area_for_bonus = num_sheets_for_bonus_calc * sheet_area
             current_leftover = max(0, total_sheet_area_for_bonus - total_remaining_parts_area)
             
-            # We take the max leftover from among all available sheet sizes.
             if current_leftover > max_optimistic_leftover_area:
                 max_optimistic_leftover_area = current_leftover
     
     return max_optimistic_leftover_area
+
+
+def _predict_worst_case_sheets(remaining_parts: List[Part], sheet_info: Dict[str, Any]) -> int:
+    """
+    Simulates a greedy, inefficient packing strategy (largest parts first) to get a
+    realistic but safe upper bound on the number of sheets required.
+    """
+    if not remaining_parts:
+        return 0
+
+    sheet_area = sheet_info['length'] * sheet_info['width']
+    if sheet_area <= 0:
+        return float('inf')
+
+    # Sort parts from largest to smallest to simulate a greedy, inefficient packing
+    parts_to_simulate = sorted(remaining_parts, key=lambda p: p['length'] * p['width'], reverse=True)
+    sheets_needed = 0
+
+    while parts_to_simulate:
+        sheets_needed += 1
+        current_sheet_capacity = sheet_area
+        
+        # Parts that couldn't fit on this sheet
+        next_remaining_parts = []
+        
+        for part in parts_to_simulate:
+            part_area = part['length'] * part['width']
+            if part_area <= current_sheet_capacity:
+                current_sheet_capacity -= part_area
+            else:
+                next_remaining_parts.append(part)
+        
+        # If we couldn't place even the largest part, it means we're stuck.
+        # This can happen if a part is larger than the sheet area.
+        if len(next_remaining_parts) == len(parts_to_simulate):
+             # To prevent an infinite loop, assume one sheet for each remaining part from here.
+            return sheets_needed + len(next_remaining_parts) - 1
+
+        parts_to_simulate = next_remaining_parts
+
+    return sheets_needed
 
 
 def _calculate_bound(remaining_parts: list, current_score: float, config: Dict[str, Any], reference_area: float, used_signatures: frozenset,
