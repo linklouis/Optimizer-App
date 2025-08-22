@@ -244,8 +244,8 @@ class TreeVisualizer {
                 let total_flow_dy = 0;
                 let ancestorCount = 0;
                 let weight = 1.0;
-                const maxAncestors = 10;   // How many generations to look back
-                const decayFactor = 0.75; // How much less influence older ancestors have
+                const maxAncestors = 20;   // How many generations to look back
+                const decayFactor = 1; // How much less influence older ancestors have
 
                 let currentAncestor = parentPos;
                 // Traverse up the tree for a few generations
