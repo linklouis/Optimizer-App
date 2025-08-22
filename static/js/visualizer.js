@@ -16,8 +16,8 @@ class TreeVisualizer {
         this.processedNodeUpdates = new Set();
         
         this.animationFrameId = null;
-        this.simulationLoopId = null; // ID for the fast simulation loop
-        this.simulationInterval = 4;  // Target ~250 ticks per second for the simulation
+        this.simulationLoopId = null; // ID for the main thread's data processing loop
+        this.simulationInterval = 0;  // Target ~250 ticks per second for the simulation
 
         this.solutionNodeId = null;
         this.lastAddedNodeId = null;
@@ -38,8 +38,8 @@ class TreeVisualizer {
         this.nodeList = [];
         this.isNodeListDirty = true;
 
-        // --- New properties for Zoom and Pan ---
-        this.zoom = { x: 0, y: 0, scale: 1.0 };
+        // --- Properties for Zoom and Pan ---
+        this.zoom = { x: 0, y: 0, scale: 0.5 };
         this.isPanning = false;
         this.panStart = { x: 0, y: 0 };
 
@@ -49,6 +49,33 @@ class TreeVisualizer {
         this.svg.addEventListener('mousemove', this._handlePanMove.bind(this));
         this.svg.addEventListener('mouseup', this._handlePanEnd.bind(this));
         this.svg.addEventListener('mouseleave', this._handlePanEnd.bind(this));
+
+        // --- Web Worker for Physics ---
+        this.physicsWorker = new Worker('static/js/physics_worker.js');
+        this.physicsWorker.onmessage = this._handleWorkerMessage.bind(this);
+        this.nodesToSendToWorker = [];
+    }
+    
+    /**
+     * Handles messages received from the physics worker thread.
+     * @param {MessageEvent} e - The event object from the worker.
+     */
+    _handleWorkerMessage(e) {
+        const { type, payload } = e.data;
+        if (type === 'tick') {
+            const workerNodes = payload.nodes;
+            // Update main thread node positions from worker data.
+            // This is the only place physics state should be written to on the main thread.
+            for (const id in workerNodes) {
+                if (this.nodes[id]) {
+                    const workerNode = workerNodes[id];
+                    this.nodes[id].x = workerNode.x;
+                    this.nodes[id].y = workerNode.y;
+                    this.nodes[id].vx = workerNode.vx;
+                    this.nodes[id].vy = workerNode.vy;
+                }
+            }
+        }
     }
 
     // --- Public Methods ---
@@ -56,6 +83,7 @@ class TreeVisualizer {
     start() {
         if (this.animationFrameId) return;
         this.clear();
+        this.physicsWorker.postMessage({ type: 'start' }); // Start the worker's simulation
         this.simulationLoopId = setInterval(this._simulationLoop.bind(this), this.simulationInterval);
         this.tickRateIntervalId = setInterval(() => {
             this.tickRate = this.tickCounter; // Ticks per second
@@ -69,21 +97,28 @@ class TreeVisualizer {
             clearInterval(this.tickRateIntervalId);
             this.tickRateIntervalId = null;
         }
-        // if (this.simulationLoopId) {
-        //     clearInterval(this.simulationLoopId);
-        //     this.simulationLoopId = null;
-        // }
-        // // It's good practice to stop the animation frame when done.
-        // // If you need to debug the final state, you can comment this out.
-        // if (this.animationFrameId) {
-        //      cancelAnimationFrame(this.animationFrameId);
-        //      this.animationFrameId = null;
-        // }
+        if (this.simulationLoopId) {
+            clearInterval(this.simulationLoopId);
+            this.simulationLoopId = null;
+        }
+        this.physicsWorker.postMessage({ type: 'stop' }); // Stop the worker's simulation
+
         // Process any remaining nodes synchronously
         while (this.pendingNodes.length > 0) {
             const nodeData = this.pendingNodes.shift();
             this._processSingleNode(nodeData);
         }
+        
+        // Send one final update to the worker to ensure it has the complete final state
+        if (this.nodesToSendToWorker.length > 0) {
+            const childCounts = this._calculateChildCounts();
+            this.physicsWorker.postMessage({
+                type: 'update',
+                payload: { newOrUpdatedNodes: this.nodesToSendToWorker, childCounts: childCounts }
+            });
+            this.nodesToSendToWorker = [];
+        }
+        
         this._updatePositions(this._calculateChildCounts());
     }
     
@@ -100,6 +135,9 @@ class TreeVisualizer {
             clearInterval(this.tickRateIntervalId);
             this.tickRateIntervalId = null;
         }
+        this.physicsWorker.postMessage({ type: 'clear' }); // Clear the worker's state
+        this.nodesToSendToWorker = [];
+
         this.tickCounter = 0;
         this.tickRate = 0;
         this.nodes = {};
@@ -115,7 +153,7 @@ class TreeVisualizer {
         this.linkGroup.innerHTML = '';
         this.framesSinceLastSpawn = 0;
         const { width, height } = this.svg.parentElement.getBoundingClientRect();
-        this.zoom = { x: width / 2, y: height / 2, scale: 1.0 };
+        this.zoom = { x: width / 2, y: height / 2, scale: 0.5 };
     }
 
     getPendingNodeCount() {
@@ -138,7 +176,7 @@ class TreeVisualizer {
         return this.nodeList;
     }
 
-    // --- Navigation Handlers (Omitted for brevity, no changes) ---
+    // --- Navigation Handlers (Unchanged) ---
     _handleZoom(e) { e.preventDefault(); const zoomIntensity = 0.1; const wheel = e.deltaY < 0 ? 1 : -1; const newScale = this.zoom.scale * (1 + wheel * zoomIntensity); const point = new DOMPoint(e.clientX, e.clientY); const transformedPoint = point.matrixTransform(this.svg.getScreenCTM().inverse()); this.zoom.x = transformedPoint.x - (transformedPoint.x - this.zoom.x) * (newScale / this.zoom.scale); this.zoom.y = transformedPoint.y - (transformedPoint.y - this.zoom.y) * (newScale / this.zoom.scale); this.zoom.scale = newScale; }
     _handlePanStart(e) { e.preventDefault(); this.isPanning = true; this.panStart.x = e.clientX; this.panStart.y = e.clientY; this.svg.style.cursor = 'grabbing'; }
     _handlePanMove(e) { if (!this.isPanning) return; e.preventDefault(); const dx = (e.clientX - this.panStart.x) / this.zoom.scale; const dy = (e.clientY - this.panStart.y) / this.zoom.scale; this.zoom.x += dx; this.zoom.y += dy; this.panStart.x = e.clientX; this.panStart.y = e.clientY; }
@@ -148,15 +186,24 @@ class TreeVisualizer {
     // --- Loops ---
 
     _simulationLoop() {
-        // This fast loop handles data processing and physics
+        // This fast loop now handles data processing and COMMUNICATION with the worker.
         this.tickCounter++;
-        this._introducePendingNodes();
-        this.childCounts = this._calculateChildCounts();
-        this._runLayoutSimulation(this.childCounts);
+        this._introducePendingNodes(); // This may call _processSingleNode, which queues new nodes for the worker.
+
+        // Always calculate the latest child counts and send them along with any newly processed nodes.
+        const childCounts = this._calculateChildCounts();
+        this.physicsWorker.postMessage({
+            type: 'update',
+            payload: {
+                newOrUpdatedNodes: this.nodesToSendToWorker,
+                childCounts: childCounts
+            }
+        });
+        this.nodesToSendToWorker = []; // Clear the queue after sending
     }
 
     _animationLoop() {
-        // This smooth loop only handles rendering
+        // This smooth loop only handles rendering. It is unchanged.
         const { width, height } = this.svg.parentElement.getBoundingClientRect();
         if (width > 0 && height > 0) {
             this.svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
@@ -262,7 +309,7 @@ class TreeVisualizer {
             }
 
             // Initialize new nodes with all required physics properties.
-            this.nodes[nodeData.id] = { 
+            const newNode = { 
                 ...existingNode, ...nodeData,
                 x: existingNode?.x ?? initialX, 
                 y: existingNode?.y ?? initialY,
@@ -271,6 +318,10 @@ class TreeVisualizer {
                 cachedColor: (existingNode && existingNode.score === nodeData.score) ? existingNode.cachedColor : null
             };
             
+            this.nodes[nodeData.id] = newNode;
+            // Queue this new/updated node to be sent to the worker in the next simulation tick.
+            this.nodesToSendToWorker.push(newNode);
+
             this.lastAddedNodeId = nodeData.id;
 
             if (nodeData.status === 'solution') {
@@ -433,94 +484,5 @@ class TreeVisualizer {
             }
         }
         return bestPath;
-    }
-
-    _runLayoutSimulation(childCounts) {
-        const nodes = this._getNodeList();
-        if (nodes.length < 2) return;
-
-        const kRepel = 2000;
-        const kAttract = 2;
-        const kAlign = 1;
-        const damping = 0.1;
-        const directionalForce = 20;
-
-        // 1. Repulsion Force Calculation.
-        // Assumes forces were reset to 0 at the end of the last tick.
-        // We don't need to worry about the root node (id=0) since it's fixed at the center, and a constant repulsion is already applied later.
-        for (let i = 1; i < nodes.length; i++) {
-            const n1 = nodes[i];
-            for (let j = i + 1; j < nodes.length; j++) {
-                const n2 = nodes[j];
-
-                const dx = n1.x - n2.x;
-                const dy = n1.y - n2.y;
-                let distance = Math.sqrt(dx * dx + dy * dy);
-                if (distance < 1) distance = 1;
-
-                // const force = kRepel / (Math.pow(distance, 1.8));
-                // const forceX = (dx / distance) * force;
-                // const forceY = (dy / distance) * force;
-                const force = kRepel / (Math.pow(distance, 2.8));
-                const forceX = dx * force;
-                const forceY = dy * force;
-                
-                n1.fx += forceX;
-                n1.fy += forceY;
-                n2.fx -= forceX;
-                n2.fy -= forceY;
-            }
-        }
-
-        // 2. Attraction, Alignment, and Directional Forces.
-        const desired_distance = 20;
-        for (const node of nodes) {
-            const parent = this.nodes[node.parent];
-            if (parent) {
-                const dx_attract = (parent.x - node.x) * kAttract;
-                const dy_attract = (parent.y - node.y) * kAttract;
-                node.fx += dx_attract;
-                node.fy += dy_attract;
-                parent.fx -= dx_attract;
-                parent.fy -= dy_attract;
-
-                const grandparent = this.nodes[parent.parent];
-                if (grandparent) {
-                    const flow_dx = parent.x - grandparent.x;
-                    const flow_dy = parent.y - grandparent.y;
-                    const flow_magnitude = Math.sqrt(flow_dx * flow_dx + flow_dy * flow_dy);
-
-                    if (flow_magnitude > 0.1) {
-                        const norm_flow_dx = (flow_dx / flow_magnitude) * desired_distance;
-                        const norm_flow_dy = (flow_dy / flow_magnitude) * desired_distance;
-                        const target_x = parent.x + norm_flow_dx;
-                        const target_y = parent.y + norm_flow_dy;
-                        const nodeChildCount = childCounts[node.id] || 0;
-                        const alignmentStrength = 1 + Math.log1p(nodeChildCount);
-                        node.fx += (target_x - node.x) * kAlign * alignmentStrength;
-                        node.fy += (target_y - node.y) * kAlign * alignmentStrength;
-                    }
-                }
-            }
-            
-            const dist_from_center = Math.sqrt(node.x * node.x + node.y * node.y);
-            if (dist_from_center > 1) {
-                node.fx += (node.x / dist_from_center) * directionalForce;
-                node.fy += (node.y / dist_from_center) * directionalForce;
-            }
-        }
-        
-        // 3. Update Velocities/Positions AND Reset Forces for the next tick.
-        for (let i = 1; i < nodes.length; i++) {
-            const node = nodes[i];
-
-            node.vx = (node.vx || 0) * damping + node.fx * 0.02;
-            node.vy = (node.vy || 0) * damping + node.fy * 0.02;
-            node.x += node.vx;
-            node.y += node.vy;
-
-            node.fx = 0;
-            node.fy = 0;
-        }
     }
 }
