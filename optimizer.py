@@ -512,7 +512,7 @@ def _calculate_bound(remaining_parts: list, current_score: float, config: Dict[s
     optimistic_new_layouts = _predict_number_of_new_sheet_layouts(remaining_parts, used_signatures, reference_area, config)
     
     # Apply weights to the raw values
-    optimistic_area_score = 0.0 # Assume perfect packing for the bound
+    optimistic_area_score = -0.03 # Assume perfect packing for the bound
     optimistic_quantity_bonus = 0.0 # Too complex to predict which offcuts will be used
     optimistic_priority_bonus = 0.0 # Same as above
     optimistic_stock_fill_bonus = _calculate_optimistic_stock_bonus(
@@ -531,6 +531,8 @@ def _calculate_bound(remaining_parts: list, current_score: float, config: Dict[s
         - future_layouts_penalty
     )
 
+    print(upper_bound)
+
     if debugger:
         debugger.log_predicted_scores({
             'area_score': optimistic_area_score,
@@ -543,6 +545,90 @@ def _calculate_bound(remaining_parts: list, current_score: float, config: Dict[s
         })
 
     return upper_bound
+
+
+def _run_greedy_seed(initial_parts_dict: Dict[int, Part], stock_sheets: List[Dict], config: Dict, optional_parts_list: List[Part], is_stock_only_job: bool, reference_area: float, max_offcut_quantity: float, normalized_sheet_penalty: float, normalized_layouts_penalty: float, total_cuts_normalizer: float, debugger: Optional['ScoreDebugger']):
+    """
+    Runs a fast, greedy optimization to find a good initial solution (a "seed").
+    This helps the main branch-and-bound search by providing a strong initial
+    best_score, allowing for much more aggressive pruning early on.
+    """
+    greedy_layouts = []
+    current_parts = initial_parts_dict.copy()
+    current_score = 0.0
+    live_stock_counts = Counter()
+    used_signatures = frozenset()
+    
+    while current_parts:
+        candidate_actions = []
+        unique_sheets = {f"{s['length']}x{s['width']}_{s.get('type', 'Default')}": s for s in stock_sheets}.values()
+        
+        for sheet_tpl in unique_sheets:
+            layout = run_single_sheet_optimization(
+                sheet_tpl, list(current_parts.values()), config, reference_area, max_offcut_quantity,
+                optional_parts_list, live_stock_counts, None
+            )
+            placed_ids = {p['part_id'] for p in layout['placed_parts'] if p['part_id'] in current_parts}
+            if not placed_ids:
+                continue
+
+            layout_score = calculate_layout_score(
+                layout, layout['sheet_info'], config, config['min_offcut_dim'], reference_area,
+                max_offcut_quantity, is_stock_only_job,
+                remaining_parts=list(current_parts.values()),
+                live_stock_counts=live_stock_counts
+            )
+            
+            efficiency = layout_score / len(placed_ids) if placed_ids else -float('inf')
+            candidate_actions.append({'layout': layout, 'efficiency': efficiency, 'placed_ids': placed_ids})
+
+        if not candidate_actions:
+            break
+
+        best_action = max(candidate_actions, key=lambda x: x['efficiency'])
+        best_layout = best_action['layout']
+        placed_ids = best_action['placed_ids']
+        
+        greedy_layouts.append(best_layout)
+        
+        layout_sig = get_layout_signature(best_layout, required_only=False)
+        is_new_signature = layout_sig not in used_signatures
+        
+        layout_score = calculate_layout_score(best_layout, best_layout['sheet_info'], config, config['min_offcut_dim'], reference_area, max_offcut_quantity, is_stock_only_job, list(current_parts.values()), live_stock_counts)
+        
+        stock_fill_bonus = 0.0
+        flat_bonus_unit = config.get('w_stock_fill_item_bonus', 0.05)
+        w_stock_fill = config.get('w_stock_fill', 1.0)
+        parts_on_this_layout = Counter(p['internal_ref'] for p in best_layout['placed_parts'] if p.get('is_stock_part'))
+        if parts_on_this_layout:
+             for ref, count_on_sheet in parts_on_this_layout.items():
+                part_template = next(p for p in best_layout['placed_parts'] if p.get('internal_ref') == ref)
+                initial_deficit = part_template.get('target_stock', 1) - part_template.get('current_stock', 0)
+                target_stock = part_template.get('target_stock', 0)
+                if target_stock <= 0: continue
+                count_already_made = live_stock_counts.get(ref, 0)
+                for i in range(count_on_sheet):
+                    live_deficit = initial_deficit - (count_already_made + i)
+                    if live_deficit <= 0: continue
+                    stock_fill_bonus += (live_deficit / target_stock) * flat_bonus_unit * w_stock_fill
+
+        layouts_penalty = normalized_layouts_penalty if is_new_signature else 0
+        unweighted_cuts = float(_count_guillotine_cuts(best_layout))
+        cuts_penalty = (unweighted_cuts / total_cuts_normalizer) * config.get('w_cuts', 0.2) if total_cuts_normalizer > 0 else 0
+        
+        current_score += layout_score + stock_fill_bonus - normalized_sheet_penalty - layouts_penalty - cuts_penalty
+        
+        current_parts = {pid: p for pid, p in current_parts.items() if pid not in placed_ids}
+        used_signatures = used_signatures.union({layout_sig})
+        for part in best_layout['placed_parts']:
+            if part.get('is_stock_part'):
+                live_stock_counts[part['internal_ref']] += 1
+                
+    if current_parts:
+        return None, -float('inf')
+
+    return greedy_layouts, current_score
+
 
 def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict], config: Dict,
                              optional_stock_parts: Optional[List[Part]] = None,
@@ -612,11 +698,31 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
         initial_stock_counts, debugger=debugger
     )
     
+    # --- NEW: Run a greedy seed to get an initial solution ---
+    greedy_layouts, greedy_score = _run_greedy_seed(
+        initial_parts_dict, stock_sheets, config, optional_parts_list, is_stock_only_job,
+        reference_area, max_offcut_quantity, normalized_sheet_penalty, normalized_layouts_penalty,
+        total_cuts_normalizer, debugger
+    )
+    
+    initial_used_signatures = frozenset()
+    initial_stock_counts = Counter()
+    initial_bound = -_calculate_bound(
+        list(initial_parts_dict.values()), 0, config, reference_area, initial_used_signatures,
+        normalized_sheet_penalty, normalized_layouts_penalty, total_cuts_normalizer, optional_parts_list,
+        initial_stock_counts, debugger=debugger
+    )
+    
     node_counter = 1
     pq = [(initial_bound, 0.0, 0, initial_parts_dict, [], initial_used_signatures, initial_stock_counts)]
     
-    best_solution = ([], list(initial_parts_dict.values()))
-    best_score = -float('inf')
+    # Use the greedy solution as the first "best" solution
+    if greedy_layouts:
+        best_solution = (greedy_layouts, []) # Assumes all parts were placed
+        best_score = greedy_score
+    else:
+        best_solution = ([], list(initial_parts_dict.values()))
+        best_score = -float('inf')
 
     while pq and (time_limit <= 0 or (time.time() - start_time) < time_limit):
         if cancellation_event and cancellation_event.is_set():
@@ -767,6 +873,7 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
                 if child_bound > best_score:
                     heapq.heappush(pq, (-child_bound, child_score, current_node_id, child_parts, child_layouts, child_signatures, child_stock_counts))
                 else:
+                    print(f"Branch pruned. Bound ({child_bound:.3f}) was not better than best score ({best_score:.3f}).")
                     tree_nodes[current_node_id]["status"] = "pruned_bound"
                     tree_update_batch[current_node_id] = tree_nodes[current_node_id].copy()
     

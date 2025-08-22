@@ -158,6 +158,8 @@ QUESTIONS
     - Always rotate labels to be on the widest axis, or just when they don't fit?
     - Should the top configurator sections be open or closed by default?
     - ---> Prefer layouts that are used multiple/more times?
+    - ----> prioritize making offcuts we don't have a ton of?
+
 
 UNCOMMENT TODO LINES IN VISUALIZER
 
@@ -198,8 +200,8 @@ General Rules: Only include code from files that have actually been modified. If
 - normalized_sheet_penalty & normalized_layout_penalty should make it clear that they're the weight (I think they are anyway)
 - make the fallback value for getting things from the config the default value
 - have the algorithm be more likely to find a satisfactory solution early on, and then allow it to work on finding better ones?
-- How does the time limiting on run_single_sheet_optimization work? Can we make it ignore options that definitely won't work?
-- Greedy heuristic in _place_parts_in_rects
+- ---> How does the time limiting on run_single_sheet_optimization work? Can we make it ignore options that definitely won't work?
+- ----> Greedy heuristic in _place_parts_in_rects
 
 - Cancle button not actually stopping optimization
 
@@ -213,3 +215,7 @@ General Rules: Only include code from files that have actually been modified. If
 
 
 --> Log every time a stat is more pessemistic than one of it's children
+
+
+
+stock_bonus solution chat: https://g.co/gemini/share/66382cfff71e
