@@ -459,10 +459,10 @@ class TreeVisualizer {
         if (nodes.length < 2) return;
 
         const kRepel = 2000;
-        const kAttract = 2.2;
-        const kAlign = 1.2;
-        const damping = 0.1;
-        const directionalForce = 5;
+        const kAttract = 0.03;
+        const kAlign = 1;
+        const damping = 0;
+        const directionalForce = 7;
 
         // 1. Repulsion Force Calculation.
         // Assumes forces were reset to 0 at the end of the last tick.
@@ -477,7 +477,7 @@ class TreeVisualizer {
                 let distance = Math.sqrt(dx * dx + dy * dy);
                 if (distance < 1) distance = 1;
 
-                // const force = kRepel / (Math.pow(distance, 1.8));
+                // const force = kRepel / (Math.pow(distance, 2));
                 // const forceX = (dx / distance) * force;
                 // const forceY = (dy / distance) * force;
                 const force = kRepel / (Math.pow(distance, 3));
@@ -495,9 +495,16 @@ class TreeVisualizer {
         for (const node of nodes) {
             const parent = this.nodes[node.parent];
             if (parent) {
-                const dx_attract = (parent.x - node.x) * kAttract;
-                const dy_attract = (parent.y - node.y) * kAttract;
-                if (parent === this.nodes[0]) {
+                // Non-linear attraction force (stronger at longer distances)
+                const dx = parent.x - node.x;
+                const dy = parent.y - node.y;
+                const distance = Math.sqrt(dx * dx + dy * dy) + 1e-6; // Add small epsilon to prevent issues at zero distance
+
+                // Scale the linear force by the distance, making the final force proportional to distance squared.
+                const dx_attract = dx * kAttract * distance;
+                const dy_attract = dy * kAttract * distance;
+
+                if (parent === nodes[0]) {
                     node.fx += dx_attract * 2;
                     node.fy += dy_attract * 2;
                 } else {
@@ -507,38 +514,52 @@ class TreeVisualizer {
                     parent.fy -= dy_attract;
                 }
 
-                // Alignment force (encourages nodes to rotate around their parent to match the flow)
-                const grandparent = this.nodes[parent.parent];
-                if (grandparent) {
-                    // 1. Determine the 'flow' direction from the grandparent to the parent.
-                    const flow_dx = parent.x - grandparent.x;
-                    const flow_dy = parent.y - grandparent.y;
-                    const flow_magnitude = Math.sqrt(flow_dx * flow_dx + flow_dy * flow_dy);
 
-                    if (flow_magnitude > 0.1) {
-                        // Normalize the flow vector to get a pure direction.
-                        const norm_flow_dx = flow_dx / flow_magnitude;
-                        const norm_flow_dy = flow_dy / flow_magnitude;
+                // Alignment force (based on recent ancestor flow)
+                let total_flow_dx = 0;
+                let total_flow_dy = 0;
+                let weight = 1.0;
+                const maxAncestors = 15;    // How many generations to look back for flow
+                const decayFactor = 1;  // Influence of older ancestors
+                let currentAncestor = parent;
 
-                        // 2. Get the child's current distance from its parent.
-                        //    This is the key change: we use the *actual* current distance
-                        //    instead of a fixed 'desired_distance'.
-                        const current_relative_dx = node.x - parent.x;
-                        const current_relative_dy = node.y - parent.y;
-                        const current_distance = Math.sqrt(current_relative_dx * current_relative_dx + current_relative_dy * current_relative_dy);
+                // Traverse up the tree for a few generations to get an average flow direction
+                for (let i = 0; i < maxAncestors && currentAncestor; i++) {
+                    const ancestorParent = this.nodes[currentAncestor.parent];
+                    if (ancestorParent) {
+                        const dx = currentAncestor.x - ancestorParent.x;
+                        const dy = currentAncestor.y - ancestorParent.y;
 
-                        // 3. Calculate the ideal target position. This point is at the same distance
-                        //    from the parent as the child currently is, but aligned with the flow.
-                        const target_x = parent.x + norm_flow_dx * current_distance;
-                        const target_y = parent.y + norm_flow_dy * current_distance;
-
-                        // 4. Apply a force pulling the node towards this rotational target.
-                        //    This creates a "turning" effect around the parent.
-                        const nodeChildCount = childCounts[node.id] || 0;
-                        const alignmentStrength = 1 + Math.log1p(nodeChildCount); // Stronger alignment for high-branching nodes
-                        node.fx += (target_x - node.x) * kAlign * alignmentStrength;
-                        node.fy += (target_y - node.y) * kAlign * alignmentStrength;
+                        total_flow_dx += dx * weight;
+                        total_flow_dy += dy * weight;
+                        weight *= decayFactor; // Older ancestors have less influence
+                    } else {
+                        break; // Stop if we hit the root
                     }
+                    currentAncestor = ancestorParent;
+                }
+
+                const flow_magnitude = Math.sqrt(total_flow_dx * total_flow_dx + total_flow_dy * total_flow_dy);
+
+                if (flow_magnitude > 0.1) {
+                    // Normalize the averaged flow vector to get a pure direction.
+                    const norm_flow_dx = total_flow_dx / flow_magnitude;
+                    const norm_flow_dy = total_flow_dy / flow_magnitude;
+
+                    // Get the child's current distance from its parent.
+                    const current_relative_dx = node.x - parent.x;
+                    const current_relative_dy = node.y - parent.y;
+                    const current_distance = Math.sqrt(current_relative_dx * current_relative_dx + current_relative_dy * current_relative_dy) * 0.9;
+
+                    // Calculate the ideal target position for rotation.
+                    const target_x = parent.x + norm_flow_dx * current_distance;
+                    const target_y = parent.y + norm_flow_dy * current_distance;
+
+                    // Apply a force pulling the node towards this rotational target.
+                    const nodeChildCount = childCounts[node.id] || 0;
+                    const alignmentStrength = 1 + Math.log1p(nodeChildCount);
+                    node.fx += (target_x - node.x) * kAlign * alignmentStrength;
+                    node.fy += (target_y - node.y) * kAlign * alignmentStrength;
                 }
             }
             
