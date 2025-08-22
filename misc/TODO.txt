@@ -209,24 +209,7 @@ General Rules: Only include code from files that have actually been modified. If
 - Add back the assumption that the priority bonus is always the max value. Maybe assume that every part (that fits) gets its own sheet, and that it is the (largest) prioritized one?
 
 
+- How does the max_offcut_quantity work?
 
-Here's our new scores. By the way, no offcuts are prioritized, so that's why the priority bonus is 0.
 
---- Periodic Score Component Stats ---
-True (Actual) Scores:
-  - area_score     : Min=  -0.303, Avg=  -0.060, Max=  -0.004, Count=3636732
-  - stock_bonus    : Min=   0.000, Avg=   0.000, Max=   0.000, Count=3636732
-  - quantity_bonus : Min=   0.000, Avg=   0.029, Max=   0.300, Count=3636732
-  - priority_bonus : Min=   0.000, Avg=   0.000, Max=   0.000, Count=3636732
-  - sheets_penalty : Min=  -0.019, Avg=  -0.019, Max=  -0.019, Count=303050
-  - layouts_penalty: Min=  -0.019, Avg=  -0.017, Max=   0.000, Count=303050
-  - cuts_penalty   : Min=  -0.017, Avg=  -0.009, Max=  -0.006, Count=303050
-
-Predicted (Bound) Scores:
-  - stock_bonus    : Min=  76.688, Avg=  81.009, Max=  93.127, Count=313501
-  - sheets_penalty : Min=  -0.500, Avg=  -0.499, Max=  -0.463, Count=313501
-  - layouts_penalty: Min=  -0.037, Avg=  -0.037, Max=  -0.019, Count=313501
-  - cuts_penalty   : Min=  -0.022, Avg=  -0.021, Max=  -0.021, Count=313501
---- End of Report ---
-
-I think it's time to start looking at the issue with the stock_bonus. How can we improve our prediction while ensuring that it's mathematically impossible for the prediction to ever be lower than the 
+--> Log every time a stat is more pessemistic than one of it's children

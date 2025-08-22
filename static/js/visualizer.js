@@ -25,6 +25,10 @@ class TreeVisualizer {
 
         this.framesSinceLastSpawn = 0;
 
+        this.childCounts = {};
+        this.activePathNodeIds = null;
+        this.bestPathNodeIds = null;
+
         // --- New properties for Zoom and Pan ---
         this.zoom = { x: 0, y: 0, scale: 1.0 };
         this.isPanning = false;
@@ -107,8 +111,8 @@ class TreeVisualizer {
     _simulationLoop() {
         // This fast loop handles data processing and physics
         this._introducePendingNodes();
-        const childCounts = this._calculateChildCounts();
-        this._runLayoutSimulation(childCounts);
+        this.childCounts = this._calculateChildCounts();
+        this._runLayoutSimulation(this.childCounts);
     }
 
     _animationLoop() {
@@ -118,8 +122,7 @@ class TreeVisualizer {
             this.svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
             this.zoomWrapper.setAttribute('transform', `translate(${this.zoom.x}, ${this.zoom.y}) scale(${this.zoom.scale})`);
             
-            const childCounts = this._calculateChildCounts();
-            this._updatePositions(childCounts);
+            this._updatePositions(this.childCounts);
         }
         this.animationFrameId = requestAnimationFrame(() => this._animationLoop());
     }
@@ -176,6 +179,7 @@ class TreeVisualizer {
 
         if (this.solutionNodeId === nodeData.id && nodeData.status !== 'solution') {
             this.solutionNodeId = null;
+            this.bestPathNodeIds = null;
         }
 
         const existingNode = this.nodes[nodeData.id];
@@ -213,11 +217,13 @@ class TreeVisualizer {
                 initialX = 0; initialY = 0;
             }
 
+            // Initialize new nodes with all required physics properties.
             this.nodes[nodeData.id] = { 
                 ...existingNode, ...nodeData,
                 x: existingNode?.x ?? initialX, 
                 y: existingNode?.y ?? initialY,
-                vx: 0, vy: 0
+                vx: 0, vy: 0,
+                fx: 0, fy: 0
             };
             
             this.lastAddedNodeId = nodeData.id;
@@ -225,6 +231,9 @@ class TreeVisualizer {
             if (nodeData.status === 'solution') {
                 this.solutionNodeId = nodeData.id;
             }
+
+            this.activePathNodeIds = null;
+            this.bestPathNodeIds = null;
         }
         
         this.processedNodeUpdates.add(updateSignature);
@@ -243,8 +252,12 @@ class TreeVisualizer {
     }
 
     _updatePositions(childCounts) {
-        const bestPathNodeIds = this._getBestPath();
-        const activePathNodeIds = this._getActivePath();
+        if (!this.bestPathNodeIds) {
+            this.bestPathNodeIds = this._getBestPath();
+        }
+        if (!this.activePathNodeIds) {
+            this.activePathNodeIds = this._getActivePath();
+        }
 
         Object.values(this.nodes).forEach(node => {
             let g = this.svgNodes[node.id];
@@ -255,8 +268,8 @@ class TreeVisualizer {
             }
             
             const isRoot = node.id === 0;
-            const isBest = bestPathNodeIds.has(node.id);
-            const isActive = activePathNodeIds.has(node.id);
+            const isBest = this.bestPathNodeIds.has(node.id);
+            const isActive = this.activePathNodeIds.has(node.id);
             const isHighBranching = (childCounts[node.id] || 0) > 3;
 
             const classList = ['node', `status-${node.status}`];
@@ -264,7 +277,12 @@ class TreeVisualizer {
             if (isActive) classList.push('on-active-path');
             if (isHighBranching) classList.push('high-branching');
             if (isRoot) classList.push('is-root');
-            g.setAttribute('class', classList.join(' '));
+            
+            const newClassName = classList.join(' ');
+            if (g.dataset.currentClass !== newClassName) {
+                g.setAttribute('class', newClassName);
+                g.dataset.currentClass = newClassName;
+            }
             
             const circle = g.querySelector('circle');
             if (!isRoot && !isHighBranching && node.status !== 'solution') {
@@ -284,9 +302,13 @@ class TreeVisualizer {
                     this.svgLinks[linkId] = link;
                     this.linkGroup.appendChild(link);
                 }
-                const isBestLink = isBest && bestPathNodeIds.has(parent.id);
-                const isActiveLink = isActive && activePathNodeIds.has(parent.id);
-                link.setAttribute('class', `link ${isBestLink ? 'on-best-path' : ''} ${isActiveLink ? 'on-active-path' : ''}`);
+                const isBestLink = isBest && this.bestPathNodeIds.has(parent.id);
+                const isActiveLink = isActive && this.activePathNodeIds.has(parent.id);
+                const newLinkClassName = `link ${isBestLink ? 'on-best-path' : ''} ${isActiveLink ? 'on-active-path' : ''}`;
+                if (link.dataset.currentClass !== newLinkClassName) {
+                    link.setAttribute('class', newLinkClassName);
+                    link.dataset.currentClass = newLinkClassName;
+                }
                 link.setAttribute('x1', parent.x);
                 link.setAttribute('y1', parent.y);
                 link.setAttribute('x2', node.x);
@@ -347,70 +369,83 @@ class TreeVisualizer {
         const damping = 0.1;
         const directionalForce = 20;
 
-        for (const n1 of nodes) {
-            n1.fx = 0; n1.fy = 0;
-            for (const n2 of nodes) {
-                if (n1 === n2) continue;
+        // 1. Repulsion Force Calculation.
+        // Assumes forces were reset to 0 at the end of the last tick.
+        for (let i = 0; i < nodes.length; i++) {
+            const n1 = nodes[i];
+            for (let j = i + 1; j < nodes.length; j++) {
+                const n2 = nodes[j];
+
                 const dx = n1.x - n2.x;
                 const dy = n1.y - n2.y;
                 let distance = Math.sqrt(dx * dx + dy * dy);
                 if (distance < 1) distance = 1;
+
                 const force = kRepel / (Math.pow(distance, 1.8));
-                n1.fx += (dx / distance) * force;
-                n1.fy += (dy / distance) * force;
+                const forceX = (dx / distance) * force;
+                const forceY = (dy / distance) * force;
+                
+                n1.fx += forceX;
+                n1.fy += forceY;
+                n2.fx -= forceX;
+                n2.fy -= forceY;
             }
         }
 
+        // 2. Attraction, Alignment, and Directional Forces.
         for (const node of nodes) {
             const parent = this.nodes[node.parent];
-            if (!parent) continue;
+            if (parent) {
+                const dx_attract = parent.x - node.x;
+                const dy_attract = parent.y - node.y;
+                node.fx += dx_attract * kAttract;
+                node.fy += dy_attract * kAttract;
+                parent.fx -= dx_attract * kAttract;
+                parent.fy -= dy_attract * kAttract;
 
-            const dx_attract = parent.x - node.x;
-            const dy_attract = parent.y - node.y;
-            node.fx += dx_attract * kAttract;
-            node.fy += dy_attract * kAttract;
-            parent.fx -= dx_attract * kAttract;
-            parent.fy -= dy_attract * kAttract;
+                const grandparent = this.nodes[parent.parent];
+                if (grandparent) {
+                    const flow_dx = parent.x - grandparent.x;
+                    const flow_dy = parent.y - grandparent.y;
+                    const flow_magnitude = Math.sqrt(flow_dx * flow_dx + flow_dy * flow_dy);
 
-            const grandparent = this.nodes[parent.parent];
-            if (grandparent) {
-                const flow_dx = parent.x - grandparent.x;
-                const flow_dy = parent.y - grandparent.y;
-                const flow_magnitude = Math.sqrt(flow_dx * flow_dx + flow_dy * flow_dy);
-
-                if (flow_magnitude > 0.1) {
-                    const desired_distance = 20;
-                    const norm_flow_dx = (flow_dx / flow_magnitude) * desired_distance;
-                    const norm_flow_dy = (flow_dy / flow_magnitude) * desired_distance;
-
-                    const target_x = parent.x + norm_flow_dx;
-                    const target_y = parent.y + norm_flow_dy;
-                    
-                    const nodeChildCount = childCounts[node.id] || 0;
-                    const alignmentStrength = 1 + Math.log1p(nodeChildCount);
-
-                    node.fx += (target_x - node.x) * kAlign * alignmentStrength;
-                    node.fy += (target_y - node.y) * kAlign * alignmentStrength;
+                    if (flow_magnitude > 0.1) {
+                        const desired_distance = 20;
+                        const norm_flow_dx = (flow_dx / flow_magnitude) * desired_distance;
+                        const norm_flow_dy = (flow_dy / flow_magnitude) * desired_distance;
+                        const target_x = parent.x + norm_flow_dx;
+                        const target_y = parent.y + norm_flow_dy;
+                        const nodeChildCount = childCounts[node.id] || 0;
+                        const alignmentStrength = 1 + Math.log1p(nodeChildCount);
+                        node.fx += (target_x - node.x) * kAlign * alignmentStrength;
+                        node.fy += (target_y - node.y) * kAlign * alignmentStrength;
+                    }
                 }
             }
-
-            const dist_from_center = Math.sqrt(node.x * node.x + node.y * node.y) + 1;
-            node.fx += node.x * directionalForce / dist_from_center;
-            node.fy += node.y * directionalForce / dist_from_center;
+            
+            const dist_from_center = Math.sqrt(node.x * node.x + node.y * node.y);
+            if (dist_from_center > 1) {
+                node.fx += (node.x / dist_from_center) * directionalForce;
+                node.fy += (node.y / dist_from_center) * directionalForce;
+            }
         }
         
+        // 3. Update Velocities/Positions AND Reset Forces for the next tick.
         const rootNode = this.nodes[0];
         for (const node of nodes) {
             if (node === rootNode) {
                 node.x = 0; 
                 node.y = 0; 
-                continue;
+            } else {
+                node.vx = (node.vx || 0) * damping + node.fx * 0.02;
+                node.vy = (node.vy || 0) * damping + node.fy * 0.02;
+                node.x += node.vx;
+                node.y += node.vy;
             }
 
-            node.vx = (node.vx || 0) * damping + node.fx * 0.02;
-            node.vy = (node.vy || 0) * damping + node.fy * 0.02;
-            node.x += node.vx;
-            node.y += node.vy;
+            // Reset forces for the next simulation tick.
+            node.fx = 0;
+            node.fy = 0;
         }
     }
 }
