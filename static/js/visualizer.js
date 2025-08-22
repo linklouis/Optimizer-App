@@ -458,10 +458,10 @@ class TreeVisualizer {
         const nodes = this._getNodeList();
         if (nodes.length < 2) return;
 
-        const kRepel = 2000;
+        const kRepel = 2500;
         const kAttract = 0.03;
         const kAlign = 1;
-        const damping = 0;
+        const damping = 0.01;
         const directionalForce = 7;
 
         // 1. Repulsion Force Calculation.
@@ -574,10 +574,15 @@ class TreeVisualizer {
         for (let i = 1; i < nodes.length; i++) {
             const node = nodes[i];
 
-            node.vx = (node.vx || 0) * damping + node.fx * 0.02;
-            node.vy = (node.vy || 0) * damping + node.fy * 0.02;
-            node.x += node.vx;
-            node.y += node.vy;
+            node.vx = (node.vx || 0) * damping + node.fx * 0.015;
+            node.vy = (node.vy || 0) * damping + node.fy * 0.015;
+            if (Math.abs(node.vx) <= 70 && Math.abs(node.vy) <= 70) {
+                node.x += node.vx;
+                node.y += node.vy;
+            } else {
+                node.vx = 70 * node.vx / Math.abs(node.vx);
+                node.vy = 70 * node.vy / Math.abs(node.vy);
+            }
 
             node.fx = 0;
             node.fy = 0;

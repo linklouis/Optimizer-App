@@ -65,6 +65,27 @@ class ScoreDebugger:
         """Logs the details of the new most promising node being explored."""
         # print(f"[DEBUG] Switching to Node {node_id}: Predicted Score={bound:.3f}, Current Score={score:.3f}, Depth={depth}, Parts Left={remaining_parts}")
 
+    def check_prediction_monotonicity(self, parent_pred: Dict[str, float], child_pred: Dict[str, float], parent_id: int, child_id: int):
+        """Checks if a child's prediction for a score component is more optimistic than its parent's."""
+        if not parent_pred:  # Root node has no parent to compare to
+            return
+
+        bonuses = {'stock_bonus', 'quantity_bonus', 'priority_bonus'}
+        penalties = {'area_score', 'sheets_penalty', 'layouts_penalty', 'cuts_penalty'}
+
+        for key, parent_val in parent_pred.items():
+            child_val = child_pred.get(key, 0.0)
+
+            # For bonuses, the child's optimistic prediction should be less than or equal to the parent's.
+            if key in bonuses and child_val > parent_val:
+                print(f"[DEBUG-WARN] Monotonicity violation on '{key}' for child {child_id} (parent {parent_id}): "
+                      f"Child_Pred ({child_val:.4f}) > Parent_Pred ({parent_val:.4f})")
+
+            # For penalties (negative values), the child's prediction should be greater than or equal to the parent's (less negative).
+            if key in penalties and child_val < parent_val:
+                print(f"[DEBUG-WARN] Monotonicity violation on '{key}' for child {child_id} (parent {parent_id}): "
+                      f"Child_Pred ({child_val:.4f}) < Parent_Pred ({parent_val:.4f})")
+
 # --- End of Debugging Class ---
 
 # --- Consolidated & Optimized Helper Functions ---
@@ -532,28 +553,62 @@ def _predict_number_of_new_sheet_layouts(remaining_parts: list, used_signatures:
     return 0
 
 
+def _calculate_worst_case_leftover_area(remaining_parts: List[Part], stock_sheets: List[Dict]) -> float:
+    """
+    Calculates the guaranteed optimistic leftover area by assuming the absolute worst-case
+    packing scenario: one sheet per remaining part. This ensures admissibility.
+    """
+    if not stock_sheets or not remaining_parts:
+        return 0.0
+
+    total_remaining_parts_area = sum(p['length'] * p['width'] for p in remaining_parts)
+    
+    # The maximum number of sheets that could possibly be used is one per part.
+    num_sheets_for_bonus_calc = len(remaining_parts)
+    
+    max_optimistic_leftover_area = 0
+    for sheet in stock_sheets:
+        sheet_area = sheet['length'] * sheet['width']
+        if sheet_area > 0:
+            # Total area provided by the worst-case number of sheets of this size.
+            total_sheet_area_for_bonus = num_sheets_for_bonus_calc * sheet_area
+            current_leftover = max(0, total_sheet_area_for_bonus - total_remaining_parts_area)
+            
+            # We take the max leftover from among all available sheet sizes.
+            if current_leftover > max_optimistic_leftover_area:
+                max_optimistic_leftover_area = current_leftover
+    
+    return max_optimistic_leftover_area
+
+
 def _calculate_bound(remaining_parts: list, current_score: float, config: Dict[str, Any], reference_area: float, used_signatures: frozenset,
                      normalized_sheet_penalty: float, normalized_layouts_penalty: float, total_cuts_normalizer: float,
-                     optional_parts_for_bound: list, live_stock_counts: Counter,
-                     debugger: Optional['ScoreDebugger'] = None) -> float:
+                     optional_parts_for_bound: list, live_stock_counts: Counter, stock_sheets: List[Dict],
+                     debugger: Optional['ScoreDebugger'] = None) -> Tuple[float, Dict[str, float]]:
     """
     Calculates a sophisticated upper bound that is aware of the live stock part deficit.
     """
     if not remaining_parts:
-        return current_score
+        return current_score, {}
 
-    # Get raw predictive values first
-    hypothetical_leftover_areas = _predict_leftover_area(remaining_parts, reference_area, config)
+    # --- START: GUARANTEED ADMISSIBLE HEURISTIC ---
+    # To ensure the bound is a true upper bound, we calculate leftover space based on the
+    # absolute worst-case packing scenario, now encapsulated in a helper function.
+    max_optimistic_leftover_area = _calculate_worst_case_leftover_area(remaining_parts, stock_sheets)
+    hypothetical_leftover_areas = [max_optimistic_leftover_area]
+    # --- END: GUARANTEED ADMISSIBLE HEURISTIC ---
+
     raw_optimistic_stock_fill = _calculate_optimistic_stock_bonus(
         remaining_parts, hypothetical_leftover_areas, optional_parts_for_bound, reference_area, live_stock_counts, config
     )
     optimistic_future_cuts = _get_min_cuts_for_parts(len(remaining_parts))
+    # The penalty must still be based on the absolute minimum sheets, using the reference area for consistency.
     min_additional_sheets = _get_min_sheets_for_parts(remaining_parts, reference_area)
     optimistic_new_layouts = _predict_number_of_new_sheet_layouts(remaining_parts, used_signatures, reference_area, config)
     
     # Apply weights to the raw values
     optimistic_area_score = 0.0 # Assume perfect packing for the bound
-    optimistic_quantity_bonus = 0.0 # Too complex to predict which offcuts will be used
+    optimistic_quantity_bonus = 0.0 # Too complex to predict
     optimistic_priority_bonus = 0.0 # Same as above
     optimistic_stock_fill_bonus = raw_optimistic_stock_fill * config.get('w_stock_fill', 1.0)
     future_cuts_penalty = (optimistic_future_cuts / total_cuts_normalizer) * config.get('w_cuts', 0.2) if total_cuts_normalizer > 0 else 0
@@ -568,19 +623,22 @@ def _calculate_bound(remaining_parts: list, current_score: float, config: Dict[s
         - future_sheets_penalty
         - future_layouts_penalty
     )
+    
+    predicted_components = {
+        'area_score': optimistic_area_score,
+        'stock_bonus': optimistic_stock_fill_bonus,
+        'quantity_bonus': optimistic_quantity_bonus,
+        'priority_bonus': optimistic_priority_bonus,
+        'sheets_penalty': -future_sheets_penalty,
+        'layouts_penalty': -future_layouts_penalty,
+        'cuts_penalty': -future_cuts_penalty
+    }
 
     if debugger:
-        debugger.log_predicted_scores({
-            'area_score': optimistic_area_score,
-            'stock_bonus': optimistic_stock_fill_bonus,
-            'quantity_bonus': optimistic_quantity_bonus,
-            'priority_bonus': optimistic_priority_bonus,
-            'sheets_penalty': -future_sheets_penalty,
-            'layouts_penalty': -future_layouts_penalty,
-            'cuts_penalty': -future_cuts_penalty
-        })
+        debugger.log_predicted_scores(predicted_components)
 
-    return upper_bound
+    return upper_bound, predicted_components
+
 
 def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict], config: Dict,
                              optional_stock_parts: Optional[List[Part]] = None,
@@ -642,16 +700,20 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
     cuts_per_part_heuristic = config.get('cuts_per_part_heuristic', 1.5) # Reduced from 4.0
     total_cuts_normalizer = total_initial_parts * cuts_per_part_heuristic
 
+    # Get a list of unique sheet templates to pass to the bound calculator
+    unique_sheets = list({f"{s['length']}x{s['width']}_{s.get('type', 'Default')}": s for s in stock_sheets}.values())
+
     initial_used_signatures = frozenset()
     initial_stock_counts = Counter()
-    initial_bound = -_calculate_bound(
+    initial_bound, initial_pred_components = _calculate_bound(
         list(initial_parts_dict.values()), 0, config, reference_area, initial_used_signatures,
         normalized_sheet_penalty, normalized_layouts_penalty, total_cuts_normalizer, optional_parts_list,
-        initial_stock_counts, debugger=debugger
+        initial_stock_counts, unique_sheets, debugger=debugger
     )
     
     node_counter = 1
-    pq = [(initial_bound, 0.0, 0, initial_parts_dict, [], initial_used_signatures, initial_stock_counts)]
+    # The priority queue now stores the prediction components for each node
+    pq = [(-initial_bound, 0.0, 0, initial_parts_dict, [], initial_used_signatures, initial_stock_counts, initial_pred_components)]
     
     best_solution = ([], list(initial_parts_dict.values()))
     best_score = -float('inf')
@@ -660,7 +722,8 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
         if cancellation_event and cancellation_event.is_set():
             break
         
-        bound, current_score, parent_node_id, current_parts, used_layouts, used_signatures, live_stock_counts = heapq.heappop(pq)
+        # Unpack the parent node's prediction components
+        bound, current_score, parent_node_id, current_parts, used_layouts, used_signatures, live_stock_counts, parent_pred_components = heapq.heappop(pq)
         
         if debugger:
             debugger.log_context_switch(-bound, current_score, len(used_layouts), len(current_parts), parent_node_id)
@@ -690,10 +753,11 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
             tree_update_batch.clear()
             last_update_time = current_time
         
-        bound_check = _calculate_bound(
+        # Pass unique_sheets to the bound check
+        bound_check, _ = _calculate_bound(
             list(current_parts.values()), current_score, config, reference_area, used_signatures,
             normalized_sheet_penalty, normalized_layouts_penalty, total_cuts_normalizer, optional_parts_list,
-            live_stock_counts, debugger=debugger
+            live_stock_counts, unique_sheets, debugger=debugger
         )
         if bound_check < best_score:
             continue
@@ -701,7 +765,6 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
         remaining_primary_parts = list(current_parts.values())
         candidate_actions = []
 
-        unique_sheets = {f"{s['length']}x{s['width']}_{s.get('type', 'Default')}": s for s in stock_sheets}.values()
         for sheet_tpl in unique_sheets:
             for _ in range(branching_factor):
                 layout_attempt = run_single_sheet_optimization(
@@ -737,7 +800,7 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
             placed_ids = {p['part_id'] for p in layout['placed_parts'] if p['part_id'] in current_parts}
             if not placed_ids: continue
 
-            # --- NEW: Calculate True Stock Bonus Here ---
+            # --- Calculate True Stock Bonus Here ---
             stock_fill_bonus = 0.0
             flat_bonus_unit = config.get('w_stock_fill_item_bonus', 0.05)
             w_stock_fill = config.get('w_stock_fill', 1.0) # Global weight for the component
@@ -755,7 +818,6 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
                     for i in range(count_on_sheet):
                         live_deficit = initial_deficit - (count_already_made + i)
                         if live_deficit <= 0: continue
-                        # Bonus is now based on a flat rate scaled by need, not area
                         stock_fill_bonus += (live_deficit / target_stock) * flat_bonus_unit * w_stock_fill
             
             layouts_penalty = normalized_layouts_penalty if action['type'] == 'generate' and is_new_signature else 0
@@ -797,13 +859,18 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
                         tree_update_batch[last_best_sol_node] = tree_nodes[last_best_sol_node].copy()
                     last_best_sol_node = current_node_id
             else:
-                child_bound = _calculate_bound(
+                # Pass unique_sheets to calculate the child's bound
+                child_bound, child_pred_components = _calculate_bound(
                     list(child_parts.values()), child_score, config, reference_area, child_signatures,
                     normalized_sheet_penalty, normalized_layouts_penalty, total_cuts_normalizer, optional_parts_list,
-                    child_stock_counts, debugger=debugger
+                    child_stock_counts, unique_sheets, debugger=debugger
                 )
+                if debugger:
+                    debugger.check_prediction_monotonicity(parent_pred_components, child_pred_components, parent_node_id, current_node_id)
+                
                 if child_bound > best_score:
-                    heapq.heappush(pq, (-child_bound, child_score, current_node_id, child_parts, child_layouts, child_signatures, child_stock_counts))
+                    # Push the child's prediction components to the queue
+                    heapq.heappush(pq, (-child_bound, child_score, current_node_id, child_parts, child_layouts, child_signatures, child_stock_counts, child_pred_components))
                 else:
                     tree_nodes[current_node_id]["status"] = "pruned_bound"
                     tree_update_batch[current_node_id] = tree_nodes[current_node_id].copy()
