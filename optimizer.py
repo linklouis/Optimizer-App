@@ -504,9 +504,9 @@ def _calculate_bound(remaining_parts: list, current_score: float, config: Dict[s
         return current_score
 
     # Get raw predictive values first
-    optimistic_stock_fill_bonus = _calculate_optimistic_stock_bonus(
-        remaining_parts, optional_parts_for_bound, live_stock_counts, config, reference_area
-    )
+    # raw_stock_fill = _calculate_optimistic_stock_bonus(
+    #     remaining_parts, optional_parts_for_bound, live_stock_counts, config, reference_area
+    # )
     optimistic_future_cuts = _get_min_cuts_for_parts(len(remaining_parts))
     min_additional_sheets = _get_min_sheets_for_parts(remaining_parts, reference_area)
     optimistic_new_layouts = _predict_number_of_new_sheet_layouts(remaining_parts, used_signatures, reference_area, config)
@@ -515,7 +515,9 @@ def _calculate_bound(remaining_parts: list, current_score: float, config: Dict[s
     optimistic_area_score = 0.0 # Assume perfect packing for the bound
     optimistic_quantity_bonus = 0.0 # Too complex to predict which offcuts will be used
     optimistic_priority_bonus = 0.0 # Same as above
-    optimistic_stock_fill_bonus = raw_optimistic_stock_fill * config.get('w_stock_fill', 1.0)
+    optimistic_stock_fill_bonus = _calculate_optimistic_stock_bonus(
+        remaining_parts, optional_parts_for_bound, live_stock_counts, config, reference_area
+    )
     future_cuts_penalty = (optimistic_future_cuts / total_cuts_normalizer) * config.get('w_cuts', 0.2) if total_cuts_normalizer > 0 else 0
     future_sheets_penalty = min_additional_sheets * normalized_sheet_penalty
     future_layouts_penalty = optimistic_new_layouts * normalized_layouts_penalty
