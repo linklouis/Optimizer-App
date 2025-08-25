@@ -607,7 +607,6 @@ def _run_greedy_seed(initial_parts_dict: Dict[int, Part], stock_sheets: List[Dic
         usable_offcuts = [o for o in best_layout['offcuts'] if o['length'] >= min_offcut_dim and o['width'] >= min_offcut_dim]
         offcut_area = sum(o['length'] * o['width'] for o in usable_offcuts)
         
-        # Calculate sub-components for logging
         waste_penalty_component = -((sheet_area - used_area - offcut_area) / reference_area * config.get('w_waste', 1.0))
         offcut_penalty_component = -((offcut_area / reference_area) * config.get('w_offcut', 0.5))
         area_score = waste_penalty_component + offcut_penalty_component
@@ -625,27 +624,38 @@ def _run_greedy_seed(initial_parts_dict: Dict[int, Part], stock_sheets: List[Dic
         layout_score = area_score + quantity_bonus + priority_bonus
         normalized_layout_score = layout_score * penalty_normalizer
 
+        # --- NEW ROBUST STOCK BONUS CALCULATION ---
         stock_fill_bonus = 0.0
         flat_bonus_unit = config.get('w_stock_fill_item_bonus', 0.05)
         w_stock_fill = config.get('w_stock_fill', 1.0)
-        parts_on_this_layout = Counter(p['internal_ref'] for p in best_layout['placed_parts'] if p.get('is_stock_part'))
-        if parts_on_this_layout:
-             for ref, count_on_sheet in parts_on_this_layout.items():
-                part_template = next(p for p in best_layout['placed_parts'] if p.get('internal_ref') == ref)
-                initial_deficit = part_template.get('target_stock', 1) - part_template.get('current_stock', 0)
-                target_stock = part_template.get('target_stock', 0)
-                if target_stock <= 0: continue
-                count_already_made = live_stock_counts.get(ref, 0)
-                for i in range(count_on_sheet):
-                    live_deficit = initial_deficit - (count_already_made + i)
-                    if live_deficit <= 0: continue
-                    stock_fill_bonus += (live_deficit / target_stock) * flat_bonus_unit * w_stock_fill
+        
+        temp_counts_for_layout = live_stock_counts.copy()
+        # Sort by part_id to ensure deterministic calculation order
+        sorted_placed_parts = sorted(best_layout['placed_parts'], key=lambda p: p['part_id'])
+
+        for part in sorted_placed_parts:
+            if not part.get('is_stock_part'):
+                continue
+            
+            ref = part['internal_ref']
+            initial_deficit = part.get('target_stock', 1) - part.get('current_stock', 0)
+            target_stock = part.get('target_stock', 0)
+            if target_stock <= 0: continue
+
+            count_already_made = temp_counts_for_layout.get(ref, 0)
+            live_deficit = initial_deficit - count_already_made
+
+            if live_deficit > 0:
+                bonus_for_this_part = (live_deficit / target_stock) * flat_bonus_unit * w_stock_fill
+                stock_fill_bonus += bonus_for_this_part
+            
+            temp_counts_for_layout[ref] += 1
+        # --- END OF NEW CALCULATION ---
 
         layouts_penalty = normalized_layouts_penalty if is_new_signature else 0
         unweighted_cuts = float(_count_guillotine_cuts(best_layout))
         cuts_penalty = (unweighted_cuts / total_cuts_normalizer) * config.get('w_cuts', 0.2) if total_cuts_normalizer > 0 else 0
         
-        # Update cumulative score and components
         current_score += normalized_layout_score + stock_fill_bonus - normalized_sheet_penalty - layouts_penalty - cuts_penalty
         greedy_score_components['waste_penalty'] += waste_penalty_component * penalty_normalizer
         greedy_score_components['offcut_penalty'] += offcut_penalty_component * penalty_normalizer
@@ -864,34 +874,33 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
             placed_ids = {p['part_id'] for p in layout['placed_parts'] if p['part_id'] in current_parts}
             if not placed_ids: continue
 
-            # --- NEW: Calculate True Stock Bonus Here ---
+            # --- NEW ROBUST STOCK BONUS CALCULATION ---
             stock_fill_bonus = 0.0
             flat_bonus_unit = config.get('w_stock_fill_item_bonus', 0.05)
-            w_stock_fill = config.get('w_stock_fill', 1.0) # Global weight for the component
+            w_stock_fill = config.get('w_stock_fill', 1.0)
+
+            temp_counts_for_layout = live_stock_counts.copy()
+            # Sort by part_id to ensure deterministic calculation order
+            sorted_placed_parts = sorted(layout['placed_parts'], key=lambda p: p['part_id'])
             
-            parts_on_this_layout = Counter(p['internal_ref'] for p in layout['placed_parts'] if p.get('is_stock_part'))
-            if parts_on_this_layout:
-                # ---- TEMPORARY DEBUG PRINT ----
-                if any(p.get('is_stock_part') for p in layout['placed_parts']):
-                    print(f"\n[DEBUG] Stock Parts on Layout. Live Counts: {live_stock_counts}")
-                # -----------------------------
-                for ref, count_on_sheet in parts_on_this_layout.items():
-                    part_template = next(p for p in layout['placed_parts'] if p.get('internal_ref') == ref)
-                    initial_deficit = part_template.get('target_stock', 1) - part_template.get('current_stock', 0)
-                    target_stock = part_template.get('target_stock', 0)
-                    if target_stock <= 0: continue
+            for part in sorted_placed_parts:
+                if not part.get('is_stock_part'):
+                    continue
+                
+                ref = part['internal_ref']
+                initial_deficit = part.get('target_stock', 1) - part.get('current_stock', 0)
+                target_stock = part.get('target_stock', 0)
+                if target_stock <= 0: continue
 
-                    count_already_made = live_stock_counts.get(ref, 0)
+                count_already_made = temp_counts_for_layout.get(ref, 0)
+                live_deficit = initial_deficit - count_already_made
 
-                    # ---- TEMPORARY DEBUG PRINT ----
-                    print(f"  - Ref: {ref}, Initial Deficit: {initial_deficit}, Already Made: {count_already_made}")
-                    # -----------------------------
-
-                    for i in range(count_on_sheet):
-                        live_deficit = initial_deficit - (count_already_made + i)
-                        if live_deficit <= 0: continue
-                        # Bonus is now based on a flat rate scaled by need, not area
-                        stock_fill_bonus += (live_deficit / target_stock) * flat_bonus_unit * w_stock_fill
+                if live_deficit > 0:
+                    bonus_for_this_part = (live_deficit / target_stock) * flat_bonus_unit * w_stock_fill
+                    stock_fill_bonus += bonus_for_this_part
+                
+                temp_counts_for_layout[ref] += 1
+            # --- END OF NEW CALCULATION ---
             
             layouts_penalty = normalized_layouts_penalty if action['type'] == 'generate' and is_new_signature else 0
             unweighted_cuts = float(_count_guillotine_cuts(layout))
