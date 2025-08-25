@@ -763,7 +763,7 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
             print(f"    - {key:<20}: {value:>8.3f}")
         print("--------------------------\n")
 
-        heuristic_penalty_normalizer = penalty_normalizer # Store the initial value for later
+        heuristic_penalty_normalizer = penalty_normalizer
         # --- RECALCULATE NORMALIZERS BASED ON GREEDY RESULTS ---
         print("[INFO] Learning from greedy solution to set new normalization factors.")
         greedy_sheet_count = len(greedy_layouts)
@@ -775,33 +775,38 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
         if greedy_total_cuts > 0:
             total_cuts_normalizer = greedy_total_cuts
 
-        # --- NEW: Define the stock bonus normalizer ---
-        stock_bonus_normalizer = greedy_components.get('stock_fill_bonus')
-        # Use 1.0 as a fallback to prevent division by zero if the greedy seed has no stock bonus
-        if not stock_bonus_normalizer or stock_bonus_normalizer <= 0:
-            stock_bonus_normalizer = 1.0
+        # --- START: CORRECTED LOGIC ---
+        w_stock_fill = config.get('w_stock_fill', 1.0)
+        total_weighted_bonus = greedy_components.get('stock_fill_bonus', 0.0)
 
+        # The normalizer should represent the total UNWEIGHTED bonus.
+        # We can derive it by removing the weight from the total weighted bonus.
+        stock_bonus_normalizer = total_weighted_bonus / w_stock_fill if w_stock_fill > 0 else 1.0
+        if stock_bonus_normalizer <= 0:
+            stock_bonus_normalizer = 1.0
+        # --- END: CORRECTED LOGIC ---
 
         # --- Re-print greedy stats with the new normalization for comparison ---
         print("\n--- Greedy Solution (Renormalized for B&B) ---")
         renormalized_components = Counter()
         
-        # Rescale components that depended on the old penalty_normalizer
         rescaling_factor = penalty_normalizer / heuristic_penalty_normalizer if heuristic_penalty_normalizer > 0 else 0
         renormalized_components['waste_penalty'] = greedy_components['waste_penalty'] * rescaling_factor
         renormalized_components['offcut_penalty'] = greedy_components['offcut_penalty'] * rescaling_factor
         renormalized_components['quantity_bonus'] = greedy_components['quantity_bonus'] * rescaling_factor
         renormalized_components['priority_bonus'] = greedy_components['priority_bonus'] * rescaling_factor
         
-        # Normalize the stock bonus using the factor learned from the greedy solution
-        renormalized_components['stock_fill_bonus'] = greedy_components['stock_fill_bonus'] / stock_bonus_normalizer
+        # --- START: SIMPLIFIED AND CORRECTED RE-PRINT LOGIC ---
+        # The total renormalized bonus contribution is simply the total weighted bonus
+        # divided by the new (unweighted) normalizer. This will equal w_stock_fill.
+        renormalized_components['stock_fill_bonus'] = total_weighted_bonus / stock_bonus_normalizer
+        # --- END: SIMPLIFIED AND CORRECTED RE-PRINT LOGIC ---
 
-        # Overwrite penalties with their newly normalized values (which should be close to -1.0)
+        # Overwrite penalties with their newly normalized and weighted values
         renormalized_components['sheets_penalty'] = -len(greedy_layouts) * normalized_sheet_penalty
         renormalized_components['cuts_penalty'] = (-greedy_total_cuts / total_cuts_normalizer * config.get('w_cuts', 0.2)) if total_cuts_normalizer > 0 else 0
         unique_greedy_signatures = {get_layout_signature(l) for l in greedy_layouts}
         renormalized_components['layouts_penalty'] = -len(unique_greedy_signatures) * normalized_layouts_penalty
-        print(renormalized_components)
         
         renormalized_score = sum(renormalized_components.values())
         print(f"  - Final Greedy Score (Renormalized): {renormalized_score:.3f}")
@@ -815,10 +820,8 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
         print("--------------------------\n")
         # --- End of re-print block ---
 
-
         best_solution = (greedy_layouts, [])
-        best_score = renormalized_score
-
+        best_score = renormalized_score # Use the renormalized score as the benchmark for the B&B search
 
         # # --- TEMPORARY: Accept greedy solution and exit immediately for analysis ---
         # print("[DEBUG] Accepting greedy solution and skipping main search.")

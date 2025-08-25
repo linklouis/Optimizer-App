@@ -223,30 +223,31 @@ stock_bonus solution chat: https://g.co/gemini/share/66382cfff71e
 
 
 
+
 --- Greedy Seed Solution ---
-  - Final Greedy Score: -2.406
+  - Final Greedy Score: -2.425
   - Score Components:
-    - area_score          :   -0.392
-    - stock_fill_bonus    :    2.859
+    - area_score          :   -0.393
+    - stock_fill_bonus    :    2.836
     - quantity_bonus      :    0.399
     - priority_bonus      :    0.000
     - sheets_penalty      :   -3.741
     - layouts_penalty     :   -0.333
-    - cuts_penalty        :   -1.198
+    - cuts_penalty        :   -1.194
 --------------------------
 
 [INFO] Learning from greedy solution to set new normalization factors.
 
 --- Greedy Solution (Renormalized for B&B) ---
-Counter({'stock_fill_bonus': 2.858682366227123, 'quantity_bonus': 0.10678382416246743, 'priority_bonus': 0.0, 'offcut_penalty': -0.023955467460808566, 'waste_penalty': -0.08075724115184947, 'layouts_penalty': -0.0891089108910891, 'sheets_penalty': -1.0, 'cuts_penalty': -1.0})
-  - Final Greedy Score (Renormalized): 0.772
+  - Final Greedy Score (Renormalized): -1.087
   - Score Components:
     - area_score          :   -0.105
-    - stock_fill_bonus    :    2.859
+    - stock_fill_bonus    :    1.000
     - quantity_bonus      :    0.107
     - priority_bonus      :    0.000
     - sheets_penalty      :   -1.000
     - layouts_penalty     :   -0.089
     - cuts_penalty        :   -1.000
 --------------------------
+
 
