@@ -224,33 +224,29 @@ stock_bonus solution chat: https://g.co/gemini/share/66382cfff71e
 
 
 --- Greedy Seed Solution ---
-  - Final Greedy Score: -1.483
+  - Final Greedy Score: -2.406
   - Score Components:
-    - area_score          :   -0.347
-    - quantity_bonus      :    0.120
-    - sheets_penalty      :   -1.870
-    - layouts_penalty     :   -0.167
-    - cuts_penalty        :   -0.637
+    - area_score          :   -0.392
+    - stock_fill_bonus    :    2.859
+    - quantity_bonus      :    0.399
+    - priority_bonus      :    0.000
+    - sheets_penalty      :   -3.741
+    - layouts_penalty     :   -0.333
+    - cuts_penalty        :   -1.198
 --------------------------
 
---- Final Score Component Stats ---
-True (Actual) Scores:
-  - total_score    : Min=  -0.303, Avg=  -0.032, Max=   0.278, Count=180001
-  - area_score     : Min=  -0.303, Avg=  -0.060, Max=  -0.004, Count=166168
-  - stock_bonus    : Min=   0.000, Avg=   0.000, Max=   0.000, Count=13833
-  - quantity_bonus : Min=   0.000, Avg=   0.029, Max=   0.300, Count=166168
-  - priority_bonus : Min=   0.000, Avg=   0.000, Max=   0.000, Count=166168
-  - sheets_penalty : Min=  -0.019, Avg=  -0.019, Max=  -0.019, Count=13833
-  - layouts_penalty: Min=  -0.019, Avg=  -0.018, Max=   0.000, Count=13833
-  - cuts_penalty   : Min=  -0.017, Avg=  -0.009, Max=  -0.006, Count=13833
+[INFO] Learning from greedy solution to set new normalization factors.
 
-Predicted (Bound) Scores:
-  - total_score    : Min=  -0.549, Avg=  -0.454, Max=  -0.320, Count=14312
-  - area_score     : Min=  -0.010, Avg=  -0.010, Max=  -0.009, Count=14312
-  - stock_bonus    : Min=   0.001, Avg=   0.100, Max=   0.218, Count=14312
-  - quantity_bonus : Min=   0.000, Avg=   0.000, Max=   0.000, Count=14312
-  - priority_bonus : Min=   0.000, Avg=   0.000, Max=   0.000, Count=14312
-  - sheets_penalty : Min=  -0.500, Avg=  -0.488, Max=  -0.463, Count=14312
-  - layouts_penalty: Min=  -0.037, Avg=  -0.036, Max=  -0.019, Count=14312
-  - cuts_penalty   : Min=  -0.022, Avg=  -0.021, Max=  -0.020, Count=14312
---- End of Report ---
+--- Greedy Solution (Renormalized for B&B) ---
+Counter({'stock_fill_bonus': 2.858682366227123, 'quantity_bonus': 0.10678382416246743, 'priority_bonus': 0.0, 'offcut_penalty': -0.023955467460808566, 'waste_penalty': -0.08075724115184947, 'layouts_penalty': -0.0891089108910891, 'sheets_penalty': -1.0, 'cuts_penalty': -1.0})
+  - Final Greedy Score (Renormalized): 0.772
+  - Score Components:
+    - area_score          :   -0.105
+    - stock_fill_bonus    :    2.859
+    - quantity_bonus      :    0.107
+    - priority_bonus      :    0.000
+    - sheets_penalty      :   -1.000
+    - layouts_penalty     :   -0.089
+    - cuts_penalty        :   -1.000
+--------------------------
+

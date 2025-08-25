@@ -499,7 +499,7 @@ def _predict_number_of_new_sheet_layouts(remaining_parts: list, used_signatures:
 
 def _calculate_bound(remaining_parts: list, current_score: float, config: Dict[str, Any], reference_area: float, used_signatures: frozenset,
                      normalized_sheet_penalty: float, normalized_layouts_penalty: float, total_cuts_normalizer: float,
-                     optional_parts_for_bound: list, live_stock_counts: Counter,
+                     optional_parts_for_bound: list, live_stock_counts: Counter, stock_bonus_normalizer: float,
                      debugger: Optional['ScoreDebugger'] = None) -> float:
     """
     Calculates a sophisticated upper bound that is aware of the live stock part deficit.
@@ -522,6 +522,7 @@ def _calculate_bound(remaining_parts: list, current_score: float, config: Dict[s
     optimistic_stock_fill_bonus = _calculate_optimistic_stock_bonus(
         remaining_parts, optional_parts_for_bound, live_stock_counts, config, reference_area
     )
+    optimistic_stock_fill_bonus /= stock_bonus_normalizer
     future_cuts_penalty = (optimistic_future_cuts / total_cuts_normalizer) * config.get('w_cuts', 0.2) if total_cuts_normalizer > 0 else 0
     future_sheets_penalty = min_additional_sheets * normalized_sheet_penalty
     future_layouts_penalty = optimistic_new_layouts * normalized_layouts_penalty
@@ -686,6 +687,7 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
                              cancellation_event: Optional['threading.Event'] = None) -> Tuple[List[Dict], List[Part], float]:
     """
     Optimizes cutting stock using a time-limited Branch and Bound search.
+    This version learns its normalization factors from an initial greedy solution.
     """
     start_time = time.time()
     time_limit = config.get('search_time_limit', 1.0)
@@ -695,7 +697,7 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
     
     debugger = ScoreDebugger() if DEBUG_SCORES else None
     last_debug_print_time = start_time
-    debug_print_interval = 2.0  # Print debug stats every 2 seconds
+    debug_print_interval = 2.0
 
     max_layouts = config.get('max_unique_layouts', 0)
     layout_score_cache = {}
@@ -728,71 +730,119 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
                 optional_parts_list.append(p_copy)
                 part_id_counter += 1
 
+    # --- 1. INITIAL HEURISTIC-BASED NORMALIZATION (FALLBACK) ---
+    # These values are used for the greedy seed and as a fallback if it fails.
     total_parts_area = sum(p['length'] * p['width'] for p in initial_parts_dict.values())
-    expected_sheets = math.ceil(total_parts_area / reference_area) if reference_area > 0 else 1
-    penalty_normalizer = 1.0 / expected_sheets if expected_sheets > 0 else 1.0
+    expected_sheets_heuristic = math.ceil(total_parts_area / reference_area) if reference_area > 0 else 1
+    penalty_normalizer = 1.0 / expected_sheets_heuristic if expected_sheets_heuristic > 0 else 1.0
     
-    normalized_sheet_penalty = config.get('w_sheets', 1.0) * penalty_normalizer
-    normalized_layouts_penalty = config.get('w_unique_layouts', 0.5) * penalty_normalizer
-    
-    cuts_per_part_heuristic = config.get('cuts_per_part_heuristic', 1.5) # Reduced from 4.0
+    cuts_per_part_heuristic = config.get('cuts_per_part_heuristic', 4.0)
     total_cuts_normalizer = total_initial_parts * cuts_per_part_heuristic
 
-    initial_used_signatures = frozenset()
-    initial_stock_counts = Counter()
-    initial_bound = -_calculate_bound(
-        list(initial_parts_dict.values()), 0, config, reference_area, initial_used_signatures,
-        normalized_sheet_penalty, normalized_layouts_penalty, total_cuts_normalizer, optional_parts_list,
-        initial_stock_counts, debugger=debugger
-    )
-    
-    # --- NEW: Run a greedy seed to get an initial solution ---
+    normalized_sheet_penalty = config.get('w_sheets', 1.0) * penalty_normalizer
+    normalized_layouts_penalty = config.get('w_unique_layouts', 0.5) * penalty_normalizer
+
+    # --- 2. RUN GREEDY SEED ---
     greedy_layouts, greedy_score, greedy_components = _run_greedy_seed(
         initial_parts_dict, stock_sheets, config, optional_parts_list, is_stock_only_job,
         reference_area, max_offcut_quantity, normalized_sheet_penalty, normalized_layouts_penalty,
         total_cuts_normalizer, penalty_normalizer, debugger
     )
     
-    initial_used_signatures = frozenset()
-    initial_stock_counts = Counter()
-    initial_bound = -_calculate_bound(
-        list(initial_parts_dict.values()), 0, config, reference_area, initial_used_signatures,
-        normalized_sheet_penalty, normalized_layouts_penalty, total_cuts_normalizer, optional_parts_list,
-        initial_stock_counts, debugger=debugger
-    )
-    
-    node_counter = 1
-    pq = [(initial_bound, 0.0, 0, initial_parts_dict, [], initial_used_signatures, initial_stock_counts)]
-    
-    # Use the greedy solution as the first "best" solution
+    # --- 3. LEARN FROM GREEDY SOLUTION (if successful) ---
     if greedy_layouts:
         print("\n--- Greedy Seed Solution ---")
         print(f"  - Final Greedy Score: {greedy_score:.3f}")
         print("  - Score Components:")
-        # Combine waste and offcut penalties into a single 'area_score' for consistent reporting
         display_components = greedy_components.copy()
         area_score = display_components.pop('waste_penalty', 0.0) + display_components.pop('offcut_penalty', 0.0)
         display_components['area_score'] = area_score
-
-        # Enforce the same print order as the main debugger
-        print_order = ['area_score', 'stock_bonus', 'quantity_bonus', 'priority_bonus', 'sheets_penalty', 'layouts_penalty', 'cuts_penalty']
+        print_order = ['area_score', 'stock_fill_bonus', 'quantity_bonus', 'priority_bonus', 'sheets_penalty', 'layouts_penalty', 'cuts_penalty']
         for key in print_order:
             value = display_components.get(key, 0.0)
-            if abs(value) > 1e-6:
-                print(f"    - {key:<20}: {value:>8.3f}")
+            print(f"    - {key:<20}: {value:>8.3f}")
         print("--------------------------\n")
-        best_solution = (greedy_layouts, []) # Assumes all parts were placed
-        best_score = greedy_score
+
+        heuristic_penalty_normalizer = penalty_normalizer # Store the initial value for later
+        # --- RECALCULATE NORMALIZERS BASED ON GREEDY RESULTS ---
+        print("[INFO] Learning from greedy solution to set new normalization factors.")
+        greedy_sheet_count = len(greedy_layouts)
+        penalty_normalizer = 1.0 / greedy_sheet_count if greedy_sheet_count > 0 else 1.0
+        normalized_sheet_penalty = config.get('w_sheets', 1.0) * penalty_normalizer
+        normalized_layouts_penalty = config.get('w_unique_layouts', 0.5) * penalty_normalizer
+        
+        greedy_total_cuts = sum(_count_guillotine_cuts(layout) for layout in greedy_layouts)
+        if greedy_total_cuts > 0:
+            total_cuts_normalizer = greedy_total_cuts
+
+        # --- NEW: Define the stock bonus normalizer ---
+        stock_bonus_normalizer = greedy_components.get('stock_fill_bonus')
+        # Use 1.0 as a fallback to prevent division by zero if the greedy seed has no stock bonus
+        if not stock_bonus_normalizer or stock_bonus_normalizer <= 0:
+            stock_bonus_normalizer = 1.0
+
+
+        # --- Re-print greedy stats with the new normalization for comparison ---
+        print("\n--- Greedy Solution (Renormalized for B&B) ---")
+        renormalized_components = Counter()
+        
+        # Rescale components that depended on the old penalty_normalizer
+        rescaling_factor = penalty_normalizer / heuristic_penalty_normalizer if heuristic_penalty_normalizer > 0 else 0
+        renormalized_components['waste_penalty'] = greedy_components['waste_penalty'] * rescaling_factor
+        renormalized_components['offcut_penalty'] = greedy_components['offcut_penalty'] * rescaling_factor
+        renormalized_components['quantity_bonus'] = greedy_components['quantity_bonus'] * rescaling_factor
+        renormalized_components['priority_bonus'] = greedy_components['priority_bonus'] * rescaling_factor
+        
+        # Normalize the stock bonus using the factor learned from the greedy solution
+        renormalized_components['stock_fill_bonus'] = greedy_components['stock_fill_bonus'] / stock_bonus_normalizer
+
+        # Overwrite penalties with their newly normalized values (which should be close to -1.0)
+        renormalized_components['sheets_penalty'] = -len(greedy_layouts) * normalized_sheet_penalty
+        renormalized_components['cuts_penalty'] = (-greedy_total_cuts / total_cuts_normalizer * config.get('w_cuts', 0.2)) if total_cuts_normalizer > 0 else 0
+        unique_greedy_signatures = {get_layout_signature(l) for l in greedy_layouts}
+        renormalized_components['layouts_penalty'] = -len(unique_greedy_signatures) * normalized_layouts_penalty
+        print(renormalized_components)
+        
+        renormalized_score = sum(renormalized_components.values())
+        print(f"  - Final Greedy Score (Renormalized): {renormalized_score:.3f}")
+        print("  - Score Components:")
+        display_components = renormalized_components.copy()
+        area_score = display_components.pop('waste_penalty', 0.0) + display_components.pop('offcut_penalty', 0.0)
+        display_components['area_score'] = area_score
+        for key in print_order:
+            value = display_components.get(key, 0.0)
+            print(f"    - {key:<20}: {value:>8.3f}")
+        print("--------------------------\n")
+        # --- End of re-print block ---
+
+
+        best_solution = (greedy_layouts, [])
+        best_score = renormalized_score
+
 
         # # --- TEMPORARY: Accept greedy solution and exit immediately for analysis ---
         # print("[DEBUG] Accepting greedy solution and skipping main search.")
         # final_layouts, remaining_parts = best_solution
         # return final_layouts, remaining_parts, best_score, [] # Return empty tree update
+    
     else:
-        print("\n[WARN] Greedy seed did not find a complete solution.\n")
+        print("\n[WARN] Greedy seed did not find a complete solution. Using heuristic normalization.\n")
         best_solution = ([], list(initial_parts_dict.values()))
         best_score = -float('inf')
 
+    # --- 4. INITIALIZE THE MAIN B&B SEARCH ---
+    initial_used_signatures = frozenset()
+    initial_stock_counts = Counter()
+    initial_bound = -_calculate_bound(
+        list(initial_parts_dict.values()), 0, config, reference_area, initial_used_signatures,
+        normalized_sheet_penalty, normalized_layouts_penalty, total_cuts_normalizer, optional_parts_list,
+        initial_stock_counts, stock_bonus_normalizer, debugger=debugger
+    )
+    
+    node_counter = 1
+    pq = [(initial_bound, 0.0, 0, initial_parts_dict, [], initial_used_signatures, initial_stock_counts)]
+    
+    # --- 5. RUN MAIN B&B LOOP ---
     while pq and (time_limit <= 0 or (time.time() - start_time) < time_limit):
         if cancellation_event and cancellation_event.is_set():
             break
@@ -806,7 +856,6 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
         tree_update_batch[parent_node_id] = tree_nodes[parent_node_id].copy()
 
         current_time = time.time()
-
         if debugger and (current_time - last_debug_print_time > debug_print_interval):
             debugger.print_stats()
             last_debug_print_time = current_time
@@ -823,14 +872,13 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
                     "tree_update": list(tree_update_batch.values())
                 }
                 progress_callback(progress_data)
-            
             tree_update_batch.clear()
             last_update_time = current_time
         
         bound_check = _calculate_bound(
             list(current_parts.values()), current_score, config, reference_area, used_signatures,
             normalized_sheet_penalty, normalized_layouts_penalty, total_cuts_normalizer, optional_parts_list,
-            live_stock_counts, debugger=debugger
+            live_stock_counts, stock_bonus_normalizer, debugger=debugger
         )
         if bound_check < best_score:
             continue
@@ -874,33 +922,24 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
             placed_ids = {p['part_id'] for p in layout['placed_parts'] if p['part_id'] in current_parts}
             if not placed_ids: continue
 
-            # --- NEW ROBUST STOCK BONUS CALCULATION ---
             stock_fill_bonus = 0.0
             flat_bonus_unit = config.get('w_stock_fill_item_bonus', 0.05)
             w_stock_fill = config.get('w_stock_fill', 1.0)
-
             temp_counts_for_layout = live_stock_counts.copy()
-            # Sort by part_id to ensure deterministic calculation order
             sorted_placed_parts = sorted(layout['placed_parts'], key=lambda p: p['part_id'])
-            
             for part in sorted_placed_parts:
-                if not part.get('is_stock_part'):
-                    continue
-                
+                if not part.get('is_stock_part'): continue
                 ref = part['internal_ref']
                 initial_deficit = part.get('target_stock', 1) - part.get('current_stock', 0)
                 target_stock = part.get('target_stock', 0)
                 if target_stock <= 0: continue
-
                 count_already_made = temp_counts_for_layout.get(ref, 0)
                 live_deficit = initial_deficit - count_already_made
-
                 if live_deficit > 0:
                     bonus_for_this_part = (live_deficit / target_stock) * flat_bonus_unit * w_stock_fill
                     stock_fill_bonus += bonus_for_this_part
-                
                 temp_counts_for_layout[ref] += 1
-            # --- END OF NEW CALCULATION ---
+            stock_fill_bonus /= stock_bonus_normalizer
             
             layouts_penalty = normalized_layouts_penalty if action['type'] == 'generate' and is_new_signature else 0
             unweighted_cuts = float(_count_guillotine_cuts(layout))
@@ -915,12 +954,10 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
                 })
             
             normalized_layout_score = layout_score * penalty_normalizer
-
             child_score = current_score + normalized_layout_score + stock_fill_bonus - normalized_sheet_penalty - layouts_penalty - cuts_penalty
             child_parts = {pid: p for pid, p in current_parts.items() if pid not in placed_ids}
             child_layouts = used_layouts + [layout]
             child_signatures = used_signatures.union({layout_sig})
-
             child_stock_counts = live_stock_counts.copy()
             for part in layout['placed_parts']:
                 if part.get('is_stock_part'):
@@ -946,12 +983,12 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
                 child_bound = _calculate_bound(
                     list(child_parts.values()), child_score, config, reference_area, child_signatures,
                     normalized_sheet_penalty, normalized_layouts_penalty, total_cuts_normalizer, optional_parts_list,
-                    child_stock_counts, debugger=debugger
+                    child_stock_counts, stock_bonus_normalizer, debugger=debugger
                 )
                 if child_bound > best_score:
                     heapq.heappush(pq, (-child_bound, child_score, current_node_id, child_parts, child_layouts, child_signatures, child_stock_counts))
                 else:
-                    print(f"Branch pruned. Bound ({child_bound:.3f}) was not better than best score ({best_score:.3f}).")
+                    print('pruned branch')  # DEBUG
                     tree_nodes[current_node_id]["status"] = "pruned_bound"
                     tree_update_batch[current_node_id] = tree_nodes[current_node_id].copy()
     
@@ -959,4 +996,11 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
         debugger.print_stats("Final Score Component Stats")
 
     final_layouts, remaining_parts = best_solution
+    
+    # --- TEMPORARY: Accept greedy solution and exit immediately for analysis ---
+    if greedy_layouts and not pq: # This condition helps if the main loop doesn't run
+        print("[DEBUG] Main search did not run or complete; returning greedy solution.")
+        final_layouts, remaining_parts = greedy_layouts, []
+        best_score = greedy_score
+
     return final_layouts, remaining_parts, best_score, list(tree_update_batch.values())
