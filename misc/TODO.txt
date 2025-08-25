@@ -239,15 +239,14 @@ stock_bonus solution chat: https://g.co/gemini/share/66382cfff71e
 [INFO] Learning from greedy solution to set new normalization factors.
 
 --- Greedy Solution (Renormalized for B&B) ---
-  - Final Greedy Score (Renormalized): -1.087
+  - Final Greedy Score (Renormalized): -1.977
   - Score Components:
     - area_score          :   -0.105
-    - stock_fill_bonus    :    1.000
+    - stock_fill_bonus    :    0.061
     - quantity_bonus      :    0.107
     - priority_bonus      :    0.000
     - sheets_penalty      :   -1.000
     - layouts_penalty     :   -0.089
-    - cuts_penalty        :   -1.000
+    - cuts_penalty        :   -0.951
 --------------------------
-
 
