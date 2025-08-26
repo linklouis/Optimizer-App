@@ -493,29 +493,42 @@ def _predict_number_of_new_sheet_layouts(remaining_parts: list, used_signatures:
 def _calculate_bound(remaining_parts: list, current_score: float, config: Dict[str, Any], reference_area: float, used_signatures: frozenset,
                      max_values: Dict[str, float],
                      optional_parts_for_bound: list, live_stock_counts: Counter,
+                     greedy_learned_rates: Dict[str, float],
                      debugger: Optional['ScoreDebugger'] = None) -> float:
     """
-    Calculates a sophisticated upper bound using min-max normalization.
+    Calculates a sophisticated upper bound using data-driven rates learned from the greedy solution.
     """
     if not remaining_parts:
         return current_score
 
-    # 1. Predict raw future values
-    optimistic_future_cuts = _get_min_cuts_for_parts(len(remaining_parts))
-    min_additional_sheets = _get_min_sheets_for_parts(remaining_parts, reference_area)
+    # --- 1. Predict future values using learned rates from the greedy solution ---
+    remaining_area = sum(p['length'] * p['width'] for p in remaining_parts)
+    
+    # Use learned packing density to predict sheets needed (more realistic than 100% yield)
+    packing_density = greedy_learned_rates.get('packing_density', 0.75) # Default to 75% if not available
+    if packing_density == 0: packing_density = 0.75
+    predicted_sheets = math.ceil(remaining_area / (packing_density * reference_area)) if reference_area > 0 else float('inf')
+
+    # Use learned waste rate to predict future waste area
+    waste_rate = 1.0 - packing_density
+    predicted_waste_area = predicted_sheets * reference_area * waste_rate
+    
+    # Use learned cuts-per-part ratio to predict future cuts
+    cuts_per_part = greedy_learned_rates.get('cuts_per_part', 2.5) # Default to 2.5 if not available
+    predicted_cuts = len(remaining_parts) * cuts_per_part
+
+    # Other predictions remain the same
     optimistic_new_layouts = _predict_number_of_new_sheet_layouts(remaining_parts, used_signatures, reference_area, config)
     raw_stock_bonus = _calculate_optimistic_stock_bonus(
         remaining_parts, optional_parts_for_bound, live_stock_counts, config, reference_area
     )
-    # Assume a small, optimistic waste percentage for future sheets
-    predicted_waste_area = min_additional_sheets * reference_area * 0.02
 
-    # 2. Normalize and weight the predictions
+    # --- 2. Normalize and weight the predictions ---
     area_penalty = (predicted_waste_area / max_values['waste_area']) * config.get('w_waste', 1.0)
     stock_bonus = (raw_stock_bonus / max_values['stock_bonus']) * config.get('w_stock_fill', 1.0)
-    sheets_penalty = (min_additional_sheets / max_values['sheets']) * config.get('w_sheets', 1.0)
+    sheets_penalty = (predicted_sheets / max_values['sheets']) * config.get('w_sheets', 1.0)
     layouts_penalty = (optimistic_new_layouts / max_values['layouts']) * config.get('w_unique_layouts', 0.5)
-    cuts_penalty = (optimistic_future_cuts / max_values['cuts']) * config.get('w_cuts', 0.2)
+    cuts_penalty = (predicted_cuts / max_values['cuts']) * config.get('w_cuts', 0.2)
 
     upper_bound = (
         current_score
@@ -782,6 +795,12 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
 
         # Don't refine stock bonus down, the initial calculation is the true max.
 
+        # Store the learned rates for use in the bound calculation
+        greedy_learned_rates = {
+            'packing_density': packing_density if total_sheet_area > 0 else 0.75,
+            'cuts_per_part': cuts_per_part_ratio if total_greedy_parts > 0 else 2.5
+        }
+
         # --- Recalculate greedy score with refined max_values for B&B baseline ---
         renormalized_components = Counter()
         renormalized_components['area_score'] = - (
@@ -825,7 +844,7 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
     # We negate it for the min-heap.
     initial_bound = -_calculate_bound(
         list(initial_parts_dict.values()), 0.0, config, reference_area, initial_used_signatures,
-        max_values, optional_parts_list, initial_stock_counts, debugger=debugger
+        max_values, optional_parts_list, initial_stock_counts, greedy_learned_rates, debugger=debugger
     )
     
     node_counter = 1
@@ -866,7 +885,7 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
         
         bound_check = _calculate_bound(
             list(current_parts.values()), current_score, config, reference_area, used_signatures,
-            max_values, optional_parts_list, live_stock_counts, debugger=debugger
+            max_values, optional_parts_list, live_stock_counts, greedy_learned_rates, debugger=debugger
         )
         if bound_check < best_score:
             continue
@@ -981,7 +1000,7 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
             else:
                 child_bound = _calculate_bound(
                     list(child_parts.values()), child_score, config, reference_area, child_signatures,
-                    max_values, optional_parts_list, child_stock_counts, debugger=debugger
+                    max_values, optional_parts_list, child_stock_counts, greedy_learned_rates, debugger=debugger
                 )
                 if child_bound > best_score:
                     heapq.heappush(pq, (-child_bound, child_score, current_node_id, child_parts, child_layouts, child_signatures, child_stock_counts))
