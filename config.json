@@ -19,7 +19,7 @@
     "use_offcuts": true,
     "add_stock_parts": true,
     "search_time_limit": 0.0,
-    "branching_factor": 3,
+    "branching_factor": 1,
     "expected_max_cuts_per_sheet": 10.0,
     "max_unique_layouts": 0,
     "selected_stock_parts": [
@@ -64,9 +64,9 @@
     "w_offcut": 0.65,
     "w_cuts": 0.2,
     "w_quantity": 0.3,
-    "w_sheets": 0.8,
+    "w_sheets": 0.5,
     "w_stock_fill": 0.6,
-    "w_unique_layouts": 0.8,
+    "w_unique_layouts": 0.5,
     "standardize_stock_layouts": true,
     "selected_offcuts": [
         "0",

@@ -329,7 +329,6 @@ def run_single_sheet_optimization(sheet_info: Dict, required_parts: List[Part], 
     """
     kerf = config['kerf']
     allow_rotation = config['allow_rotation']
-    time_limit = 0.1 
     is_stock_only_job = not required_parts and optional_stock_parts
 
     initial_sheet_rect = [{'x': 0, 'y': 0, 'length': sheet_info['length'], 'width': sheet_info['width']}]
@@ -345,23 +344,17 @@ def run_single_sheet_optimization(sheet_info: Dict, required_parts: List[Part], 
     best_score = calculate_layout_score(best_layout, sheet_info, config, config['min_offcut_dim'], reference_area, max_offcut_quantity, is_stock_only_job=is_stock_only_job, live_stock_counts=live_stock_counts, debugger=debugger)
 
     if optional_stock_parts and remaining_rects_after_job:
-        # The list is now already sorted, so we just use it directly.
-        # The expensive sorted() call is gone.
-        start_time = time.time()
-        iterations = 0
-        while time.time() - start_time < time_limit:
-            if cancellation_event and cancellation_event.is_set():
-                break
-                
-            k = min(len(optional_stock_parts), 10)
-            parts_to_attempt = random.sample(optional_stock_parts, k=k)
-            
-            placed_stock_parts, final_rects = _place_parts_in_rects(
-                parts_to_attempt, remaining_rects_after_job, kerf, allow_rotation
-            )
-            
-            if not placed_stock_parts and iterations > 10: break
-            
+        # PERF: Replace the iterative random sampling with a single, deterministic greedy pass.
+        # This is much faster as it avoids the expensive random.sample and reduces
+        # the number of calls to the JIT-compiled _place_parts_in_rects function.
+        # Sort parts by area to prioritize placing larger, more difficult ones first.
+        fittable_parts = sorted(optional_stock_parts, key=lambda p: p['length'] * p['width'], reverse=True)
+
+        placed_stock_parts, final_rects = _place_parts_in_rects(
+            fittable_parts, remaining_rects_after_job, kerf, allow_rotation
+        )
+
+        if placed_stock_parts:
             candidate_placed_parts = placed_job_parts + placed_stock_parts
             candidate_layout = {
                 "placed_parts": candidate_placed_parts, "offcuts": final_rects,
@@ -373,7 +366,6 @@ def run_single_sheet_optimization(sheet_info: Dict, required_parts: List[Part], 
             if candidate_score > best_score:
                 best_score = candidate_score
                 best_layout = candidate_layout
-            iterations += 1
     
     return best_layout
 
@@ -454,14 +446,38 @@ def _count_guillotine_cuts(layout: Dict[str, Any]) -> int:
     return _count_guillotine_cuts_jit(placed_parts_data, sheet_info['width'], sheet_info['length'])
 
 
-def _calculate_optimistic_stock_bonus(remaining_parts: list, optional_parts_for_bound: list, 
+@numba.jit(nopython=True)
+def _calculate_made_counts_jit(refs: np.ndarray, unique_refs: np.ndarray, live_counts_arr: np.ndarray) -> np.ndarray:
+    """Calculates the cumulative count of each part reference, optimized with Numba."""
+    num_parts = refs.shape[0]
+    made_counts = np.zeros(num_parts, dtype=np.float64)
+    
+    # Create a temporary count array indexed the same as unique_refs.
+    # This acts as our hash map in the Numba world.
+    temp_counts = live_counts_arr.copy()
+
+    for i in range(num_parts):
+        ref = refs[i]
+        # Find the index of the current part's ref in the unique_refs array.
+        # np.searchsorted is very fast on sorted arrays.
+        idx = np.searchsorted(unique_refs, ref)
+        
+        # This check is for safety, in case a ref is not in unique_refs, though it should be.
+        if idx < len(unique_refs) and unique_refs[idx] == ref:
+            made_counts[i] = temp_counts[idx]
+            temp_counts[idx] += 1
+            
+    return made_counts
+
+
+def _calculate_optimistic_stock_bonus(remaining_parts: list, optional_parts_data: np.ndarray, 
                                      live_stock_counts: Counter, config: Dict[str, Any], 
                                      reference_area: float) -> float:
     """
     Calculates a realistic upper bound for the stock fill bonus using vectorized NumPy operations.
     """
     is_mixed_job = any(not p.get('is_stock_part') for p in remaining_parts)
-    if not optional_parts_for_bound or (not remaining_parts and is_mixed_job):
+    if optional_parts_data.shape[0] == 0 or (not remaining_parts and is_mixed_job):
         return 0.0
 
     estimated_sheets = _get_min_sheets_for_parts(remaining_parts, reference_area)
@@ -476,16 +492,8 @@ def _calculate_optimistic_stock_bonus(remaining_parts: list, optional_parts_for_
     flat_bonus_unit = config.get('w_stock_fill_item_bonus', 0.05)
     
     # --- Vectorized Calculation ---
-    # Extract data into NumPy arrays to avoid Python object overhead
-    num_parts = len(optional_parts_for_bound)
-    part_data = np.array([
-        [
-            hash(p['internal_ref']),  # Use hash for quick numeric grouping
-            p.get('target_stock', 1),
-            p.get('current_stock', 0),
-            p['length'] * p['width']
-        ] for p in optional_parts_for_bound
-    ], dtype=np.float64)
+    # PERF: The expensive array conversion has been moved outside this hot function.
+    part_data = optional_parts_data
 
     # Quickly count how many of each part we have already made
     refs = part_data[:, 0]
@@ -493,17 +501,8 @@ def _calculate_optimistic_stock_bonus(remaining_parts: list, optional_parts_for_
     live_counts_arr = np.array([live_stock_counts.get(ref_hash, 0) for ref_hash in unique_refs], dtype=np.float64)
     
     # Calculate how many parts of each type have been made so far in the simulation
-    # This creates a cumulative count for each part instance
-    counts_map = dict(zip(unique_refs, counts))
-    live_counts_map = dict(zip(unique_refs, live_counts_arr))
-    
-    # Numba JIT could be used here for a further boost if needed
-    made_counts = np.zeros(num_parts, dtype=np.float64)
-    temp_counts = live_counts_map.copy()
-    for i in range(num_parts):
-        ref = refs[i]
-        made_counts[i] = temp_counts.get(ref, 0)
-        temp_counts[ref] = temp_counts.get(ref, 0) + 1
+    # This uses a fast, JIT-compiled function to replace a very slow Python loop with dict lookups.
+    made_counts = _calculate_made_counts_jit(refs, unique_refs, live_counts_arr)
 
     # Vectorized bonus calculation
     target_stock = part_data[:, 1]
@@ -538,7 +537,7 @@ def _calculate_optimistic_stock_bonus(remaining_parts: list, optional_parts_for_
     predicted_bonus = np.sum(sorted_bonuses[:full_fit_idx])
     
     # Add the fractional bonus for the one part that might fit partially
-    if full_fit_idx < num_parts:
+    if full_fit_idx < part_data.shape[0]:
         area_filled = cumulative_areas[full_fit_idx - 1] if full_fit_idx > 0 else 0
         remaining_area = optimistic_available_area - area_filled
         fractional_fit = remaining_area / sorted_areas[full_fit_idx]
@@ -620,7 +619,7 @@ def _predict_number_of_new_sheet_layouts(remaining_parts: list, used_signatures:
 
 def _calculate_bound(remaining_parts: list, current_score: float, config: Dict[str, Any], reference_area: float, used_signatures: frozenset,
                      max_values: Dict[str, float],
-                     optional_parts_for_bound: list, live_stock_counts: Counter,
+                     optional_parts_data_for_bound: np.ndarray, live_stock_counts: Counter,
                      learned_rates: Dict[str, float],
                      debugger: Optional['ScoreDebugger'] = None) -> float:
     """
@@ -643,7 +642,7 @@ def _calculate_bound(remaining_parts: list, current_score: float, config: Dict[s
 
     optimistic_new_layouts = _predict_number_of_new_sheet_layouts(remaining_parts, used_signatures, reference_area, config)
     raw_stock_bonus = _calculate_optimistic_stock_bonus(
-        remaining_parts, optional_parts_for_bound, live_stock_counts, config, reference_area
+        remaining_parts, optional_parts_data_for_bound, live_stock_counts, config, reference_area
     )
 
     area_penalty = (predicted_waste_area / max_values['waste_area']) * config.get('w_waste', 1.0)
@@ -813,7 +812,7 @@ def _update_bounding_parameters_from_solution(solution_layouts: list, config: di
     return updated_max_values, new_learned_rates
 
 def _rescore_top_nodes(pq: list, config: dict, reference_area: float, max_values: dict,
-                       optional_parts_list: list, learned_rates: dict, 
+                       optional_parts_data: np.ndarray, learned_rates: dict, 
                        debugger: Optional['ScoreDebugger']) -> list:
     """
     Implements an adaptive, iterative re-scoring of the top nodes in the priority queue
@@ -847,7 +846,7 @@ def _rescore_top_nodes(pq: list, config: dict, reference_area: float, max_values
                 _stale_bound, score, _id, parts, layouts, sigs, stock_counts = node
                 new_bound = _calculate_bound(
                     list(parts.values()), score, config, reference_area, sigs,
-                    max_values, optional_parts_list, stock_counts, learned_rates, debugger
+                    max_values, optional_parts_data, stock_counts, learned_rates, debugger
                 )
                 new_pq_list.append((-new_bound, score, _id, parts, layouts, sigs, stock_counts))
                 already_rescored_ids.add(_id)
@@ -928,6 +927,16 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
         # Pre-sort the list here, ONCE.
         optional_parts_list.sort(key=lambda p: p.get('target_stock', 1) - p.get('current_stock', 0), reverse=True)
 
+    # PERF: Pre-convert optional parts to a NumPy array to avoid repeated conversions.
+    optional_parts_np = np.array([
+        [
+            hash(p['internal_ref']),
+            p.get('target_stock', 1),
+            p.get('current_stock', 0),
+            p['length'] * p['width']
+        ] for p in optional_parts_list
+    ], dtype=np.float64) if optional_parts_list else np.empty((0, 4), dtype=np.float64)
+
     # --- 1. ESTIMATE MAX VALUES (PRE-GREEDY) ---
     max_values = {}
     total_parts_area = sum(p['length'] * p['width'] for p in initial_parts_dict.values())
@@ -1005,7 +1014,7 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
     initial_stock_counts = Counter()
     initial_bound = -_calculate_bound(
         list(initial_parts_dict.values()), 0.0, config, reference_area, initial_used_signatures,
-        max_values, optional_parts_list, initial_stock_counts, learned_rates, debugger=debugger
+        max_values, optional_parts_np, initial_stock_counts, learned_rates, debugger=debugger
     )
     
     node_counter = 1
@@ -1052,7 +1061,7 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
             
             bound_check = _calculate_bound(
                 list(current_parts.values()), current_score, config, reference_area, used_signatures,
-                max_values, optional_parts_list, live_stock_counts, learned_rates, debugger=debugger
+                max_values, optional_parts_np, live_stock_counts, learned_rates, debugger=debugger
             )
             if bound_check < best_score:
                 continue
@@ -1149,12 +1158,12 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
                             child_layouts, config, total_initial_parts, optional_parts_list, reference_area, max_values
                         )
                         pq = _rescore_top_nodes(
-                            pq, config, reference_area, max_values, optional_parts_list, learned_rates, debugger
+                            pq, config, reference_area, max_values, optional_parts_np, learned_rates, debugger
                         )
                 else:
                     child_bound = _calculate_bound(
                         list(child_parts.values()), child_score, config, reference_area, child_signatures,
-                        max_values, optional_parts_list, child_stock_counts, learned_rates, debugger=debugger
+                        max_values, optional_parts_np, child_stock_counts, learned_rates, debugger=debugger
                     )
                     if child_bound > best_score:
                         node_data = (child_bound, child_score, child_node_id, child_parts, child_layouts, child_signatures, child_stock_counts)
