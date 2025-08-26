@@ -69,16 +69,16 @@ class TreeVisualizer {
             clearInterval(this.tickRateIntervalId);
             this.tickRateIntervalId = null;
         }
-        // if (this.simulationLoopId) {
-        //     clearInterval(this.simulationLoopId);
-        //     this.simulationLoopId = null;
-        // }
-        // // It's good practice to stop the animation frame when done.
-        // // If you need to debug the final state, you can comment this out.
-        // if (this.animationFrameId) {
-        //      cancelAnimationFrame(this.animationFrameId);
-        //      this.animationFrameId = null;
-        // }
+        if (this.simulationLoopId) {
+            clearInterval(this.simulationLoopId);
+            this.simulationLoopId = null;
+        }
+        // It's good practice to stop the animation frame when done.
+        // If you need to debug the final state, you can comment this out.
+        if (this.animationFrameId) {
+             cancelAnimationFrame(this.animationFrameId);
+             this.animationFrameId = null;
+        }
         // Process any remaining nodes synchronously
         while (this.pendingNodes.length > 0) {
             const nodeData = this.pendingNodes.shift();

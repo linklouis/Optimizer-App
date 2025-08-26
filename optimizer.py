@@ -2,6 +2,7 @@ import time
 import random
 import heapq
 import math
+import threading
 from typing import List, Dict, Any, Tuple, Optional
 from collections import Counter
 import numba
@@ -235,7 +236,8 @@ def run_single_sheet_optimization(sheet_info: Dict, required_parts: List[Part], 
                                   reference_area: float, max_offcut_quantity: float, 
                                   optional_stock_parts: Optional[List[Part]] = None,
                                   live_stock_counts: Optional[Counter] = None,
-                                  debugger: Optional['ScoreDebugger'] = None) -> Dict:
+                                  debugger: Optional['ScoreDebugger'] = None,
+                                  cancellation_event: Optional['threading.Event'] = None) -> Dict:
     """
     Finds the best layout for a single sheet.
     """
@@ -262,6 +264,9 @@ def run_single_sheet_optimization(sheet_info: Dict, required_parts: List[Part], 
         start_time = time.time()
         iterations = 0
         while time.time() - start_time < time_limit:
+            if cancellation_event and cancellation_event.is_set():
+                break
+                
             k = min(len(sorted_stock_parts), 10)
             parts_to_attempt = random.sample(sorted_stock_parts, k=k)
             
@@ -491,7 +496,8 @@ def _calculate_bound(remaining_parts: list, current_score: float, config: Dict[s
 def _run_greedy_seed(initial_parts_dict: Dict[int, Part], stock_sheets: List[Dict], config: Dict,
                      optional_parts_list: List[Part], is_stock_only_job: bool, reference_area: float,
                      max_offcut_quantity: float, max_values: Dict[str, float],
-                     debugger: Optional['ScoreDebugger']):
+                     debugger: Optional['ScoreDebugger'],
+                     cancellation_event: Optional['threading.Event'] = None):
     """
     Runs a fast, greedy optimization to find a good starting solution.
     """
@@ -503,13 +509,16 @@ def _run_greedy_seed(initial_parts_dict: Dict[int, Part], stock_sheets: List[Dic
     greedy_raw_components = Counter()
 
     while current_parts:
+        if cancellation_event and cancellation_event.is_set():
+            return None, -float('inf'), Counter()
+            
         candidate_actions = []
         unique_sheets = {f"{s['length']}x{s['width']}_{s.get('type', 'Default')}": s for s in stock_sheets}.values()
 
         for sheet_tpl in unique_sheets:
             layout = run_single_sheet_optimization(
                 sheet_tpl, list(current_parts.values()), config, reference_area, max_offcut_quantity,
-                optional_parts_list, live_stock_counts, None
+                optional_parts_list, live_stock_counts, None, cancellation_event
             )
             placed_ids = {p['part_id'] for p in layout['placed_parts'] if p['part_id'] in current_parts}
             if not placed_ids:
@@ -777,7 +786,7 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
     # --- 2. RUN GREEDY SEED ---
     greedy_layouts, greedy_score, greedy_raw_components = _run_greedy_seed(
         initial_parts_dict, stock_sheets, config, optional_parts_list, is_stock_only_job,
-        reference_area, max_offcut_quantity, max_values, debugger
+        reference_area, max_offcut_quantity, max_values, debugger, cancellation_event
     )
     
     best_solution = ([], list(initial_parts_dict.values()))
@@ -881,7 +890,7 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
                 for _ in range(branching_factor):
                     layout_attempt = run_single_sheet_optimization(
                         sheet_tpl, remaining_primary_parts, config, reference_area, max_offcut_quantity,
-                        optional_parts_list, live_stock_counts, debugger
+                        optional_parts_list, live_stock_counts, debugger, cancellation_event
                     )
                     if any(p.get('part_id') in current_parts for p in layout_attempt['placed_parts']):
                         candidate_actions.append({'type': 'generate', 'layout': layout_attempt})
