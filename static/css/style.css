@@ -367,16 +367,10 @@ th .select-all-parts-in-file { cursor: pointer; }
 }
 
 /* --- Loading Indicator --- */
-.loading-overlay {
-    position: fixed;
-    inset: 0;
-    background-color: rgba(var(--bg-secondary-rgb), 0.8);
-    backdrop-filter: blur(4px);
-    z-index: 20;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    padding: 2rem;
+#optimization-status-panel {
+    margin-bottom: 2rem;
+    /* This element is now part of the normal document flow. */
+    /* JS will toggle its display between 'none' and 'block'. */
 }
 
 .loading-panel {

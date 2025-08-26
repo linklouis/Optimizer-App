@@ -666,7 +666,8 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
                              is_stock_only_job: bool = False,
                              progress_callback=None,
                              max_offcut_quantity: float = 1.0,
-                             cancellation_event: Optional['threading.Event'] = None) -> Tuple[List[Dict], List[Part], float]:
+                             cancellation_event: Optional['threading.Event'] = None,
+                             preview_callback=None) -> Tuple[List[Dict], List[Part], float, list]:
     """
     Optimizes cutting stock using a Branch and Bound search with a "deep dive" strategy.
     """
@@ -819,6 +820,10 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
 
         best_solution = (greedy_layouts, [])
         best_score = renormalized_score
+
+        if preview_callback:
+            preview_callback(greedy_layouts, [], best_score, time.time() - start_time)
+            
     else:
         print("\n[WARN] Greedy seed did not find a complete solution. Using heuristic normalization.\n")
 
@@ -967,6 +972,10 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
                 if not child_parts: # Found a solution
                     if child_score > best_score:
                         best_score, best_solution = child_score, (child_layouts, [])
+                        
+                        if preview_callback:
+                            preview_callback(child_layouts, [], child_score, time.time() - start_time)
+
                         tree_nodes[child_node_id]["status"] = "solution"
                         tree_update_batch[child_node_id] = tree_nodes[child_node_id].copy()
                         if last_best_sol_node is not None and last_best_sol_node in tree_nodes:

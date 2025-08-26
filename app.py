@@ -47,7 +47,7 @@ def run_optimization_task(task_id, config):
         def progress_callback(progress_data):
             with tasks_lock:
                 if task_id in tasks:
-                    tasks[task_id]['progress'] = progress_data
+                    tasks[task_id].setdefault('progress', {}).update(progress_data)
         
         opt_start_time = time.time()
         
@@ -105,8 +105,24 @@ def run_optimization_task(task_id, config):
         parts_to_cut = hhos_parts + required_stock_parts
         is_stock_only_job = not parts_to_cut and optional_stock_parts
         stock_sheets = [{'id': 'default_sheet', 'length': config['default_length'], 'width': config['default_width'], 'quantity': float('inf'), 'type': 'Default'}]
+        initial_optional_parts = get_initial_optional_parts(stock_inv_df, config)
+        ideal_score = calculate_ideal_score(parts_to_cut, initial_optional_parts, offcut_df, config)
+
+        def preview_callback(layouts, remaining, score, elapsed_time):
+            """Prepares and sends a preview of a new best solution via the progress stream."""
+            final_layouts = standardize_layouts(layouts, initial_optional_parts, config) if config.get('standardize_stock_layouts', False) and layouts else layouts
+            temp_result_obj = { 'layouts': final_layouts, 'ideal_score': ideal_score }
+            updated_result_obj = recalculate_global_summary(temp_result_obj, config)
+            final_score = updated_result_obj.get('final_score', score)
+            score_percentage = updated_result_obj.get('score_percentage', 0.0)
+            preview_result = prepare_results_for_render(
+                final_layouts, remaining, final_score, config, elapsed_time, ideal_score, score_percentage
+            )
+            with tasks_lock:
+                if task_id in tasks:
+                    # Ensure progress dict exists
+                    tasks[task_id].setdefault('progress', {})['best_solution_preview'] = preview_result
         
-        # --- FIX: CALCULATE MAX OFFCUT QUANTITY FOR NORMALIZATION ---
         max_offcut_quantity = 1.0
         if offcut_df is not None and not offcut_df.empty and 'quantity' in offcut_df.columns:
             max_val = offcut_df['quantity'].max()
@@ -125,15 +141,13 @@ def run_optimization_task(task_id, config):
         layouts, remaining, score, final_tree_update = optimize_multiple_sheets(
             parts_to_cut, stock_sheets, config, optional_stock_parts, is_stock_only_job, progress_callback,
             max_offcut_quantity=max_offcut_quantity,
-            cancellation_event=cancel_event # Pass the event to the optimizer
+            cancellation_event=cancel_event,
+            preview_callback=preview_callback
         )
         opt_elapsed_time = time.time() - opt_start_time
         
-        initial_optional_parts = get_initial_optional_parts(stock_inv_df, config)
         final_layouts = standardize_layouts(layouts, initial_optional_parts, config) if config.get('standardize_stock_layouts', False) and layouts else layouts
         
-        ideal_score = calculate_ideal_score(parts_to_cut, initial_optional_parts, offcut_df, config)
-
         temp_result_obj = { 'layouts': final_layouts, 'ideal_score': ideal_score }
         
         updated_result_obj = recalculate_global_summary(temp_result_obj, config)

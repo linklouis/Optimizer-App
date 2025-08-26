@@ -3,13 +3,37 @@ document.addEventListener('DOMContentLoaded', function() {
     let currentState = null;
     let treeVisualizer = null;
 
+    function finalizeRender(result) {
+        const resultsDiv = document.getElementById('results');
+        
+        // Clean up old listeners to prevent duplication
+        resultsDiv?.removeEventListener('click', handleLayoutClick);
+        const oldUndoBtn = document.getElementById('undo-button');
+        if (oldUndoBtn) {
+            // A simple way to remove listeners is to replace the node
+            const newUndoBtn = oldUndoBtn.cloneNode(true);
+            oldUndoBtn.parentNode.replaceChild(newUndoBtn, oldUndoBtn);
+        }
+
+        renderResults(result); // Render the new state
+
+        // Attach new listeners only if the result is valid
+        if (result && !result.error) {
+            resultsDiv?.addEventListener('click', handleLayoutClick);
+            const undoButton = document.getElementById('undo-button');
+            if (undoButton) {
+                undoButton.addEventListener('click', handleUndo);
+                undoButton.disabled = stateHistory.length === 0;
+            }
+        }
+    }
+
     // --- State-dependent Handlers ---
     async function handleUndo() {
         if (stateHistory.length === 0) return;
 
-        const loadingOverlay = document.getElementById('loading-overlay');
-        // Prevent loading flicker on fast actions
-        let timer = setTimeout(() => loadingOverlay.style.display = 'flex', 200);
+        const statusPanel = document.getElementById('optimization-status-panel');
+        let timer = setTimeout(() => statusPanel.style.display = 'block', 200);
 
         const previousState = stateHistory.pop();
 
@@ -23,10 +47,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!response.ok) throw new Error('Server failed to restore state.');
 
             currentState = await response.json();
-            renderResults(currentState);
-            if(currentState && !currentState.error) {
-                document.getElementById('undo-button')?.addEventListener('click', handleUndo);
-            }
+            finalizeRender(currentState);
 
         } catch (error) {
             stateHistory.push(previousState); // Push state back on failure
@@ -34,7 +55,7 @@ document.addEventListener('DOMContentLoaded', function() {
             alert(`Failed to undo: ${error.message}`);
         } finally {
             clearTimeout(timer);
-            if (loadingOverlay) loadingOverlay.style.display = 'none';
+            if (statusPanel) statusPanel.style.display = 'none';
         }
     }
 
@@ -55,9 +76,8 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!action) return;
 
         stateHistory.push(JSON.parse(JSON.stringify(currentState)));
-        const loadingOverlay = document.getElementById('loading-overlay');
-        // Prevent loading flicker on fast actions
-        let timer = setTimeout(() => loadingOverlay.style.display = 'flex', 200);
+        const statusPanel = document.getElementById('optimization-status-panel');
+        let timer = setTimeout(() => statusPanel.style.display = 'block', 200);
 
         try {
             const response = await fetch('/update_layout', {
@@ -73,44 +93,32 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!response.ok) throw new Error((await response.json()).error || `HTTP ${response.status}`);
 
             currentState = await response.json();
-            renderResults(currentState);
-             if(currentState && !currentState.error) {
-                document.getElementById('undo-button')?.addEventListener('click', handleUndo);
-            }
+            finalizeRender(currentState);
         } catch (error) {
             stateHistory.pop();
             console.error('Error updating layout:', error);
             alert(`Failed to update layout: ${error.message}`);
         } finally {
             clearTimeout(timer);
-            loadingOverlay.style.display = 'none';
+            statusPanel.style.display = 'none';
         }
     }
 
     async function handleCancelOptimization(taskId, eventSource) {
         if (!taskId) return;
 
-        // 1. Immediately stop all client-side activity
-        if (eventSource) {
-            eventSource.close();
-        }
-        if (treeVisualizer) {
-            treeVisualizer.stop();
-        }
+        if (eventSource) eventSource.close();
+        if (treeVisualizer) treeVisualizer.stop();
         
         const tickRateValue = document.getElementById('viz-tick-rate');
         if (tickRateValue) tickRateValue.textContent = '0';
         
-        // 2. Hide the loading overlay and switch back to the config tab
-        const loadingOverlay = document.getElementById('loading-overlay');
-        if (loadingOverlay) loadingOverlay.style.display = 'none';
+        const statusPanel = document.getElementById('optimization-status-panel');
+        if (statusPanel) statusPanel.style.display = 'none';
         
         const configTabButton = document.querySelector('.tab-button[data-tab="config"]');
-        if (configTabButton) {
-            configTabButton.click();
-        }
+        if (configTabButton) configTabButton.click();
 
-        // 3. Send the cancellation request to the server in the background
         try {
             await fetch(`/cancel_optimization/${taskId}`, { method: 'POST' });
         } catch (error) {
@@ -130,7 +138,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Global keydown for Undo
     document.addEventListener('keydown', (event) => {
         if ((event.ctrlKey || event.metaKey) && event.key === 'z') {
             event.preventDefault();
@@ -141,22 +148,19 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // Main optimization form submission
     const configForm = document.querySelector('.config-form');
     if (configForm) {
-        // Control form submission via Enter key
         configForm.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && (e.target.type === 'text' || e.target.type === 'number')) {
                 const parentCard = e.target.closest('.card');
                 const cardTitle = parentCard?.querySelector('.card-title')?.textContent || '';
                 
                 if (cardTitle.includes('General Settings') || cardTitle.includes('Scoring Weights')) {
-                    // Do nothing, allow submission to bubble up to the form
                 } else if (cardTitle.includes('File Paths')) {
-                    e.preventDefault(); // Prevent default form submit
+                    e.preventDefault();
                     document.querySelector('button[value="refresh_files"]')?.click();
                 } else {
-                    e.preventDefault(); // Prevent submission from other cards
+                    e.preventDefault();
                 }
             }
         });
@@ -176,7 +180,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
             e.preventDefault();
 
-            const loadingOverlay = document.getElementById('loading-overlay');
+            const statusPanel = document.getElementById('optimization-status-panel');
             const progressBarFill = document.getElementById('progress-bar-fill');
             const partProgressPercent = document.getElementById('part-progress-percent');
             const timeTrackerValue = document.getElementById('time-tracker-value');
@@ -189,18 +193,16 @@ document.addEventListener('DOMContentLoaded', function() {
             const acceptBtn = document.getElementById('accept-solution-btn');
             const cancelBtn = document.getElementById('cancel-optimization-btn');
 
-            if (!loadingOverlay) return;
+            if (!statusPanel) return;
 
-            loadingOverlay.style.display = 'flex';
+            statusPanel.style.display = 'block';
             document.querySelector('.tab-button[data-tab="results"]')?.click();
             document.getElementById('results-container').innerHTML = '';
 
-            // --- Initialize Visualizer ---
             const visualizerSvgId = 'path-visualization-svg'; 
             treeVisualizer = new TreeVisualizer(visualizerSvgId);
             treeVisualizer.start();
 
-            // --- Reset UI Elements ---
             progressBarFill.style.width = '0%';
             partProgressPercent.textContent = '0%';
             timeTrackerValue.textContent = '00:00';
@@ -225,7 +227,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 const eventSource = new EventSource(`/stream/${task_id}`);
                 let receivedDoneEvent = false;
 
-                // --- Attach Button Handlers ---
                 const newCancelBtn = cancelBtn.cloneNode(true);
                 cancelBtn.parentNode.replaceChild(newCancelBtn, cancelBtn);
                 newCancelBtn.addEventListener('click', () => handleCancelOptimization(task_id, eventSource));
@@ -236,11 +237,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     newAcceptBtn.disabled = true;
                     newCancelBtn.disabled = true;
                     try {
-                        // Request early termination and then wait for the 'done' event to fire.
                         await fetch(`/cancel_optimization/${task_id}`, { method: 'POST' });
                     } catch (error) {
                         console.error("Error sending early termination request:", error);
-                        // Re-enable buttons if the request fails
                         newAcceptBtn.disabled = false;
                         newCancelBtn.disabled = false;
                     }
@@ -267,7 +266,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     
                     if (data.sheets_in_best_solution !== undefined && data.sheets_in_best_solution !== null) {
                         sheetsUsedValue.textContent = data.sheets_in_best_solution;
-                        if (newAcceptBtn) newAcceptBtn.disabled = false; // Enable accept button once a solution is found
+                        if (newAcceptBtn) newAcceptBtn.disabled = false;
+                    }
+
+                    if (data.best_solution_preview) {
+                        renderResults(data.best_solution_preview); // Render preview (non-interactive)
                     }
 
                     if (data.tree_update && treeVisualizer) {
@@ -293,12 +296,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
                     currentState = result;
                     stateHistory = [];
-                    renderResults(result);
-                    if(result && !result.error) {
-                        document.getElementById('undo-button')?.addEventListener('click', handleUndo);
-                    }
+                    finalizeRender(result);
                     
-                    loadingOverlay.style.display = 'none';
+                    statusPanel.style.display = 'none';
                     eventSource.close();
                 });
 
@@ -309,38 +309,30 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                     console.error("EventSource failed:", err);
                     alert("An error occurred while streaming results. Please check the console.");
-                    loadingOverlay.style.display = 'none';
+                    statusPanel.style.display = 'none';
                     eventSource.close();
                 };
 
             } catch (error) {
                 console.error("Optimization failed:", error);
                 alert(`Error: ${error.message}`);
-                loadingOverlay.style.display = 'none';
+                statusPanel.style.display = 'none';
             }
         });
     }
 
-    // Attach listener for layout interaction
-    document.getElementById('results')?.addEventListener('click', handleLayoutClick);
-    
-    // Initial UI Setup
     setupThemeToggle();
     setupTabs();
     setupFormControls();
     setupCollapsibleSections();
-    restoreAccordionStates(); // This was the missing call
+    restoreAccordionStates();
 
-    // Render initial data if it exists
     const initialDataElement = document.getElementById('initial-results-data');
     if (initialDataElement) {
         const initialData = JSON.parse(initialDataElement.textContent);
-        currentState = initialData;
-        renderResults(currentState); // Always render, even if data is null
-        
-        if (currentState && !currentState.error) {
-            document.getElementById('undo-button')?.addEventListener('click', handleUndo);
-            // Only switch to results tab if there's actual data
+        if (initialData) {
+            currentState = initialData;
+            finalizeRender(currentState);
             document.querySelector('.tab-button[data-tab="results"]')?.click();
         }
     }

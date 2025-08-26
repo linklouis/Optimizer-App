@@ -223,3 +223,6 @@ stock_bonus solution chat: https://g.co/gemini/share/66382cfff71e
 
 - update the way results_manager.py handles scores, including ideal score
 - update the variables found from the best solution for calculating the bound when a new best solution is found?
+- incorporate the greedy solution into the visualizer?
+
+- The 'Cancel Optimization' button doesn't always actually stop the optimization from continuing in the background, and most of the time, if you try to start a new run without reloading, it's super slow and laggy.
