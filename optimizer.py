@@ -291,31 +291,81 @@ def run_single_sheet_optimization(sheet_info: Dict, required_parts: List[Part], 
     
     return best_layout
 
-def _count_guillotine_cuts(layout: Dict[str, Any]) -> int:
+@numba.jit(nopython=True)
+def _count_guillotine_cuts_jit(placed_parts_data: np.ndarray, sheet_width: float, sheet_length: float) -> int:
     """
-    Accurately counts the number of unique guillotine cuts by identifying all
-    unique internal horizontal and vertical cut lines.
+    Numba-optimized core function to count guillotine cuts from NumPy array data.
     """
-    sheet_info = layout['sheet_info']
-    placed_parts = layout.get('placed_parts', [])
-    if not placed_parts:
+    if placed_parts_data.shape[0] == 0:
         return 0
 
     TOLERANCE = 1e-6
-    x_coords, y_coords = set(), set()
+    
+    # Pre-allocate arrays for all x and y coordinates
+    all_x_coords = np.empty(placed_parts_data.shape[0] * 2, dtype=np.float64)
+    all_y_coords = np.empty(placed_parts_data.shape[0] * 2, dtype=np.float64)
 
-    for part in placed_parts:
-        p_len = part['width'] if part.get('rotated') else part['length']
-        p_wid = part['length'] if part.get('rotated') else part['width']
-        x_coords.add(part['x'])
-        x_coords.add(part['x'] + p_wid)
-        y_coords.add(part['y'])
-        y_coords.add(part['y'] + p_len)
+    for i in range(placed_parts_data.shape[0]):
+        part_x, part_y, part_len, part_wid, rotated = placed_parts_data[i]
         
-    unique_x_cuts = {round(x, 4) for x in x_coords if x > TOLERANCE and x < sheet_info['width'] - TOLERANCE}
-    unique_y_cuts = {round(y, 4) for y in y_coords if y > TOLERANCE and y < sheet_info['length'] - TOLERANCE}
+        p_len = part_wid if rotated else part_len
+        p_wid = part_len if rotated else part_wid
+        
+        all_x_coords[i*2] = part_x
+        all_x_coords[i*2 + 1] = part_x + p_wid
+        all_y_coords[i*2] = part_y
+        all_y_coords[i*2 + 1] = part_y + p_len
 
-    return len(unique_x_cuts) + len(unique_y_cuts)
+    # --- Count unique internal X cuts ---
+    np.sort(all_x_coords)
+    unique_x_cuts = 0
+    if all_x_coords.shape[0] > 0:
+        last_x = all_x_coords[0]
+        if last_x > TOLERANCE and last_x < sheet_width - TOLERANCE:
+            unique_x_cuts += 1
+        for i in range(1, all_x_coords.shape[0]):
+            current_x = all_x_coords[i]
+            if current_x - last_x > TOLERANCE:
+                if current_x > TOLERANCE and current_x < sheet_width - TOLERANCE:
+                    unique_x_cuts += 1
+                last_x = current_x
+    
+    # --- Count unique internal Y cuts ---
+    np.sort(all_y_coords)
+    unique_y_cuts = 0
+    if all_y_coords.shape[0] > 0:
+        last_y = all_y_coords[0]
+        if last_y > TOLERANCE and last_y < sheet_length - TOLERANCE:
+            unique_y_cuts += 1
+        for i in range(1, all_y_coords.shape[0]):
+            current_y = all_y_coords[i]
+            if current_y - last_y > TOLERANCE:
+                if current_y > TOLERANCE and current_y < sheet_length - TOLERANCE:
+                    unique_y_cuts += 1
+                last_y = current_y
+
+    return unique_x_cuts + unique_y_cuts
+
+def _count_guillotine_cuts(layout: Dict[str, Any]) -> int:
+    """
+    Wrapper function to count guillotine cuts. Extracts data for the jitted core.
+    """
+    placed_parts = layout.get('placed_parts', [])
+    if not placed_parts:
+        return 0
+        
+    # Prepare data in a NumPy array format for Numba
+    # Columns: x, y, length, width, rotated
+    placed_parts_data = np.array([
+        [
+            p['x'], p['y'], p['length'], p['width'], 
+            1.0 if p.get('rotated') else 0.0
+        ] 
+        for p in placed_parts
+    ], dtype=np.float64)
+    
+    sheet_info = layout['sheet_info']
+    return _count_guillotine_cuts_jit(placed_parts_data, sheet_info['width'], sheet_info['length'])
 
 
 def _calculate_optimistic_stock_bonus(remaining_parts: list, optional_parts_for_bound: list, 
