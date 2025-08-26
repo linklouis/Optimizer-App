@@ -5,6 +5,8 @@ import pandas as pd
 import traceback
 import time
 import uuid
+import cProfile
+import pstats
 import threading
 
 from data_processing import process_uploaded_files, extract_hhos_data
@@ -37,6 +39,9 @@ def get_initial_optional_parts(stock_inv_df, config):
 # --- Main Application Logic ---
 def run_optimization_task(task_id, config):
     """The function that will run in a background thread."""
+    pr = cProfile.Profile()
+    pr.enable()
+
     try:
         # Create a cancellation event and store it in the task dictionary
         cancel_event = threading.Event()
@@ -176,6 +181,10 @@ def run_optimization_task(task_id, config):
             if task_id in tasks:
                 tasks[task_id]['status'] = 'error'
                 tasks[task_id]['result'] = {"error": f"An error occurred: {e}"}
+    finally:
+        # --- Save Profiler Results ---
+        pr.disable()
+        pr.dump_stats("stats.prof") # Saves the results to a file
 
 @app.route('/', methods=['GET', 'POST'])
 def home():
