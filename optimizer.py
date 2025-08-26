@@ -668,7 +668,7 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
                              max_offcut_quantity: float = 1.0,
                              cancellation_event: Optional['threading.Event'] = None) -> Tuple[List[Dict], List[Part], float]:
     """
-    Optimizes cutting stock using a Branch and Bound search with min-max normalization.
+    Optimizes cutting stock using a Branch and Bound search with a "deep dive" strategy.
     """
     start_time = time.time()
     time_limit = config.get('search_time_limit', 1.0)
@@ -752,56 +752,48 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
         reference_area, max_offcut_quantity, max_values, debugger
     )
     
+    best_solution = ([], list(initial_parts_dict.values()))
+    best_score = -float('inf')
+    greedy_learned_rates = {}
+
     # --- 3. LEARN FROM GREEDY SOLUTION (if successful) ---
     if greedy_layouts:
         print("\n--- Greedy Seed Solution (Initial Score) ---")
         print(f"  - Final Greedy Score: {greedy_score:.3f}")
         print("------------------------------------------\n")
 
-        # --- REFINE MAX VALUES BASED ON GREEDY RESULTS ---
         print("[INFO] Refining max values with data-driven heuristics from the greedy solution.")
 
-        # --- Smarter `max_cuts` Estimation ---
-        # 1. Learn the effective "cuts-per-part" ratio from the greedy solution.
         total_greedy_parts = sum(len(l['placed_parts']) for l in greedy_layouts)
         greedy_total_cuts = greedy_raw_components.get('cuts', 0)
+        cuts_per_part_ratio = 2.5
         if total_greedy_parts > 0:
             cuts_per_part_ratio = greedy_total_cuts / total_greedy_parts
-            # 2. Project this ratio onto the absolute max number of parts (all required + all optional).
             absolute_max_parts = total_initial_parts + len(optional_parts_list)
-            # 3. Add a 25% safety margin for less optimal, higher-cut solutions.
             projected_max_cuts = (absolute_max_parts * cuts_per_part_ratio) * 1.25
             max_values['cuts'] = max(max_values['cuts'], projected_max_cuts)
 
-        # --- Smarter `max_sheets` Estimation ---
-        # 1. Learn the effective packing density from the greedy solution.
         greedy_sheet_count = len(greedy_layouts)
         total_greedy_area = sum(p['length'] * p['width'] for l in greedy_layouts for p in l['placed_parts'])
         total_sheet_area = greedy_sheet_count * reference_area
+        packing_density = 0.75
         if total_sheet_area > 0:
             packing_density = total_greedy_area / total_sheet_area
-            # 2. Project the sheet count needed for ALL possible parts using a slightly less optimistic density.
             total_possible_parts_area = total_parts_area + sum(p['length'] * p['width'] for p in optional_parts_list)
-            projected_density = max(0.5, packing_density * 0.9) # Assume 90% of greedy efficiency
+            projected_density = max(0.5, packing_density * 0.9)
             projected_max_sheets = math.ceil(total_possible_parts_area / (projected_density * reference_area))
             max_values['sheets'] = max(max_values['sheets'], projected_max_sheets)
         
-        # --- Update `max_layouts` based on the new `max_sheets` ---
         greedy_layout_count = len({get_layout_signature(l, required_only=False) for l in greedy_layouts})
-        # Assume the ratio of layouts-to-sheets will be similar to the greedy solution.
         layouts_per_sheet_ratio = greedy_layout_count / greedy_sheet_count if greedy_sheet_count > 0 else 1
-        projected_max_layouts = math.ceil(max_values['sheets'] * layouts_per_sheet_ratio) + 1 # Add a buffer
+        projected_max_layouts = math.ceil(max_values['sheets'] * layouts_per_sheet_ratio) + 1
         max_values['layouts'] = max(max_values['layouts'], projected_max_layouts)
 
-        # Don't refine stock bonus down, the initial calculation is the true max.
-
-        # Store the learned rates for use in the bound calculation
         greedy_learned_rates = {
-            'packing_density': packing_density if total_sheet_area > 0 else 0.75,
-            'cuts_per_part': cuts_per_part_ratio if total_greedy_parts > 0 else 2.5
+            'packing_density': packing_density,
+            'cuts_per_part': cuts_per_part_ratio
         }
 
-        # --- Recalculate greedy score with refined max_values for B&B baseline ---
         renormalized_components = Counter()
         renormalized_components['area_score'] = - (
             (greedy_raw_components.get('waste_area', 0) / max_values['waste_area']) * config.get('w_waste', 1.0) +
@@ -829,9 +821,6 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
         best_score = renormalized_score
     else:
         print("\n[WARN] Greedy seed did not find a complete solution. Using heuristic normalization.\n")
-        best_solution = ([], list(initial_parts_dict.values()))
-        best_score = -float('inf')
-        greedy_learned_rates = {} # No learned rates if greedy fails
 
     # --- 4. INITIALIZE THE MAIN B&B SEARCH ---
     initial_used_signatures = frozenset()
@@ -842,178 +831,176 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
     )
     
     node_counter = 1
-    # Changed from a heapq (pq) to a list-based stack for depth-first search
-    stack = [(initial_bound, 0.0, 0, initial_parts_dict, [], initial_used_signatures, initial_stock_counts)]
+    pq = [(initial_bound, 0.0, 0, initial_parts_dict, [], initial_used_signatures, initial_stock_counts)]
     
     # --- 5. RUN MAIN B&B LOOP ---
-    # Main B&B loop now uses a stack (LIFO) for a depth-first search strategy
-    while stack and (time_limit <= 0 or (time.time() - start_time) < time_limit):
-        if cancellation_event and cancellation_event.is_set():
-            break
+    # This loop pops the best global option to start a "deep dive".
+    while pq and (time_limit <= 0 or (time.time() - start_time) < time_limit):
+        if cancellation_event and cancellation_event.is_set(): break
+
+        # Pop the most promising path from the global queue to start a deep dive
+        (
+            _bound, current_score, parent_node_id, current_parts, 
+            used_layouts, used_signatures, live_stock_counts
+        ) = heapq.heappop(pq)
         
-        # Pop from the stack (LIFO) instead of a priority queue
-        bound, current_score, parent_node_id, current_parts, used_layouts, used_signatures, live_stock_counts = stack.pop()
-        
-        if debugger:
-            debugger.log_context_switch(-bound, current_score, len(used_layouts), len(current_parts), parent_node_id)
-        
-        tree_nodes[parent_node_id]["status"] = "explored"
-        tree_update_batch[parent_node_id] = tree_nodes[parent_node_id].copy()
-
-        current_time = time.time()
-        if debugger and (current_time - last_debug_print_time > debug_print_interval):
-            debugger.print_stats()
-            last_debug_print_time = current_time
-
-        batch_size_limit = 500
-        if (current_time - last_update_time > 0.2) or len(tree_update_batch) >= batch_size_limit:
-            if progress_callback:
-                progress_data = {
-                    "part_progress": int(((total_initial_parts - len(current_parts)) / total_initial_parts) * 100 if total_initial_parts > 0 else 100),
-                    "elapsed_time": current_time - start_time,
-                    "time_limit": time_limit, "nodes_explored": node_counter,
-                    "current_best_score": best_score if best_score > -float('inf') else None,
-                    "sheets_in_best_solution": len(best_solution[0]) if best_solution[0] else None,
-                    "tree_update": list(tree_update_batch.values())
-                }
-                progress_callback(progress_data)
-            tree_update_batch.clear()
-            last_update_time = current_time
-        
-        bound_check = _calculate_bound(
-            list(current_parts.values()), current_score, config, reference_area, used_signatures,
-            max_values, optional_parts_list, live_stock_counts, greedy_learned_rates, debugger=debugger
-        )
-        if bound_check < best_score:
-            continue
-
-        remaining_primary_parts = list(current_parts.values())
-        candidate_actions = []
-
-        unique_sheets = {f"{s['length']}x{s['width']}_{s.get('type', 'Default')}": s for s in stock_sheets}.values()
-        for sheet_tpl in unique_sheets:
-            for _ in range(branching_factor):
-                layout_attempt = run_single_sheet_optimization(
-                    sheet_tpl, remaining_primary_parts, config, reference_area, max_offcut_quantity,
-                    optional_parts_list, live_stock_counts, debugger
-                )
-                if any(p.get('part_id') in current_parts for p in layout_attempt['placed_parts']):
-                    candidate_actions.append({'type': 'generate', 'layout': layout_attempt})
-        
-        unique_layouts_in_path = {get_layout_signature(l): l for l in used_layouts}.values()
-        for existing_layout in unique_layouts_in_path:
-            if any(p['part_id'] in current_parts for p in existing_layout['placed_parts'] if 'part_id' in p):
-                candidate_actions.append({'type': 'reuse', 'layout': existing_layout})
-
-        # Collect all valid child nodes before pushing to the stack
-        children_to_add = []
-        for action in candidate_actions:
-            layout = action['layout']
-            placed_ids = {p['part_id'] for p in layout['placed_parts'] if p['part_id'] in current_parts}
-            if not placed_ids: continue
-            
-            layout_sig = get_layout_signature(layout, required_only=False)
-            is_new_signature = layout_sig not in used_signatures
-            if is_new_signature and max_layouts > 0 and len(used_signatures) >= max_layouts:
-                continue
-            
-            # --- CALCULATE SCORE DELTA FOR THIS LAYOUT ---
-            sheet_info = layout['sheet_info']
-            sheet_area = sheet_info['length'] * sheet_info['width']
-            used_area = layout['total_placed_area']
-            min_offcut_dim = config['min_offcut_dim']
-            usable_offcuts = [o for o in layout['offcuts'] if o['length'] >= min_offcut_dim and o['width'] >= min_offcut_dim]
-            offcut_area = sum(o['length'] * o['width'] for o in usable_offcuts)
-            
-            raw_waste = sheet_area - used_area - offcut_area
-            raw_offcuts = offcut_area
-            raw_quantity = float(sheet_info.get('quantity', 1)) if sheet_info.get('type') != 'Default' else 0.0
-            raw_priority = 0.0
-            if sheet_info.get('type') == 'Offcut':
-                offcut_id_str = str(sheet_info.get('id', '')).replace('offcut_', '')
-                if offcut_id_str in config.get('prioritized_offcuts', []):
-                    raw_priority = 1.0
-            
-            raw_stock_bonus = 0.0
-            temp_counts_for_layout = live_stock_counts.copy()
-            for part in sorted(layout['placed_parts'], key=lambda p: p['part_id']):
-                if not part.get('is_stock_part'): continue
-                ref = part['internal_ref']
-                initial_deficit = part.get('target_stock', 1) - part.get('current_stock', 0)
-                target_stock = part.get('target_stock', 0)
-                if target_stock <= 0: continue
-                count_already_made = temp_counts_for_layout.get(ref, 0)
-                live_deficit = initial_deficit - count_already_made
-                if live_deficit > 0:
-                    raw_stock_bonus += (live_deficit / target_stock) * flat_bonus_unit
-                temp_counts_for_layout[ref] += 1
-            raw_cuts = _count_guillotine_cuts(layout)
-
-            component_deltas = {}
-            component_deltas['area_score'] = - (
-                (raw_waste / max_values['waste_area']) * config.get('w_waste', 1.0) +
-                (raw_offcuts / max_values['offcut_area']) * config.get('w_offcut', 0.5)
-            )
-            component_deltas['stock_bonus'] = (raw_stock_bonus / max_values['stock_bonus']) * config.get('w_stock_fill', 1.0)
-            component_deltas['quantity_bonus'] = (raw_quantity / max_values['quantity_bonus']) * config.get('w_quantity', 0.1)
-            component_deltas['priority_bonus'] = (raw_priority / max_values['priority_bonus']) * config.get('w_priority_offcut', 10.0)
-            component_deltas['sheets_penalty'] = - (1.0 / max_values['sheets']) * config.get('w_sheets', 1.0)
-            component_deltas['cuts_penalty'] = - (raw_cuts / max_values['cuts']) * config.get('w_cuts', 0.2)
-            
-            component_deltas['layouts_penalty'] = 0.0
-            if is_new_signature:
-                component_deltas['layouts_penalty'] = - (1.0 / max_values['layouts']) * config.get('w_unique_layouts', 0.5)
-            
-            score_delta = sum(component_deltas.values())
+        # Start a "deep dive" from this node, exploring descendants preferentially
+        diving = True
+        while diving and (time_limit <= 0 or (time.time() - start_time) < time_limit):
+            diving = False # A dive ends unless a promising child is chosen to continue
 
             if debugger:
-                debugger.log_true_scores(component_deltas)
+                debugger.log_context_switch(-_bound, current_score, len(used_layouts), len(current_parts), parent_node_id)
+            
+            tree_nodes[parent_node_id]["status"] = "explored"
+            tree_update_batch[parent_node_id] = tree_nodes[parent_node_id].copy()
 
-            child_score = current_score + score_delta
-            child_parts = {pid: p for pid, p in current_parts.items() if pid not in placed_ids}
-            child_layouts = used_layouts + [layout]
-            child_signatures = used_signatures.union({layout_sig})
-            child_stock_counts = live_stock_counts.copy()
-            for part in layout['placed_parts']:
-                if part.get('is_stock_part'):
-                    child_stock_counts[part['internal_ref']] += 1
+            # --- Progress and Debugging ---
+            current_time = time.time()
+            if debugger and (current_time - last_debug_print_time > debug_print_interval):
+                debugger.print_stats()
+                last_debug_print_time = current_time
 
-            current_node_id = node_counter
-            new_node = {"id": current_node_id, "parent": parent_node_id, "score": child_score, "status": "exploring"}
-            tree_nodes[current_node_id] = new_node
-            tree_update_batch[current_node_id] = new_node.copy()
-            node_counter += 1
+            batch_size_limit = 500
+            if (current_time - last_update_time > 0.2) or len(tree_update_batch) >= batch_size_limit:
+                if progress_callback:
+                    progress_data = {
+                        "part_progress": int(((total_initial_parts - len(current_parts)) / total_initial_parts) * 100 if total_initial_parts > 0 else 100),
+                        "elapsed_time": current_time - start_time,
+                        "time_limit": time_limit, "nodes_explored": node_counter,
+                        "current_best_score": best_score if best_score > -float('inf') else None,
+                        "sheets_in_best_solution": len(best_solution[0]) if best_solution[0] else None,
+                        "tree_update": list(tree_update_batch.values())
+                    }
+                    progress_callback(progress_data)
+                tree_update_batch.clear()
+                last_update_time = current_time
+            
+            # --- Pruning ---
+            bound_check = _calculate_bound(
+                list(current_parts.values()), current_score, config, reference_area, used_signatures,
+                max_values, optional_parts_list, live_stock_counts, greedy_learned_rates, debugger=debugger
+            )
+            if bound_check < best_score:
+                continue # End this dive path, go back to outer loop to pop a new path
 
-            if not child_parts:
-                if child_score > best_score:
-                    best_score = child_score
-                    best_solution = (child_layouts, [])
-                    tree_nodes[current_node_id]["status"] = "solution"
-                    tree_update_batch[current_node_id] = tree_nodes[current_node_id].copy()
-                    if last_best_sol_node is not None and last_best_sol_node in tree_nodes:
-                        tree_nodes[last_best_sol_node]["status"] = "explored"
-                        tree_update_batch[last_best_sol_node] = tree_nodes[last_best_sol_node].copy()
-                    last_best_sol_node = current_node_id
-            else:
-                child_bound = _calculate_bound(
-                    list(child_parts.values()), child_score, config, reference_area, child_signatures,
-                    max_values, optional_parts_list, child_stock_counts, greedy_learned_rates, debugger=debugger
-                )
-                if child_bound > best_score:
-                    children_to_add.append({
-                        'bound': child_bound,
-                        'state_tuple': (-child_bound, child_score, current_node_id, child_parts, child_layouts, child_signatures, child_stock_counts)
-                    })
-                else:
-                    tree_nodes[current_node_id]["status"] = "pruned_bound"
-                    tree_update_batch[current_node_id] = tree_nodes[current_node_id].copy()
+            # --- Generate Child Nodes ---
+            remaining_primary_parts = list(current_parts.values())
+            candidate_actions = []
+            unique_sheets = {f"{s['length']}x{s['width']}_{s.get('type', 'Default')}": s for s in stock_sheets}.values()
+            for sheet_tpl in unique_sheets:
+                for _ in range(branching_factor):
+                    layout_attempt = run_single_sheet_optimization(
+                        sheet_tpl, remaining_primary_parts, config, reference_area, max_offcut_quantity,
+                        optional_parts_list, live_stock_counts, debugger
+                    )
+                    if any(p.get('part_id') in current_parts for p in layout_attempt['placed_parts']):
+                        candidate_actions.append({'type': 'generate', 'layout': layout_attempt})
+            
+            unique_layouts_in_path = {get_layout_signature(l): l for l in used_layouts}.values()
+            for existing_layout in unique_layouts_in_path:
+                if any(p['part_id'] in current_parts for p in existing_layout['placed_parts'] if 'part_id' in p):
+                    candidate_actions.append({'type': 'reuse', 'layout': existing_layout})
 
-        # After checking all actions, sort the collected children by their bound (most promising first)
-        children_to_add.sort(key=lambda x: x['bound'], reverse=True)
-        
-        # Add them to the stack. The most promising child goes in last, so it's processed first (LIFO).
-        for child in children_to_add:
-            stack.append(child['state_tuple'])
+            potential_next_nodes = []
+            for action in candidate_actions:
+                layout = action['layout']
+                placed_ids = {p['part_id'] for p in layout['placed_parts'] if p['part_id'] in current_parts}
+                if not placed_ids: continue
+                
+                layout_sig = get_layout_signature(layout, required_only=False)
+                is_new_signature = layout_sig not in used_signatures
+                if is_new_signature and max_layouts > 0 and len(used_signatures) >= max_layouts: continue
+                
+                # --- Calculate Score Delta ---
+                sheet_info = layout['sheet_info']
+                sheet_area = sheet_info['length'] * sheet_info['width']
+                used_area = layout['total_placed_area']
+                min_offcut_dim = config['min_offcut_dim']
+                usable_offcuts = [o for o in layout['offcuts'] if o['length'] >= min_offcut_dim and o['width'] >= min_offcut_dim]
+                offcut_area = sum(o['length'] * o['width'] for o in usable_offcuts)
+                
+                raw_waste, raw_offcuts = sheet_area - used_area - offcut_area, offcut_area
+                raw_quantity = float(sheet_info.get('quantity', 1)) if sheet_info.get('type') != 'Default' else 0.0
+                raw_priority = 1.0 if sheet_info.get('type') == 'Offcut' and str(sheet_info.get('id', '')).replace('offcut_', '') in config.get('prioritized_offcuts', []) else 0.0
+                
+                raw_stock_bonus = 0.0
+                temp_counts_for_layout = live_stock_counts.copy()
+                for part in sorted(layout['placed_parts'], key=lambda p: p['part_id']):
+                    if not part.get('is_stock_part'): continue
+                    ref = part['internal_ref']
+                    initial_deficit = part.get('target_stock', 1) - part.get('current_stock', 0)
+                    target_stock = part.get('target_stock', 0)
+                    if target_stock <= 0: continue
+                    count_already_made = temp_counts_for_layout.get(ref, 0)
+                    live_deficit = initial_deficit - count_already_made
+                    if live_deficit > 0: raw_stock_bonus += (live_deficit / target_stock) * flat_bonus_unit
+                    temp_counts_for_layout[ref] += 1
+                raw_cuts = _count_guillotine_cuts(layout)
+
+                component_deltas = {}
+                component_deltas['area_score'] = -((raw_waste / max_values['waste_area']) * config.get('w_waste', 1.0) + (raw_offcuts / max_values['offcut_area']) * config.get('w_offcut', 0.5))
+                component_deltas['stock_bonus'] = (raw_stock_bonus / max_values['stock_bonus']) * config.get('w_stock_fill', 1.0)
+                component_deltas['quantity_bonus'] = (raw_quantity / max_values['quantity_bonus']) * config.get('w_quantity', 0.1)
+                component_deltas['priority_bonus'] = (raw_priority / max_values['priority_bonus']) * config.get('w_priority_offcut', 10.0)
+                component_deltas['sheets_penalty'] = -(1.0 / max_values['sheets']) * config.get('w_sheets', 1.0)
+                component_deltas['cuts_penalty'] = -(raw_cuts / max_values['cuts']) * config.get('w_cuts', 0.2)
+                component_deltas['layouts_penalty'] = -(1.0 / max_values['layouts']) * config.get('w_unique_layouts', 0.5) if is_new_signature else 0.0
+                score_delta = sum(component_deltas.values())
+                if debugger: debugger.log_true_scores(component_deltas)
+
+                # --- Create Child Node State ---
+                child_score = current_score + score_delta
+                child_parts = {pid: p for pid, p in current_parts.items() if pid not in placed_ids}
+                child_layouts = used_layouts + [layout]
+                child_signatures = used_signatures.union({layout_sig})
+                child_stock_counts = live_stock_counts.copy()
+                for part in layout['placed_parts']:
+                    if part.get('is_stock_part'): child_stock_counts[part['internal_ref']] += 1
+
+                child_node_id = node_counter
+                new_node = {"id": child_node_id, "parent": parent_node_id, "score": child_score, "status": "exploring"}
+                tree_nodes[child_node_id] = new_node
+                tree_update_batch[child_node_id] = new_node.copy()
+                node_counter += 1
+
+                if not child_parts: # Found a solution
+                    if child_score > best_score:
+                        best_score, best_solution = child_score, (child_layouts, [])
+                        tree_nodes[child_node_id]["status"] = "solution"
+                        tree_update_batch[child_node_id] = tree_nodes[child_node_id].copy()
+                        if last_best_sol_node is not None and last_best_sol_node in tree_nodes:
+                            tree_nodes[last_best_sol_node]["status"] = "explored"
+                            tree_update_batch[last_best_sol_node] = tree_nodes[last_best_sol_node].copy()
+                        last_best_sol_node = child_node_id
+                else: # Not a solution, check if it's a promising path
+                    child_bound = _calculate_bound(
+                        list(child_parts.values()), child_score, config, reference_area, child_signatures,
+                        max_values, optional_parts_list, child_stock_counts, greedy_learned_rates, debugger=debugger
+                    )
+                    if child_bound > best_score:
+                        node_data = (child_bound, child_score, child_node_id, child_parts, child_layouts, child_signatures, child_stock_counts)
+                        potential_next_nodes.append(node_data)
+                    else:
+                        tree_nodes[child_node_id]["status"] = "pruned_bound"
+                        tree_update_batch[child_node_id] = tree_nodes[child_node_id].copy()
+
+            if potential_next_nodes:
+                # Sort potential children by bound to find the best one to dive into
+                potential_next_nodes.sort(key=lambda x: x[0], reverse=True)
+                
+                # Best child continues the dive
+                best_child_data = potential_next_nodes.pop(0)
+                (
+                    _bound, current_score, parent_node_id, current_parts, 
+                    used_layouts, used_signatures, live_stock_counts
+                ) = best_child_data
+                diving = True # Signal to continue the inner loop with the new node's state
+
+                # Push other promising children to the global queue
+                for other_node in potential_next_nodes:
+                    other_bound, *node_tuple = other_node
+                    heapq.heappush(pq, (-other_bound, *node_tuple))
     
     if debugger:
         debugger.print_stats("Final Score Component Stats")
