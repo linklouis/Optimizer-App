@@ -475,14 +475,14 @@ class TreeVisualizer {
                 const dx = n1.x - n2.x;
                 const dy = n1.y - n2.y;
                 let distance = Math.sqrt(dx * dx + dy * dy);
-                if (distance < 1) distance = 1;
+                if (distance < 2) distance = 2;
 
                 // const force = kRepel / (Math.pow(distance, 2));
                 // const forceX = (dx / distance) * force;
                 // const forceY = (dy / distance) * force;
                 const force = kRepel / (Math.pow(distance, 3));
                 const forceX = dx * force;
-                const forceY = dy * force;
+                const forceY = dy * force;                
                 
                 n1.fx += forceX;
                 n1.fy += forceY;
@@ -490,6 +490,7 @@ class TreeVisualizer {
                 n2.fy -= forceY;
             }
         }
+        
 
         // 2. Attraction, Alignment, and Directional Forces.
         for (const node of nodes) {
@@ -498,7 +499,7 @@ class TreeVisualizer {
                 // Non-linear attraction force (stronger at longer distances)
                 const dx = parent.x - node.x;
                 const dy = parent.y - node.y;
-                const distance = Math.sqrt(dx * dx + dy * dy) + 1e-6; // Add small epsilon to prevent issues at zero distance
+                const distance = Math.pow(dx * dx + dy * dy, 0.3) + 1e-6; // Add small epsilon to prevent issues at zero distance
 
                 // Scale the linear force by the distance, making the final force proportional to distance squared.
                 const dx_attract = dx * kAttract * distance;
@@ -569,20 +570,23 @@ class TreeVisualizer {
                 node.fy += (node.y / dist_from_center) * directionalForce;
             }
         }
+
         
         // 3. Update Velocities/Positions AND Reset Forces for the next tick.
+        const max_velocity = 20;
         for (let i = 1; i < nodes.length; i++) {
             const node = nodes[i];
 
-            node.vx = (node.vx || 0) * damping + node.fx * 0.015;
-            node.vy = (node.vy || 0) * damping + node.fy * 0.015;
-            if (Math.abs(node.vx) <= 70 && Math.abs(node.vy) <= 70) {
-                node.x += node.vx;
-                node.y += node.vy;
-            } else {
-                node.vx = 70 * node.vx / Math.abs(node.vx);
-                node.vy = 70 * node.vy / Math.abs(node.vy);
+            node.vx = (node.vx || 0) * damping + node.fx * 0.011;
+            node.vy = (node.vy || 0) * damping + node.fy * 0.011;
+            if (Math.abs(node.vx) > max_velocity || Math.abs(node.vy) > max_velocity) {
+                const total_velocity = Math.sqrt(node.vx * node.vx + node.vy * node.vy);
+                const scaling_factor = max_velocity / total_velocity;
+                node.vx *= scaling_factor;
+                node.vy *= scaling_factor;
             }
+            node.x += node.vx;
+            node.y += node.vy;
 
             node.fx = 0;
             node.fy = 0;
