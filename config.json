@@ -4,7 +4,7 @@
     "hhos_files": [
         {
             "path": "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv",
-            "multiplier": 15
+            "multiplier": 5
         },
         {
             "path": "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv",
@@ -168,12 +168,12 @@
         "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv_3": 5,
         "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv_4": 5,
         "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv_5": 5,
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv:::0": 15,
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv:::1": 15,
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv:::2": 15,
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv:::3": 15,
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv:::4": 15,
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv:::5": 15,
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv:::0": 5,
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv:::1": 5,
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv:::2": 5,
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv:::3": 5,
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv:::4": 5,
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv:::5": 5,
         "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv:::0": 5,
         "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv:::1": 5,
         "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv:::2": 5,

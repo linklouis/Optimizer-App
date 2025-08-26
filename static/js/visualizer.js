@@ -175,7 +175,7 @@ class TreeVisualizer {
             return;
         }
 
-        const maxInterval = 10;
+        const maxInterval = 30;
         const minInterval = 0;
         const lowerThreshold = 50;
         const upperThreshold = 500;

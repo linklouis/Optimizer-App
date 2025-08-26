@@ -505,8 +505,8 @@ def _calculate_bound(remaining_parts: list, current_score: float, config: Dict[s
     remaining_area = sum(p['length'] * p['width'] for p in remaining_parts)
     
     # Use learned packing density to predict sheets needed (more realistic than 100% yield)
-    packing_density = greedy_learned_rates.get('packing_density', 0.75) # Default to 75% if not available
-    if packing_density == 0: packing_density = 0.75
+    packing_density = greedy_learned_rates.get('packing_density', 0.9) * 1.1 # Default to 9% if not available
+    if packing_density == 0: packing_density = 0.9
     predicted_sheets = math.ceil(remaining_area / (packing_density * reference_area)) if reference_area > 0 else float('inf')
 
     # Use learned waste rate to predict future waste area
@@ -514,7 +514,7 @@ def _calculate_bound(remaining_parts: list, current_score: float, config: Dict[s
     predicted_waste_area = predicted_sheets * reference_area * waste_rate
     
     # Use learned cuts-per-part ratio to predict future cuts
-    cuts_per_part = greedy_learned_rates.get('cuts_per_part', 2.5) # Default to 2.5 if not available
+    cuts_per_part = greedy_learned_rates.get('cuts_per_part', 1.2) # Default to 1.2 if not available
     predicted_cuts = len(remaining_parts) * cuts_per_part
 
     # Other predictions remain the same
@@ -827,35 +827,32 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
 
         best_solution = (greedy_layouts, [])
         best_score = renormalized_score
-
-        # # --- TEMPORARY: Accept greedy solution and exit immediately for analysis ---
-        # print("[DEBUG] Accepting greedy solution and skipping main search.")
-        # final_layouts, remaining_parts = best_solution
-        # return final_layouts, remaining_parts, best_score, [] # Return empty tree update
     else:
         print("\n[WARN] Greedy seed did not find a complete solution. Using heuristic normalization.\n")
         best_solution = ([], list(initial_parts_dict.values()))
         best_score = -float('inf')
+        greedy_learned_rates = {} # No learned rates if greedy fails
 
     # --- 4. INITIALIZE THE MAIN B&B SEARCH ---
     initial_used_signatures = frozenset()
     initial_stock_counts = Counter()
-    # The initial bound is calculated from a state of 0 score and all parts remaining.
-    # We negate it for the min-heap.
     initial_bound = -_calculate_bound(
         list(initial_parts_dict.values()), 0.0, config, reference_area, initial_used_signatures,
         max_values, optional_parts_list, initial_stock_counts, greedy_learned_rates, debugger=debugger
     )
     
     node_counter = 1
-    pq = [(initial_bound, 0.0, 0, initial_parts_dict, [], initial_used_signatures, initial_stock_counts)]
+    # Changed from a heapq (pq) to a list-based stack for depth-first search
+    stack = [(initial_bound, 0.0, 0, initial_parts_dict, [], initial_used_signatures, initial_stock_counts)]
     
     # --- 5. RUN MAIN B&B LOOP ---
-    while pq and (time_limit <= 0 or (time.time() - start_time) < time_limit):
+    # Main B&B loop now uses a stack (LIFO) for a depth-first search strategy
+    while stack and (time_limit <= 0 or (time.time() - start_time) < time_limit):
         if cancellation_event and cancellation_event.is_set():
             break
         
-        bound, current_score, parent_node_id, current_parts, used_layouts, used_signatures, live_stock_counts = heapq.heappop(pq)
+        # Pop from the stack (LIFO) instead of a priority queue
+        bound, current_score, parent_node_id, current_parts, used_layouts, used_signatures, live_stock_counts = stack.pop()
         
         if debugger:
             debugger.log_context_switch(-bound, current_score, len(used_layouts), len(current_parts), parent_node_id)
@@ -908,6 +905,8 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
             if any(p['part_id'] in current_parts for p in existing_layout['placed_parts'] if 'part_id' in p):
                 candidate_actions.append({'type': 'reuse', 'layout': existing_layout})
 
+        # Collect all valid child nodes before pushing to the stack
+        children_to_add = []
         for action in candidate_actions:
             layout = action['layout']
             placed_ids = {p['part_id'] for p in layout['placed_parts'] if p['part_id'] in current_parts}
@@ -919,7 +918,6 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
                 continue
             
             # --- CALCULATE SCORE DELTA FOR THIS LAYOUT ---
-            # 1. Get raw values for the layout
             sheet_info = layout['sheet_info']
             sheet_area = sheet_info['length'] * sheet_info['width']
             used_area = layout['total_placed_area']
@@ -951,7 +949,6 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
                 temp_counts_for_layout[ref] += 1
             raw_cuts = _count_guillotine_cuts(layout)
 
-            # 2. Normalize, weight, and calculate score delta components
             component_deltas = {}
             component_deltas['area_score'] = - (
                 (raw_waste / max_values['waste_area']) * config.get('w_waste', 1.0) +
@@ -1003,11 +1000,20 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
                     max_values, optional_parts_list, child_stock_counts, greedy_learned_rates, debugger=debugger
                 )
                 if child_bound > best_score:
-                    heapq.heappush(pq, (-child_bound, child_score, current_node_id, child_parts, child_layouts, child_signatures, child_stock_counts))
+                    children_to_add.append({
+                        'bound': child_bound,
+                        'state_tuple': (-child_bound, child_score, current_node_id, child_parts, child_layouts, child_signatures, child_stock_counts)
+                    })
                 else:
-                    print('branch pruned')
                     tree_nodes[current_node_id]["status"] = "pruned_bound"
                     tree_update_batch[current_node_id] = tree_nodes[current_node_id].copy()
+
+        # After checking all actions, sort the collected children by their bound (most promising first)
+        children_to_add.sort(key=lambda x: x['bound'], reverse=True)
+        
+        # Add them to the stack. The most promising child goes in last, so it's processed first (LIFO).
+        for child in children_to_add:
+            stack.append(child['state_tuple'])
     
     if debugger:
         debugger.print_stats("Final Score Component Stats")
