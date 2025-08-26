@@ -462,7 +462,7 @@ class TreeVisualizer {
         const kAttract = 0.03;
         const kAlign = 1;
         const damping = 0.01;
-        const directionalForce = 7;
+        const directionalForce = 0;
 
         // 1. Repulsion Force Calculation.
         // Assumes forces were reset to 0 at the end of the last tick.
