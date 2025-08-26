@@ -21,7 +21,7 @@ DEFAULT_CONFIG = {
     'standardize_stock_layouts': True,
     'selected_offcuts': [],
     'prioritized_offcuts': [],
-    'w_priority_offcut': 15.0,
+    'w_priority_offcut': 1.0,
     'selected_hhos_parts': []
 }
 
