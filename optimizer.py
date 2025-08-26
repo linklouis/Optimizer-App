@@ -259,16 +259,16 @@ def run_single_sheet_optimization(sheet_info: Dict, required_parts: List[Part], 
     best_score = calculate_layout_score(best_layout, sheet_info, config, config['min_offcut_dim'], reference_area, max_offcut_quantity, is_stock_only_job=is_stock_only_job, live_stock_counts=live_stock_counts, debugger=debugger)
 
     if optional_stock_parts and remaining_rects_after_job:
-        sorted_stock_parts = sorted(optional_stock_parts, key=lambda p: p.get('target_stock', 1) - p.get('current_stock', 0), reverse=True)
-        
+        # The list is now already sorted, so we just use it directly.
+        # The expensive sorted() call is gone.
         start_time = time.time()
         iterations = 0
         while time.time() - start_time < time_limit:
             if cancellation_event and cancellation_event.is_set():
                 break
                 
-            k = min(len(sorted_stock_parts), 10)
-            parts_to_attempt = random.sample(sorted_stock_parts, k=k)
+            k = min(len(optional_stock_parts), 10)
+            parts_to_attempt = random.sample(optional_stock_parts, k=k)
             
             placed_stock_parts, final_rects = _place_parts_in_rects(
                 parts_to_attempt, remaining_rects_after_job, kerf, allow_rotation
@@ -372,10 +372,10 @@ def _calculate_optimistic_stock_bonus(remaining_parts: list, optional_parts_for_
                                      live_stock_counts: Counter, config: Dict[str, Any], 
                                      reference_area: float) -> float:
     """
-    Calculates a realistic upper bound for the stock fill bonus.
+    Calculates a realistic upper bound for the stock fill bonus using vectorized NumPy operations.
     """
     is_mixed_job = any(not p.get('is_stock_part') for p in remaining_parts)
-    if not optional_parts_for_bound or not remaining_parts and is_mixed_job:
+    if not optional_parts_for_bound or (not remaining_parts and is_mixed_job):
         return 0.0
 
     estimated_sheets = _get_min_sheets_for_parts(remaining_parts, reference_area)
@@ -389,39 +389,74 @@ def _calculate_optimistic_stock_bonus(remaining_parts: list, optional_parts_for_
     w_stock_fill = config.get('w_stock_fill', 1.0)
     flat_bonus_unit = config.get('w_stock_fill_item_bonus', 0.05)
     
-    candidate_parts = []
-    temp_counts = live_stock_counts.copy()
+    # --- Vectorized Calculation ---
+    # Extract data into NumPy arrays to avoid Python object overhead
+    num_parts = len(optional_parts_for_bound)
+    part_data = np.array([
+        [
+            hash(p['internal_ref']),  # Use hash for quick numeric grouping
+            p.get('target_stock', 1),
+            p.get('current_stock', 0),
+            p['length'] * p['width']
+        ] for p in optional_parts_for_bound
+    ], dtype=np.float64)
 
-    for part in sorted(optional_parts_for_bound, key=lambda p: p['part_id']):
-        ref = part['internal_ref']
-        initial_deficit = part.get('target_stock', 1) - part.get('current_stock', 0)
-        target_stock = part.get('target_stock', 1)
-        if target_stock <= 0: continue
-
-        count_already_made = temp_counts.get(ref, 0)
-        live_deficit = initial_deficit - count_already_made
-        
-        potential_bonus = (live_deficit / target_stock) * flat_bonus_unit * w_stock_fill if live_deficit > 0 else 0.0
-        
-        part_area = part['length'] * part['width']
-        if part_area > 0:
-            bonus_density = potential_bonus / part_area
-            candidate_parts.append({'bonus': potential_bonus, 'area': part_area, 'density': bonus_density})
-        
-        temp_counts[ref] += 1
+    # Quickly count how many of each part we have already made
+    refs = part_data[:, 0]
+    unique_refs, counts = np.unique(refs, return_counts=True)
+    live_counts_arr = np.array([live_stock_counts.get(ref_hash, 0) for ref_hash in unique_refs], dtype=np.float64)
     
-    sorted_candidates = sorted(candidate_parts, key=lambda x: x['density'], reverse=True)
+    # Calculate how many parts of each type have been made so far in the simulation
+    # This creates a cumulative count for each part instance
+    counts_map = dict(zip(unique_refs, counts))
+    live_counts_map = dict(zip(unique_refs, live_counts_arr))
+    
+    # Numba JIT could be used here for a further boost if needed
+    made_counts = np.zeros(num_parts, dtype=np.float64)
+    temp_counts = live_counts_map.copy()
+    for i in range(num_parts):
+        ref = refs[i]
+        made_counts[i] = temp_counts.get(ref, 0)
+        temp_counts[ref] = temp_counts.get(ref, 0) + 1
 
-    predicted_bonus = 0.0
-    area_filled = 0.0
-    for cand in sorted_candidates:
-        if area_filled + cand['area'] <= optimistic_available_area:
-            predicted_bonus += cand['bonus']
-            area_filled += cand['area']
-        else:
-            fractional_fit = (optimistic_available_area - area_filled) / cand['area']
-            predicted_bonus += cand['bonus'] * fractional_fit
-            break
+    # Vectorized bonus calculation
+    target_stock = part_data[:, 1]
+    current_stock = part_data[:, 2]
+    part_areas = part_data[:, 3]
+    
+    initial_deficit = target_stock - current_stock
+    live_deficit = initial_deficit - made_counts
+    live_deficit[live_deficit < 0] = 0 # Cannot have negative deficit
+    target_stock[target_stock <= 0] = 1.0 # Avoid division by zero
+    
+    potential_bonus = (live_deficit / target_stock) * flat_bonus_unit * w_stock_fill
+    
+    # Calculate bonus density (bonus per unit of area)
+    # Add a small epsilon to area to prevent division by zero for zero-area parts
+    bonus_density = potential_bonus / (part_areas + 1e-9)
+
+    # --- Knapsack-like Filling ---
+    # Sort candidates by bonus density in descending order
+    sorted_indices = np.argsort(bonus_density)[::-1]
+    
+    sorted_bonuses = potential_bonus[sorted_indices]
+    sorted_areas = part_areas[sorted_indices]
+    
+    # Use cumulative sum to find how many parts fit
+    cumulative_areas = np.cumsum(sorted_areas)
+    
+    # Find index of the last part that fits completely
+    # searchsorted is very fast
+    full_fit_idx = np.searchsorted(cumulative_areas, optimistic_available_area, side='right')
+    
+    predicted_bonus = np.sum(sorted_bonuses[:full_fit_idx])
+    
+    # Add the fractional bonus for the one part that might fit partially
+    if full_fit_idx < num_parts:
+        area_filled = cumulative_areas[full_fit_idx - 1] if full_fit_idx > 0 else 0
+        remaining_area = optimistic_available_area - area_filled
+        fractional_fit = remaining_area / sorted_areas[full_fit_idx]
+        predicted_bonus += sorted_bonuses[full_fit_idx] * fractional_fit
 
     return predicted_bonus
 
@@ -803,6 +838,9 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
                 p_copy['part_id'] = part_id_counter
                 optional_parts_list.append(p_copy)
                 part_id_counter += 1
+        
+        # Pre-sort the list here, ONCE.
+        optional_parts_list.sort(key=lambda p: p.get('target_stock', 1) - p.get('current_stock', 0), reverse=True)
 
     # --- 1. ESTIMATE MAX VALUES (PRE-GREEDY) ---
     max_values = {}
