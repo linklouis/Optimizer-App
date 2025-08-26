@@ -14,7 +14,7 @@ DEFAULT_CONFIG = {
     'selected_stock_parts': [],
     'required_stock_quantities': {},
     'dark_mode': False,
-    'w_waste': 1.0, 'w_offcut': 0.5, 'w_cuts': 0.2, 'w_quantity': 0.3,
+    'w_waste': 1.0, 'w_offcut': 0.65, 'w_cuts': 0.2, 'w_quantity': 0.3,
     'w_sheets': 0.5,
     'w_stock_fill': 0.6,
     'w_unique_layouts': 0.5,

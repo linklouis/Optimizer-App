@@ -108,19 +108,23 @@ def run_optimization_task(task_id, config):
         initial_optional_parts = get_initial_optional_parts(stock_inv_df, config)
         ideal_score = calculate_ideal_score(parts_to_cut, initial_optional_parts, offcut_df, config)
 
-        def preview_callback(layouts, remaining, score, elapsed_time):
+        def preview_callback(layouts, remaining, score, elapsed_time, max_values):
             """Prepares and sends a preview of a new best solution via the progress stream."""
             final_layouts = standardize_layouts(layouts, initial_optional_parts, config) if config.get('standardize_stock_layouts', False) and layouts else layouts
-            temp_result_obj = { 'layouts': final_layouts, 'ideal_score': ideal_score }
+            temp_result_obj = { 
+                'layouts': final_layouts, 
+                'ideal_score': ideal_score,
+                'final_score': score,
+                'max_values': max_values
+            }
             updated_result_obj = recalculate_global_summary(temp_result_obj, config)
             final_score = updated_result_obj.get('final_score', score)
             score_percentage = updated_result_obj.get('score_percentage', 0.0)
             preview_result = prepare_results_for_render(
-                final_layouts, remaining, final_score, config, elapsed_time, ideal_score, score_percentage
+                final_layouts, remaining, final_score, config, elapsed_time, ideal_score, score_percentage, max_values
             )
             with tasks_lock:
                 if task_id in tasks:
-                    # Ensure progress dict exists
                     tasks[task_id].setdefault('progress', {})['best_solution_preview'] = preview_result
         
         max_offcut_quantity = 1.0
@@ -138,7 +142,7 @@ def run_optimization_task(task_id, config):
                 offcuts_with_id['type'] = 'Offcut'
                 stock_sheets.extend(offcuts_with_id.to_dict('records'))
 
-        layouts, remaining, score, final_tree_update = optimize_multiple_sheets(
+        layouts, remaining, score, final_tree_update, max_values = optimize_multiple_sheets(
             parts_to_cut, stock_sheets, config, optional_stock_parts, is_stock_only_job, progress_callback,
             max_offcut_quantity=max_offcut_quantity,
             cancellation_event=cancel_event,
@@ -148,14 +152,14 @@ def run_optimization_task(task_id, config):
         
         final_layouts = standardize_layouts(layouts, initial_optional_parts, config) if config.get('standardize_stock_layouts', False) and layouts else layouts
         
-        temp_result_obj = { 'layouts': final_layouts, 'ideal_score': ideal_score }
+        temp_result_obj = { 'layouts': final_layouts, 'ideal_score': ideal_score, 'max_values': max_values }
         
         updated_result_obj = recalculate_global_summary(temp_result_obj, config)
         final_score = updated_result_obj.get('final_score', score)
         score_percentage = updated_result_obj.get('score_percentage', 0.0)
 
         optimization_result = prepare_results_for_render(
-            final_layouts, remaining, final_score, config, opt_elapsed_time, ideal_score, score_percentage
+            final_layouts, remaining, final_score, config, opt_elapsed_time, ideal_score, score_percentage, max_values
         )
         
         if optimization_result:

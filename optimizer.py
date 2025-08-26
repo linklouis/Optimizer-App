@@ -812,7 +812,7 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
         best_score = renormalized_score
 
         if preview_callback:
-            preview_callback(greedy_layouts, [], best_score, time.time() - start_time)
+            preview_callback(greedy_layouts, [], best_score, time.time() - start_time, max_values)
             
     else:
         print("\n[WARN] Greedy seed did not find a complete solution. Using heuristic normalization.\n")
@@ -953,7 +953,7 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
                         best_score, best_solution = child_score, (child_layouts, [])
                         
                         if preview_callback:
-                            preview_callback(child_layouts, [], child_score, time.time() - start_time)
+                            preview_callback(child_layouts, [], child_score, time.time() - start_time, max_values)
 
                         tree_nodes[child_node_id]["status"] = "solution"
                         tree_update_batch[child_node_id] = new_node.copy()
@@ -1003,4 +1003,4 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
         final_layouts, remaining_parts = greedy_layouts, []
         best_score = renormalized_score
 
-    return final_layouts, remaining_parts, best_score, list(tree_update_batch.values())
+    return final_layouts, remaining_parts, best_score, list(tree_update_batch.values()), max_values
