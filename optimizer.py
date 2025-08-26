@@ -177,59 +177,145 @@ def _get_split_penalty(rect1_len: float, rect1_wid: float, rect2_len: float, rec
     return get_ratio_penalty(rect1_len, rect1_wid) + get_ratio_penalty(rect2_len, rect2_wid)
 
 
+@numba.jit(nopython=True)
+def _place_parts_in_rects_jit(
+    parts_to_place_np: np.ndarray,
+    initial_rects_np: np.ndarray,
+    kerf: float,
+    allow_rotation: bool,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Core part placement algorithm, fully optimized with Numba to work on NumPy arrays.
+    - parts_to_place_np columns: part_id, length, width
+    - rects_np columns: x, y, length, width
+    - placed_parts_np columns: part_id, x, y, length, width, rotated_flag
+    """
+    # Pre-allocate a generous array for empty rectangles.
+    # This avoids resizing, which is slow.
+    empty_rects = np.zeros((initial_rects_np.shape[0] + parts_to_place_np.shape[0] * 2, 4), dtype=np.float64)
+    empty_rects[:initial_rects_np.shape[0], :] = initial_rects_np
+    num_empty_rects = initial_rects_np.shape[0]
+
+    # Pre-allocate for placed parts
+    placed_parts = np.zeros((parts_to_place_np.shape[0], 6), dtype=np.float64)
+    num_placed_parts = 0
+
+    for i in range(parts_to_place_np.shape[0]):
+        part_id, part_length, part_width = parts_to_place_np[i]
+
+        best_rect_idx = -1
+        is_rotated = False
+
+        # --- Find Best Fit ---
+        min_short_side_fit = float('inf')
+
+        # Try without rotation
+        for j in range(num_empty_rects):
+            rect_len, rect_wid = empty_rects[j, 2], empty_rects[j, 3]
+            if part_length <= rect_len and part_width <= rect_wid:
+                short_side_fit = min(rect_len - part_length, rect_wid - part_width)
+                if short_side_fit < min_short_side_fit:
+                    min_short_side_fit = short_side_fit
+                    best_rect_idx = j
+                    is_rotated = False
+
+        # Try with rotation if allowed
+        if allow_rotation and part_length != part_width:
+            for j in range(num_empty_rects):
+                rect_len, rect_wid = empty_rects[j, 2], empty_rects[j, 3]
+                if part_width <= rect_len and part_length <= rect_wid:
+                    short_side_fit = min(rect_len - part_width, rect_wid - part_length)
+                    if short_side_fit < min_short_side_fit:
+                        min_short_side_fit = short_side_fit
+                        best_rect_idx = j
+                        is_rotated = True
+        
+        if best_rect_idx != -1:
+            part_l = part_width if is_rotated else part_length
+            part_w = part_length if is_rotated else part_width
+            
+            # Get the chosen rectangle
+            rect_x, rect_y, rect_len, rect_wid = empty_rects[best_rect_idx]
+
+            # --- Update placed_parts array ---
+            placed_parts[num_placed_parts, 0] = part_id
+            placed_parts[num_placed_parts, 1] = rect_x
+            placed_parts[num_placed_parts, 2] = rect_y
+            placed_parts[num_placed_parts, 3] = part_length # Store original dims
+            placed_parts[num_placed_parts, 4] = part_width
+            placed_parts[num_placed_parts, 5] = 1.0 if is_rotated else 0.0
+            num_placed_parts += 1
+
+            # --- Update empty_rects array ---
+            # "Pop" the used rectangle by swapping with the last one
+            empty_rects[best_rect_idx] = empty_rects[num_empty_rects - 1]
+            num_empty_rects -= 1
+
+            # Define the two possible split strategies
+            rect_above_len = rect_len - part_l - kerf
+            rect_right_of_part_wid = rect_wid - part_w - kerf
+            
+            rect_right_wid = rect_wid - part_w - kerf
+            rect_above_part_len = rect_len - part_l - kerf
+
+            # --- Simplified Split Decision (Guillotine) ---
+            # Add the two new rectangles from the split
+            if rect_above_len > 1e-6 and rect_wid > 1e-6:
+                empty_rects[num_empty_rects, 0] = rect_x
+                empty_rects[num_empty_rects, 1] = rect_y + part_l + kerf
+                empty_rects[num_empty_rects, 2] = rect_above_len
+                empty_rects[num_empty_rects, 3] = rect_wid
+                num_empty_rects += 1
+            
+            if part_l > 1e-6 and rect_right_of_part_wid > 1e-6:
+                empty_rects[num_empty_rects, 0] = rect_x + part_w + kerf
+                empty_rects[num_empty_rects, 1] = rect_y
+                empty_rects[num_empty_rects, 2] = part_l
+                empty_rects[num_empty_rects, 3] = rect_right_of_part_wid
+                num_empty_rects += 1
+
+    # Return only the active portions of the arrays
+    return placed_parts[:num_placed_parts], empty_rects[:num_empty_rects]
+
+
 def _place_parts_in_rects(parts_to_place: List[Part], initial_rects: List[Rect], 
                           kerf: float, allow_rotation: bool) -> Tuple[List[Part], List[Rect]]:
-    """Helper function to run the core part placement algorithm."""
-    placed_parts: List[Part] = []
-    empty_rects = [r.copy() for r in initial_rects]
+    """
+    Wrapper for the JIT-compiled placement function.
+    Handles conversion between Python dicts and NumPy arrays.
+    """
+    if not parts_to_place or not initial_rects:
+        return [], initial_rects
 
-    for part in parts_to_place:
-        orientations = [(part['length'], part['width'], False)]
-        if allow_rotation and part['length'] != part['width']:
-            orientations.append((part['width'], part['length'], True))
+    # Convert inputs to NumPy arrays
+    parts_np = np.array([[p['part_id'], p['length'], p['width']] for p in parts_to_place], dtype=np.float64)
+    rects_np = np.array([[r['x'], r['y'], r['length'], r['width']] for r in initial_rects], dtype=np.float64)
 
-        best_fit = {'rect_index': -1, 'orientation': None}
+    # Call the fast JIT function
+    placed_parts_np, final_rects_np = _place_parts_in_rects_jit(parts_np, rects_np, kerf, allow_rotation)
+
+    # Convert results back to Python dicts
+    # This is done only once at the end, not in a hot loop
+    part_map = {p['part_id']: p for p in parts_to_place}
+    placed_parts_list = []
+    for i in range(placed_parts_np.shape[0]):
+        part_id, x, y, length, width, rotated_flag = placed_parts_np[i]
+        original_part = part_map[part_id]
         
-        if not empty_rects:
-            continue
-        empty_rects_np = np.array([[r['length'], r['width']] for r in empty_rects], dtype=np.float64)
+        placed_part = original_part.copy()
+        placed_part.update({
+            'x': x,
+            'y': y,
+            'rotated': bool(rotated_flag)
+        })
+        placed_parts_list.append(placed_part)
 
-        for part_l, part_w, rotated in orientations:
-            rect_index = find_best_fit(part_l, part_w, empty_rects_np)
-            if rect_index != -1:
-                best_fit['rect_index'] = rect_index
-                best_fit['orientation'] = (part_l, part_w, rotated)
-                break 
-        
-        if best_fit['rect_index'] != -1:
-            part_l, part_w, rotated = best_fit['orientation']
-            
-            rect_idx = best_fit['rect_index']
-            rect = empty_rects[rect_idx]
-            
-            empty_rects[rect_idx] = empty_rects[-1]
-            empty_rects.pop()
-
-            placed_part = part.copy()
-            placed_part.update({'rotated': rotated, 'x': rect['x'], 'y': rect['y']})
-            placed_parts.append(placed_part)
-
-            rect_above = {'x': rect['x'], 'y': rect['y'] + part_l + kerf, 'length': rect['length'] - part_l - kerf, 'width': rect['width']}
-            rect_right_of_part = {'x': rect['x'] + part_w + kerf, 'y': rect['y'], 'length': part_l, 'width': rect['width'] - part_w - kerf}
-            rect_right = {'x': rect['x'] + part_w + kerf, 'y': rect['y'], 'length': rect['length'], 'width': rect['width'] - part_w - kerf}
-            rect_above_part = {'x': rect['x'], 'y': rect['y'] + part_l + kerf, 'length': rect['length'] - part_l - kerf, 'width': part_w}
-            
-            penalty1 = _get_split_penalty(rect_above['length'], rect_above['width'], rect_right_of_part['length'], rect_right_of_part['width'])
-            penalty2 = _get_split_penalty(rect_right['length'], rect_right['width'], rect_above_part['length'], rect_above_part['width'])
-
-            if penalty1 <= penalty2:
-                if rect_above['length'] > 0 and rect_above['width'] > 0: empty_rects.append(rect_above)
-                if rect_right_of_part['length'] > 0 and rect_right_of_part['width'] > 0: empty_rects.append(rect_right_of_part)
-            else:
-                if rect_right['length'] > 0 and rect_right['width'] > 0: empty_rects.append(rect_right)
-                if rect_above_part['length'] > 0 and rect_above_part['width'] > 0: empty_rects.append(rect_above_part)
-                
-    return placed_parts, empty_rects
+    final_rects_list = [
+        {'x': r[0], 'y': r[1], 'length': r[2], 'width': r[3]}
+        for r in final_rects_np
+    ]
+    
+    return placed_parts_list, final_rects_list
 
 
 def run_single_sheet_optimization(sheet_info: Dict, required_parts: List[Part], config: Dict, 
