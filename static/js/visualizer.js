@@ -549,7 +549,7 @@ class TreeVisualizer {
                     // Get the child's current distance from its parent.
                     const current_relative_dx = node.x - parent.x;
                     const current_relative_dy = node.y - parent.y;
-                    const current_distance = Math.sqrt(current_relative_dx * current_relative_dx + current_relative_dy * current_relative_dy) * 0.9;
+                    const current_distance = Math.sqrt(current_relative_dx * current_relative_dx + current_relative_dy * current_relative_dy) * 0.85;
 
                     // Calculate the ideal target position for rotation.
                     const target_x = parent.x + norm_flow_dx * current_distance;

@@ -186,6 +186,8 @@ document.addEventListener('DOMContentLoaded', function() {
             const nodesRenderedValue = document.getElementById('viz-nodes-rendered');
             const pendingUpdatesValue = document.getElementById('viz-pending-updates');
             const tickRateValue = document.getElementById('viz-tick-rate');
+            const acceptBtn = document.getElementById('accept-solution-btn');
+            const cancelBtn = document.getElementById('cancel-optimization-btn');
 
             if (!loadingOverlay) return;
 
@@ -198,6 +200,7 @@ document.addEventListener('DOMContentLoaded', function() {
             treeVisualizer = new TreeVisualizer(visualizerSvgId);
             treeVisualizer.start();
 
+            // --- Reset UI Elements ---
             progressBarFill.style.width = '0%';
             partProgressPercent.textContent = '0%';
             timeTrackerValue.textContent = '00:00';
@@ -205,6 +208,9 @@ document.addEventListener('DOMContentLoaded', function() {
             bestScoreValue.textContent = '-';
             sheetsUsedValue.textContent = '-';
             if (pendingUpdatesValue) pendingUpdatesValue.textContent = '0';
+            if (acceptBtn) acceptBtn.disabled = true;
+            if (cancelBtn) cancelBtn.disabled = false;
+
 
             try {
                 const formData = new FormData(configForm);
@@ -219,14 +225,26 @@ document.addEventListener('DOMContentLoaded', function() {
                 const eventSource = new EventSource(`/stream/${task_id}`);
                 let receivedDoneEvent = false;
 
-                // --- Attach Cancel Button Handler ---
-                const cancelBtn = document.getElementById('cancel-optimization-btn');
-                if (cancelBtn) {
-                    // Clone and replace to remove any old listeners from previous runs
-                    const newCancelBtn = cancelBtn.cloneNode(true);
-                    cancelBtn.parentNode.replaceChild(newCancelBtn, cancelBtn);
-                    newCancelBtn.addEventListener('click', () => handleCancelOptimization(task_id, eventSource));
-                }
+                // --- Attach Button Handlers ---
+                const newCancelBtn = cancelBtn.cloneNode(true);
+                cancelBtn.parentNode.replaceChild(newCancelBtn, cancelBtn);
+                newCancelBtn.addEventListener('click', () => handleCancelOptimization(task_id, eventSource));
+
+                const newAcceptBtn = acceptBtn.cloneNode(true);
+                acceptBtn.parentNode.replaceChild(newAcceptBtn, acceptBtn);
+                newAcceptBtn.addEventListener('click', async () => {
+                    newAcceptBtn.disabled = true;
+                    newCancelBtn.disabled = true;
+                    try {
+                        // Request early termination and then wait for the 'done' event to fire.
+                        await fetch(`/cancel_optimization/${task_id}`, { method: 'POST' });
+                    } catch (error) {
+                        console.error("Error sending early termination request:", error);
+                        // Re-enable buttons if the request fails
+                        newAcceptBtn.disabled = false;
+                        newCancelBtn.disabled = false;
+                    }
+                });
 
                 eventSource.addEventListener('progress', (event) => {
                     const data = JSON.parse(event.data);
@@ -246,12 +264,15 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                     if (data.nodes_explored !== undefined) nodesExploredValue.textContent = data.nodes_explored.toLocaleString();
                     if (data.current_best_score !== undefined && data.current_best_score !== null) bestScoreValue.textContent = data.current_best_score.toFixed(2);
-                    if (data.sheets_in_best_solution !== undefined && data.sheets_in_best_solution !== null) sheetsUsedValue.textContent = data.sheets_in_best_solution;
-                    // --- Update Visualizer ---
+                    
+                    if (data.sheets_in_best_solution !== undefined && data.sheets_in_best_solution !== null) {
+                        sheetsUsedValue.textContent = data.sheets_in_best_solution;
+                        if (newAcceptBtn) newAcceptBtn.disabled = false; // Enable accept button once a solution is found
+                    }
+
                     if (data.tree_update && treeVisualizer) {
                         treeVisualizer.addOrUpdateNodes(data.tree_update);
                     }
-                    // --- Update Visualizer Stats ---
                     if (treeVisualizer) {
                         if (nodesRenderedValue) nodesRenderedValue.textContent = treeVisualizer.getRenderedNodeCount().toLocaleString();
                         if (pendingUpdatesValue) pendingUpdatesValue.textContent = treeVisualizer.getPendingNodeCount().toLocaleString();
@@ -261,36 +282,28 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 eventSource.addEventListener('done', (event) => {
                     receivedDoneEvent = true;
-                    const result = JSON.parse(event.data); // Parse result first
+                    const result = JSON.parse(event.data);
 
                     if (treeVisualizer) {
-                        // Process any final node updates that arrived with the 'done' event
                         if (result && result.final_tree_update) {
                             treeVisualizer.addOrUpdateNodes(result.final_tree_update);
                         }
-                        treeVisualizer.stop(); // Stop the animation and draw the final state
+                        treeVisualizer.stop();
                     }
 
                     currentState = result;
                     stateHistory = [];
-                    // Only render if the result is not null
-                    if (result) { 
-                        renderResults(result);
-                        if(!result.error) {
-                            document.getElementById('undo-button')?.addEventListener('click', handleUndo);
-                        }
-                    } else {
-                        // If result is null, display a placeholder
-                        renderResults(null); 
+                    renderResults(result);
+                    if(result && !result.error) {
+                        document.getElementById('undo-button')?.addEventListener('click', handleUndo);
                     }
-                    // --- DEBUG: Keep visualizer open. To revert, uncomment the line below. ---
-                    // TODO: Remove this line in production
-                    // loadingOverlay.style.display = 'none';
+                    
+                    loadingOverlay.style.display = 'none';
                     eventSource.close();
                 });
 
                 eventSource.onerror = (err) => {
-                    if (receivedDoneEvent) { // If we're already done, ignore the error
+                    if (receivedDoneEvent) {
                         eventSource.close();
                         return;
                     }

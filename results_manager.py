@@ -348,3 +348,51 @@ def prepare_results_for_render(layouts, remaining_parts, final_score, config, el
         'elapsed_time': elapsed_time,
         'config': {'default_width': config['default_width'], 'default_length': config['default_length']}
     }
+
+
+def prepare_preview_summary(layouts: list, config: dict) -> dict:
+    """Creates a lightweight summary of a solution for real-time preview."""
+    if not layouts:
+        return None
+
+    grouped_layouts = {}
+    for layout in layouts:
+        sig = get_layout_signature(layout, required_only=False)
+        if sig not in grouped_layouts:
+            grouped_layouts[sig] = {
+                'layout_obj': layout,
+                'quantity': 1
+            }
+        else:
+            grouped_layouts[sig]['quantity'] += 1
+            
+    total_sheets = len(layouts)
+    num_unique_layouts = len(grouped_layouts)
+    
+    total_placed_area = sum(l.get('total_placed_area', 0) for l in layouts)
+    total_sheet_area = sum(l['sheet_info']['length'] * l['sheet_info']['width'] for l in layouts)
+    overall_yield = (total_placed_area / total_sheet_area) * 100 if total_sheet_area > 0 else 0
+    
+    first_group = next(iter(grouped_layouts.values()), None)
+    if not first_group: return None
+
+    first_layout = first_group['layout_obj']
+    sheet_info = first_layout['sheet_info']
+    sheet_area = sheet_info['length'] * sheet_info['width']
+    
+    first_layout_summary = {
+        'signature': get_layout_signature(first_layout, required_only=config.get('standardize_stock_layouts', False)),
+        'placed_parts': first_layout['placed_parts'],
+        'sheet_info': sheet_info,
+        'yield_percentage': (first_layout.get('total_placed_area', 0) / sheet_area) * 100 if sheet_area > 0 else 0,
+        'usable_offcuts': [r for r in first_layout.get('offcuts', []) if r['length'] >= config['min_offcut_dim'] and r['width'] >= config['min_offcut_dim']],
+        'quantity': first_group['quantity']
+    }
+    
+    return {
+        'total_sheets': total_sheets,
+        'num_unique_layouts': num_unique_layouts,
+        'overall_yield': overall_yield,
+        'first_layout': first_layout_summary,
+        'config': {'default_width': config.get('default_width', 48)}
+    }
