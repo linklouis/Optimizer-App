@@ -199,7 +199,7 @@ General Rules: Only include code from files that have actually been modified. If
 
 - X normalized_sheet_penalty & normalized_layout_penalty should make it clear that they're the weight (I think they are anyway)
 - make the fallback value for getting things from the config the default value
-- have the algorithm be more likely to find a satisfactory solution early on, and then allow it to work on finding better ones?
+- ✓ have the algorithm be more likely to find a satisfactory solution early on, and then allow it to work on finding better ones?
 - ---> How does the time limiting on run_single_sheet_optimization work? Can we make it ignore options that definitely won't work?
 - ----> Greedy heuristic in _place_parts_in_rects
 
