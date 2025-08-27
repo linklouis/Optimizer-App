@@ -502,6 +502,7 @@ class TreeVisualizer {
                 const distance = Math.pow(dx * dx + dy * dy, 0.3) + 1e-6; // Add small epsilon to prevent issues at zero distance
 
                 // Scale the linear force by the distance, making the final force proportional to distance squared.
+                // TODO figure out some way to have this increase approximately linearly for small to mid distances, but then be much larger for very large distances.
                 const dx_attract = dx * kAttract * distance;
                 const dy_attract = dy * kAttract * distance;
 

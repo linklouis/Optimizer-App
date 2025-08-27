@@ -212,6 +212,9 @@ document.addEventListener('DOMContentLoaded', function() {
             if (pendingUpdatesValue) pendingUpdatesValue.textContent = '0';
             if (acceptBtn) acceptBtn.disabled = true;
             if (cancelBtn) cancelBtn.disabled = false;
+            
+            const logContainer = document.getElementById('solution-log-entries');
+            if(logContainer) logContainer.innerHTML = '';
 
 
             try {
@@ -271,6 +274,41 @@ document.addEventListener('DOMContentLoaded', function() {
 
                     if (data.best_solution_preview) {
                         renderResults(data.best_solution_preview); // Render preview (non-interactive)
+                    }
+
+if (data.log_entry) {
+                        const logContainer = document.getElementById('solution-log-entries');
+                        if (logContainer) {
+                            const entry = document.createElement('div');
+                            entry.className = 'log-entry';
+                            
+                            const timeStamp = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                            const newScore = data.log_entry.new_score.toFixed(2);
+                            
+                            let message;
+                            if (data.log_entry.previous_rescored !== undefined) {
+                                const prevRescored = data.log_entry.previous_rescored.toFixed(2);
+                                message = `
+                                    <span class="log-timestamp">[${timeStamp}]</span>
+                                    <span>New best found!</span>
+                                    <span class="log-score new">Score: <strong>${newScore}</strong></span>
+                                    <span class="log-score old">(Prev. rescored: ${prevRescored})</span>
+                                `;
+                            } else {
+                                message = `
+                                    <span class="log-timestamp">[${timeStamp}]</span>
+                                    <span>Initial solution found.</span>
+                                    <span class="log-score new">Score: <strong>${newScore}</strong></span>
+                                `;
+                            }
+                            entry.innerHTML = message.trim();
+                            
+                            const isScrolledToBottom = logContainer.scrollHeight - logContainer.clientHeight <= logContainer.scrollTop + 1;
+                            logContainer.appendChild(entry);
+                            if (isScrolledToBottom) {
+                                logContainer.scrollTop = logContainer.scrollHeight;
+                            }
+                        }
                     }
 
                     if (data.tree_update && treeVisualizer) {

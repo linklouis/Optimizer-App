@@ -10,7 +10,7 @@ import pstats
 import threading
 
 from data_processing import process_uploaded_files, extract_hhos_data
-from optimizer import optimize_multiple_sheets
+from optimizer import optimize_multiple_sheets, _update_bounding_parameters_from_solution
 from config_manager import load_config, save_config, update_config_from_form, DEFAULT_CONFIG
 from geometry_utils import find_all_empty_rectangles, consolidate_empty_space
 from results_manager import (
@@ -112,25 +112,48 @@ def run_optimization_task(task_id, config):
         stock_sheets = [{'id': 'default_sheet', 'length': config['default_length'], 'width': config['default_width'], 'quantity': float('inf'), 'type': 'Default'}]
         initial_optional_parts = get_initial_optional_parts(stock_inv_df, config)
         ideal_score = calculate_ideal_score(parts_to_cut, initial_optional_parts, offcut_df, config)
+        
+        # --- Data for callbacks ---
+        total_initial_parts = sum(p.get('quantity', 1) for p in parts_to_cut)
+        reference_area = config['default_length'] * config['default_width']
 
-        def preview_callback(layouts, remaining, score, elapsed_time, max_values):
-            """Prepares and sends a preview of a new best solution via the progress stream."""
-            final_layouts = standardize_layouts(layouts, initial_optional_parts, config) if config.get('standardize_stock_layouts', False) and layouts else layouts
-            temp_result_obj = { 
-                'layouts': final_layouts, 
-                'ideal_score': ideal_score,
-                'final_score': score,
-                'max_values': max_values
-            }
-            updated_result_obj = recalculate_global_summary(temp_result_obj, config)
-            final_score = updated_result_obj.get('final_score', score)
-            score_percentage = updated_result_obj.get('score_percentage', 0.0)
-            preview_result = prepare_results_for_render(
-                final_layouts, remaining, final_score, config, elapsed_time, ideal_score, score_percentage, max_values
+        def preview_callback(layouts, remaining, score, elapsed_time, max_values, previous_layouts=None):
+            """Prepares and sends a preview and a log entry of a new best solution."""
+            # --- Start: Log Generation Logic ---
+            # This logic handles the complexity of a dynamic scoring system. When a new, better
+            # solution is found, the parameters for normalizing the score (max_values) are updated.
+            # To provide a fair "apples-to-apples" comparison for the log, we must rescore both
+            # the new solution AND the previous one against the SAME updated normalization parameters.
+            log_entry = {}
+            # 1. Calculate the new max_values based on the new best solution
+            new_max_values, _ = _update_bounding_parameters_from_solution(
+                layouts, config, total_initial_parts, optional_stock_parts, reference_area, max_values
             )
+            # 2. Rescore the new solution with its corresponding new max_values
+            new_temp_obj = {'layouts': layouts, 'ideal_score': ideal_score, 'max_values': new_max_values}
+            new_recalculated = recalculate_global_summary(new_temp_obj, config)
+            log_entry['new_score'] = new_recalculated.get('final_score', 0)
+
+            # 3. Rescore the previous solution using the new max_values for a fair comparison
+            if previous_layouts:
+                prev_temp_obj = {'layouts': previous_layouts, 'ideal_score': ideal_score, 'max_values': new_max_values}
+                prev_recalculated = recalculate_global_summary(prev_temp_obj, config)
+                log_entry['previous_rescored'] = prev_recalculated.get('final_score', 0)
+            # --- End: Log Generation Logic ---
+
+            final_layouts = standardize_layouts(layouts, initial_optional_parts, config) if config.get('standardize_stock_layouts', False) and layouts else layouts
+            
+            # Use the already calculated score and max_values for the preview render object
+            score_percentage = new_recalculated.get('score_percentage', 0.0)
+            preview_result = prepare_results_for_render(
+                final_layouts, remaining, log_entry['new_score'], config, elapsed_time, ideal_score, score_percentage, new_max_values
+            )
+            
             with tasks_lock:
                 if task_id in tasks:
-                    tasks[task_id].setdefault('progress', {})['best_solution_preview'] = preview_result
+                    progress = tasks[task_id].setdefault('progress', {})
+                    progress['best_solution_preview'] = preview_result
+                    progress['log_entry'] = log_entry # Add log entry to progress data
         
         max_offcut_quantity = 1.0
         if offcut_df is not None and not offcut_df.empty and 'quantity' in offcut_df.columns:

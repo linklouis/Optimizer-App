@@ -158,7 +158,7 @@
                                     <div class="stock-item">
                                         <input type="checkbox" name="selected_offcuts" id="offcut_{{ offcut.id }}" value="{{ offcut.id }}" {% if offcut.id in config.selected_offcuts %}checked{% endif %}>
                                         <div class="stock-item-details">
-                                            <strong>{{ offcut.length|round(2) }} x {{ offcut.width|round(2) }}</strong>
+                                            <strong>{{ offcut.length|round(3) }} x {{ offcut.width|round(3) }}</strong>
                                             <span class="stock-status">(Qty: {{ offcut.quantity | int }})</span>
                                         </div>
                                         <div class="stock-item-qty">
@@ -193,7 +193,7 @@
                                         <input type="checkbox" name="selected_stock_parts" id="stock_{{ part.internal_ref }}" value="{{ part.internal_ref }}" {% if part.internal_ref in config.selected_stock_parts %}checked{% endif %}>
                                         <div class="stock-item-details">
                                             <strong>{{ part.part_name_clean or 'Unnamed Part' }}</strong>
-                                            <span>{{ part.length|round(2) }} x {{ part.width|round(2) }}</span>
+                                            <span>{{ part.length|round(3) }} x {{ part.width|round(3) }}</span>
                                             <span class="stock-status">(Need: {{ (part.target_stock - part.current_stock) | int }})</span>
                                         </div>
                                         <div class="stock-item-qty">
@@ -326,9 +326,24 @@
                                     <span class="stat-value" id="sheets-used-value">-</span>
                                 </div>
                             </div>
+
+                            <div id="solution-log-container" class="solution-log-container">
+                                <div class="log-header">
+                                    <i class="fa-solid fa-clipboard-list"></i> Solution Log
+                                </div>
+                                <div id="solution-log-entries" class="solution-log-entries">
+                                    </div>
+                            </div>
                             
                             <p class="loading-tip">
+                                <!-- TODO have these be chosen randomly -->
                                 <strong>Tip:</strong> Allowing more search time can improve material yield and reduce waste.
+                                <strong>Tip:</strong> The visualization on the right shows the optimizer's search path in real-time.
+                                <strong>Tip:</strong> You can stop the optimization early and accept the best solution found so far.
+                                <strong>Tip:</strong> The "Branching Factor" setting controls how many layout options are explored at each step. Higher values may yield better results but take longer.
+                                <strong>Tip:</strong> The "Max Unique Layouts" setting limits the number of different cutting patterns used. Setting it to 0 removes the limit.
+                                <strong>Tip:</strong> You can adjust scoring weights to prioritize different aspects of the solution, such as minimizing waste or using offcuts.
+                                <strong>Tip:</strong> The scoring system adapts as better solutions are found. A new "best score" might look lower than a previous one because the normalization scale has become stricter. The Solution Log provides a direct, apples-to-apples comparison.
                             </p>
                             
                             <div class="loading-actions">

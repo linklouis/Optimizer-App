@@ -20,7 +20,7 @@ function renderResults(result) {
         <div class="summary-metric"><span class="value">${result.score_percentage.toFixed(1)}%</span><span class="label">Overall Score<span class="tooltip" data-tooltip="Actual: ${result.final_score.toFixed(2)} | Ideal: ${result.ideal_score.toFixed(2)}">[?]</span></span></div>
         <div class="summary-metric"><span class="value">${totalSheets}</span><span class="label">Total Sheets Used</span></div>
         <div class="summary-metric"><span class="value">${result.num_unique_layouts}</span><span class="label">Unique Layouts</span></div>
-        <div class="summary-metric"><span class="value">${result.overall_yield.toFixed(2)}%</span><span class="label">Overall Yield</span></div>
+        <div class="summary-metric"><span class="value">${result.overall_yield.toFixed(3)}%</span><span class="label">Overall Yield</span></div>
         <div class="summary-metric"><span class="value">${result.elapsed_time.toFixed(2)}s</span><span class="label">Time Spent</span></div>
         <div class="summary-metric ${result.remaining_parts.length > 0 ? 'is-alert' : ''}"><span class="value">${result.remaining_parts.length}</span><span class="label">Parts Not Placed</span></div>
         <div class="summary-metric action-metric">
@@ -63,8 +63,8 @@ function renderResults(result) {
             let dimLabels = '';
             if (p_wid > 8 && p_len > 8) {
                 const textOffset = 1.5;
-                dimLabels += `<text class="inner-dim-text" x="${p_wid/2}" y="${textOffset}" dominant-baseline="hanging" text-anchor="middle">${p_wid.toFixed(2)}</text>`;
-                dimLabels += `<text class="inner-dim-text" x="${textOffset}" y="${p_len/2}" transform="rotate(-90, ${textOffset}, ${p_len/2})" dominant-baseline="middle" text-anchor="middle">${p_len.toFixed(2)}</text>`;
+                dimLabels += `<text class="inner-dim-text" x="${p_wid/2}" y="${textOffset}" dominant-baseline="hanging" text-anchor="middle">${p_wid.toFixed(3)}</text>`;
+                dimLabels += `<text class="inner-dim-text" x="${textOffset}" y="${p_len/2}" transform="rotate(-90, ${textOffset}, ${p_len/2})" dominant-baseline="middle" text-anchor="middle">${p_len.toFixed(3)}</text>`;
             }
 
             svgContent += `<g class="part-group interactive-item" transform="translate(${part.x},${svg_y})" data-item-index="${index}" data-item-type="${itemType}">
@@ -87,8 +87,8 @@ function renderResults(result) {
             let dimLabels = '';
             if (o_wid > 8 && o_len > 8) {
                 const textOffset = 1.5;
-                dimLabels += `<text class="inner-dim-text" x="${o_wid/2}" y="${textOffset}" dominant-baseline="hanging" text-anchor="middle">${o_wid.toFixed(2)}</text>`;
-                dimLabels += `<text class="inner-dim-text" x="${textOffset}" y="${o_len/2}" transform="rotate(-90, ${textOffset}, ${o_len/2})" dominant-baseline="middle" text-anchor="middle">${o_len.toFixed(2)}</text>`;
+                dimLabels += `<text class="inner-dim-text" x="${o_wid/2}" y="${textOffset}" dominant-baseline="hanging" text-anchor="middle">${o_wid.toFixed(3)}</text>`;
+                dimLabels += `<text class="inner-dim-text" x="${textOffset}" y="${o_len/2}" transform="rotate(-90, ${textOffset}, ${o_len/2})" dominant-baseline="middle" text-anchor="middle">${o_len.toFixed(3)}</text>`;
             }
 
             svgContent += `<g class="offcut-group interactive-item" transform="translate(${offcut.x},${svg_y})" data-item-index="${index}" data-item-type="offcut">

@@ -2,8 +2,9 @@ import math
 from collections import Counter
 import pandas as pd
 
-# NOTE: The dependency on optimizer.calculate_layout_score for standardization is maintained.
-from optimizer import calculate_layout_score, get_layout_signature
+# NOTE: The dependency on optimizer is now broken. All shared utils are in scoring_utils.
+from optimizer import calculate_layout_score
+from scoring_utils import get_layout_signature, calculate_solution_score
 
 # --- NEW HELPERS FOR NORMALIZED SCORE CALCULATION ---
 
@@ -42,7 +43,6 @@ def _estimate_max_values(all_parts: list, optional_stock_parts: list, offcut_df:
     reference_area = config.get('default_length', 96) * config.get('default_width', 48)
     if reference_area <= 0: return {}
 
-    # Expand all parts to get counts
     expanded_parts = []
     for part in all_parts:
         for _ in range(int(part.get('quantity', 1))):
@@ -61,7 +61,6 @@ def _estimate_max_values(all_parts: list, optional_stock_parts: list, offcut_df:
     flat_bonus_unit = config.get('w_stock_fill_item_bonus', 0.05)
     temp_counts = Counter()
     
-    # Expand optional parts for accurate bonus calculation
     expanded_optional = []
     for part in optional_stock_parts:
         deficit = int(part.get('target_stock', 1) - part.get('current_stock', 0))
@@ -158,11 +157,6 @@ def calculate_ideal_score(parts_to_cut: list, optional_stock_parts: list, offcut
     Calculates a realistic ideal score by simulating a greedy packing strategy
     and scoring it with the same normalized method as the optimizer.
     """
-    kerf = config.get('kerf', 0.125)
-    allow_rotation = config.get('allow_rotation', True)
-    min_offcut_dim = config.get('min_offcut_dim', 0)
-
-    # 1. Prepare parts and estimate max_values for normalization
     all_parts_for_max = parts_to_cut + optional_stock_parts
     max_values = _estimate_max_values(all_parts_for_max, optional_stock_parts, offcut_df, config)
     if not max_values: return 0.0
@@ -177,15 +171,12 @@ def calculate_ideal_score(parts_to_cut: list, optional_stock_parts: list, offcut
             part_id_counter += 1
     
     expanded_parts.sort(key=lambda p: p['length'] * p['width'], reverse=True)
-    
     parts_to_place_ids = {p['part_id'] for p in expanded_parts}
-    
     simulated_layouts = []
     
     def get_parts_to_place():
         return [p for p in expanded_parts if p['part_id'] in parts_to_place_ids]
 
-    # 2. Simulate placing parts on offcuts
     if config.get('use_offcuts') and offcut_df is not None and not offcut_df.empty:
         selected_ids = [int(i) for i in config.get('selected_offcuts', [])]
         available_offcuts = offcut_df.loc[offcut_df.index.isin(selected_ids)].copy()
@@ -199,71 +190,19 @@ def calculate_ideal_score(parts_to_cut: list, optional_stock_parts: list, offcut
                 for _ in range(int(offcut.get('quantity', 1))):
                     if not parts_to_place_ids: break
                     
-                    placed = _greedy_packer(offcut, get_parts_to_place(), kerf, allow_rotation)
+                    placed = _greedy_packer(offcut, get_parts_to_place(), config['kerf'], config['allow_rotation'])
                     if placed:
                         simulated_layouts.append({'placed_parts': placed, 'sheet_info': offcut})
                         for p in placed: parts_to_place_ids.remove(p['part_id'])
 
-    # 3. Simulate placing remaining parts on default sheets
     default_sheet = {'length': config['default_length'], 'width': config['default_width'], 'type': 'Default'}
     while parts_to_place_ids:
-        placed = _greedy_packer(default_sheet, get_parts_to_place(), kerf, allow_rotation)
+        placed = _greedy_packer(default_sheet, get_parts_to_place(), config['kerf'], config['allow_rotation'])
         if not placed: break
         simulated_layouts.append({'placed_parts': placed, 'sheet_info': default_sheet})
         for p in placed: parts_to_place_ids.remove(p['part_id'])
 
-    # 4. Score the simulated result using normalized scoring
-    raw = Counter()
-    live_stock_counts = Counter()
-    flat_bonus_unit = config.get('w_stock_fill_item_bonus', 0.05)
-
-    for layout in simulated_layouts:
-        sheet_info = layout['sheet_info']
-        sheet_area = sheet_info['length'] * sheet_info['width']
-        placed_area = sum(p['length'] * p['width'] for p in layout['placed_parts'])
-        
-        # A simple offcut calculation for the simulation
-        offcut_area = sheet_area - placed_area
-        raw['waste_area'] += offcut_area # For ideal score, all leftover is considered waste
-        raw['cuts'] += _count_guillotine_cuts(layout)
-        
-        if sheet_info.get('type') != 'Default':
-            raw['quantity_bonus'] += float(sheet_info.get('quantity', 1))
-            offcut_id_str = str(sheet_info.get('id', ''))
-            if offcut_id_str in config.get('prioritized_offcuts', []):
-                raw['priority_bonus'] += 1.0
-
-        for part in sorted(layout['placed_parts'], key=lambda p: p.get('part_id', 0)):
-            if not part.get('is_stock_part'): continue
-            ref = part['internal_ref']
-            initial_deficit = part.get('target_stock', 1) - part.get('current_stock', 0)
-            target = part.get('target_stock', 0)
-            if target <= 0: continue
-            
-            count_already_made = live_stock_counts.get(ref, 0)
-            live_deficit = initial_deficit - count_already_made
-            if live_deficit > 0:
-                raw['stock_bonus'] += (live_deficit / target) * flat_bonus_unit
-            live_stock_counts[ref] += 1
-            
-    # Normalize and sum components
-    norm = Counter()
-    if max_values.get('waste_area', 0) > 0:
-        norm['area_score'] = - (raw['waste_area'] / max_values['waste_area']) * config.get('w_waste', 1.0)
-    if max_values.get('stock_bonus', 0) > 0:
-        norm['stock_bonus'] = (raw['stock_bonus'] / max_values['stock_bonus']) * config.get('w_stock_fill', 1.0)
-    if max_values.get('quantity_bonus', 0) > 0:
-        norm['quantity_bonus'] = (raw['quantity_bonus'] / max_values['quantity_bonus']) * config.get('w_quantity', 0.1)
-    if max_values.get('priority_bonus', 0) > 0:
-        norm['priority_bonus'] = (raw['priority_bonus'] / max_values['priority_bonus']) * config.get('w_priority_offcut', 10.0)
-    if max_values.get('sheets', 0) > 0:
-        norm['sheets_penalty'] = - (len(simulated_layouts) / max_values['sheets']) * config.get('w_sheets', 1.0)
-    if max_values.get('layouts', 0) > 0:
-        norm['layouts_penalty'] = - (len(simulated_layouts) / max_values['layouts']) * config.get('w_unique_layouts', 0.5)
-    if max_values.get('cuts', 0) > 0:
-        norm['cuts_penalty'] = - (raw['cuts'] / max_values['cuts']) * config.get('w_cuts', 0.2)
-
-    return sum(norm.values())
+    return calculate_solution_score(simulated_layouts, max_values, config)
 
 # --- REBUILT GLOBAL SUMMARY RECALCULATION ---
 
@@ -277,12 +216,7 @@ def recalculate_global_summary(result_obj, config):
 
     total_placed_area = 0
     total_sheet_area = 0
-    total_sheets = 0
-    raw = Counter()
-    live_stock_counts = Counter()
-    flat_bonus_unit = config.get('w_stock_fill_item_bonus', 0.05)
-
-    # First pass: calculate areas and yields for individual layouts
+    
     for layout in layouts:
         quantity = layout.get('quantity', 1)
         sheet_info = layout['sheet_info']
@@ -294,74 +228,13 @@ def recalculate_global_summary(result_obj, config):
         
         total_placed_area += layout['total_placed_area'] * quantity
         total_sheet_area += sheet_area * quantity
-        total_sheets += quantity
 
-    # Second pass: calculate raw components for scoring, iterating through each copy of a layout
-    for _i in range(int(total_sheets)):
-        # This approach ensures stock bonus is calculated correctly based on live deficit
-        # Find which layout this sheet corresponds to
-        sheet_counter = 0
-        current_layout = None
-        for layout in layouts:
-            sheet_counter += layout.get('quantity', 1)
-            if _i < sheet_counter:
-                current_layout = layout
-                break
-        if not current_layout: continue # Should not happen
-
-        sheet_info = current_layout['sheet_info']
-        sheet_area = sheet_info['length'] * sheet_info['width']
-        offcut_area = sum(o['length'] * o['width'] for o in current_layout['usable_offcuts'])
-        
-        raw['waste_area'] += sheet_area - current_layout['total_placed_area'] - offcut_area
-        raw['offcut_area'] += offcut_area
-        raw['cuts'] += _count_guillotine_cuts(current_layout)
-        
-        if sheet_info.get('type') != 'Default':
-            raw['quantity_bonus'] += float(sheet_info.get('quantity', 1))
-            offcut_id_str = str(sheet_info.get('id', '')).replace('offcut_', '')
-            if offcut_id_str in config.get('prioritized_offcuts', []):
-                raw['priority_bonus'] += 1.0
-        
-        for part in sorted(current_layout['placed_parts'], key=lambda p: p.get('part_id', 0)):
-            if not part.get('is_stock_part'): continue
-            ref = part['internal_ref']
-            initial_deficit = part.get('target_stock', 1) - part.get('current_stock', 0)
-            target = part.get('target_stock', 0)
-            if target <= 0: continue
-            
-            count_already_made = live_stock_counts.get(ref, 0)
-            live_deficit = initial_deficit - count_already_made
-            if live_deficit > 0:
-                raw['stock_bonus'] += (live_deficit / target) * flat_bonus_unit
-            live_stock_counts[ref] += 1
-
-    # Normalize and sum components if max_values is available
-    if max_values:
-        norm = Counter()
-        if max_values.get('waste_area', 0) > 0:
-            norm['area_score'] = -(
-                (raw['waste_area'] / max_values['waste_area']) * config.get('w_waste', 1.0) +
-                (raw['offcut_area'] / max_values['offcut_area']) * config.get('w_offcut', 0.5)
-            )
-        if max_values.get('stock_bonus', 0) > 0:
-            norm['stock_bonus'] = (raw['stock_bonus'] / max_values['stock_bonus']) * config.get('w_stock_fill', 1.0)
-        if max_values.get('quantity_bonus', 0) > 0:
-            norm['quantity_bonus'] = (raw['quantity_bonus'] / max_values['quantity_bonus']) * config.get('w_quantity', 0.1)
-        if max_values.get('priority_bonus', 0) > 0:
-            norm['priority_bonus'] = (raw['priority_bonus'] / max_values['priority_bonus']) * config.get('w_priority_offcut', 10.0)
-        if max_values.get('sheets', 0) > 0:
-            norm['sheets_penalty'] = - (total_sheets / max_values['sheets']) * config.get('w_sheets', 1.0)
-        if max_values.get('layouts', 0) > 0:
-            norm['layouts_penalty'] = - (len(layouts) / max_values['layouts']) * config.get('w_unique_layouts', 0.5)
-        if max_values.get('cuts', 0) > 0:
-            norm['cuts_penalty'] = - (raw['cuts'] / max_values['cuts']) * config.get('w_cuts', 0.2)
-        
-        result_obj['final_score'] = sum(norm.values())
+    # Use the single source of truth for scoring
+    result_obj['final_score'] = calculate_solution_score(layouts, max_values, config)
     
     # Update summary stats
     result_obj['overall_yield'] = (total_placed_area / total_sheet_area) * 100 if total_sheet_area > 0 else 0
-    result_obj['num_unique_layouts'] = len(layouts)
+    result_obj['num_unique_layouts'] = len({get_layout_signature(l) for l in layouts}) if layouts else 0
 
     ideal_score = result_obj.get('ideal_score', 0)
     final_score = result_obj.get('final_score', -float('inf'))
@@ -378,7 +251,6 @@ def recalculate_global_summary(result_obj, config):
 def _calculate_live_stock_bonus(layout: dict, live_deficit_tracker: Counter, config: dict) -> float:
     """
     Calculates the stock fill bonus for a layout variation during standardization.
-    This ensures the best variation is chosen based on its ability to fill needed stock parts.
     """
     stock_fill_bonus = 0.0
     reference_area = config.get('default_length', 96) * config.get('default_width', 48)
@@ -414,7 +286,6 @@ def standardize_layouts(layouts: list, initial_optional_parts: list, config: dic
         for v in unique_variations:
             is_stock_only_job = not any(not p.get('is_optional_filler', False) for p in v['placed_parts'])
             reference_area = config['default_length'] * config['default_width']
-            # Note: This uses the old calculate_layout_score for local comparison, which is fine for standardization.
             base_score = calculate_layout_score(v, v['sheet_info'], config, config['min_offcut_dim'], reference_area, 1.0, is_stock_only_job)
             
             stock_bonus_to_remove = 0.0
@@ -449,9 +320,6 @@ def standardize_layouts(layouts: list, initial_optional_parts: list, config: dic
 def prepare_results_for_render(layouts, remaining_parts, final_score, config, elapsed_time, ideal_score, score_percentage, max_values=None):
     if not layouts: return None
     
-    # We can rely on the summary calculated just before this call.
-    # We just need to group the layouts for rendering.
-    
     grouped_layouts = {}
     for layout in layouts:
         use_required_sig = config.get('standardize_stock_layouts', False)
@@ -478,7 +346,6 @@ def prepare_results_for_render(layouts, remaining_parts, final_score, config, el
         else:
             grouped_layouts[signature]['quantity'] += 1
     
-    # Calculate overall yield from grouped layouts
     total_placed_area_final = sum(l['quantity'] * sum(p['length'] * p['width'] for p in l['placed_parts']) for l in grouped_layouts.values())
     total_sheet_area_final = sum(l['quantity'] * l['sheet_info']['length'] * l['sheet_info']['width'] for l in grouped_layouts.values())
     overall_yield = (total_placed_area_final / total_sheet_area_final) * 100 if total_sheet_area_final > 0 else 0

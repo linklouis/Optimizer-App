@@ -748,3 +748,61 @@ body.dark-mode .btn-accept:hover:not(:disabled) {
 }
 
 
+
+/* --- Solution Log Styles --- */
+.solution-log-container {
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    background-color: var(--bg-primary);
+    display: flex;
+    flex-direction: column;
+    max-height: 140px; /* Limit height */
+}
+
+.log-header {
+    padding: 0.5rem 0.75rem;
+    font-weight: 600;
+    font-size: 0.9rem;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    background-color: var(--bg-secondary);
+    border-radius: 0.5rem 0.5rem 0 0;
+    flex-shrink: 0;
+}
+.log-header i {
+    margin-right: 0.5rem;
+    color: var(--primary);
+}
+
+.solution-log-entries {
+    padding: 0.5rem;
+    overflow-y: auto; /* Enable scrolling */
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+
+.log-entry {
+    font-family: monospace;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    align-items: baseline;
+    padding: 0.2rem 0.25rem;
+    border-radius: 0.25rem;
+}
+
+.log-entry:nth-child(odd) {
+    background-color: rgba(var(--bg-secondary-rgb), 0.5);
+}
+
+.log-entry .log-score.new strong {
+    color: var(--success);
+}
+
+.log-entry .log-score.old {
+    opacity: 0.8;
+}
