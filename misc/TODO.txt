@@ -79,6 +79,7 @@ FEATURES
         - Parts on the Results tab should always be displayed at the same size
         - Hovering over a part should highlight it in red, so it's obvious clicking will delete it.
         - ---------> Display the lines for the cuts
+        - -----> All nodes directly attached to the root freeze after like 300 ticks?
 
 CODE
     - ✓ Start separating some of the big files (index, app)
@@ -116,9 +117,9 @@ BUGS
     - ✓ Tree visualizer fucking explodes when using a branching factor >1
     - ✓ Reset to defaults button only works once, and then you have to reload the page if you want to use it again?
 
-Here are the next bugs/updates to address, as well as the current versions of the files.
     - The calculated ideal score is several orders of magnitude smaller than the true score.
     - The stock part standardization doesn't seem to affect the final score.
+    - Only ever seems to show the same tip?
 
 MISC
     - X Change default branching factor to 2 or 3.

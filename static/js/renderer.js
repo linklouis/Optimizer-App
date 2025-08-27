@@ -30,12 +30,20 @@ function renderResults(result) {
     const grid = document.createElement('div');
     grid.className = 'results-grid';
     const cardTemplate = document.getElementById('layout-card-template');
-    const max_card_width = 450;
+    const SVG_BASE_WIDTH = 450;
     const default_width = result.config.default_width;
+    // The scale must be based on the viewBox dimensions, which include 4 units of horizontal padding.
+    const PIXELS_PER_UNIT = SVG_BASE_WIDTH / (default_width + 4);
+    // This value must match the total horizontal padding of .layout-card in style.css (1rem left + 1rem right).
+    const CARD_HORIZONTAL_PADDING = '2rem'; 
+
     result.layouts.forEach(layout => {
         const card = cardTemplate.content.cloneNode(true).querySelector('.layout-card');
         const sheet = layout.sheet_info;
-        card.style.width = `${(sheet.width / default_width) * max_card_width}px`;
+        
+        const viewBoxWidth = sheet.width + 4;
+        const svgContentWidth = viewBoxWidth * PIXELS_PER_UNIT;
+        card.style.width = `calc(${svgContentWidth}px + ${CARD_HORIZONTAL_PADDING})`;
         card.dataset.layoutSignature = layout.signature;
         card.querySelector('.layout-title').innerHTML = `${sheet.type} ${sheet.length.toFixed(1)}x${sheet.width.toFixed(1)} | x<span>${layout.quantity}</span> | Yield: <span>${layout.yield_percentage.toFixed(2)}</span>%`;
         const svg = card.querySelector('svg');
