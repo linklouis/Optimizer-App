@@ -480,9 +480,12 @@ def _calculate_optimistic_stock_bonus(remaining_parts: list, optional_parts_data
     if optional_parts_data.shape[0] == 0 or (not remaining_parts and is_mixed_job):
         return 0.0
 
-    estimated_sheets = _get_min_sheets_for_parts(remaining_parts, reference_area)
-    total_future_area = estimated_sheets * reference_area
+    # Be more generous about future available space for stock parts by assuming a more
+    # moderate overall packing density (e.g., 75%) for the estimate.
+    packing_density_for_stock = 0.75 
     required_parts_area = sum(p['length'] * p['width'] for p in remaining_parts)
+    total_future_area = (required_parts_area / packing_density_for_stock) if packing_density_for_stock > 0 else 0
+
     optimistic_available_area = max(0, total_future_area - required_parts_area)
 
     if optimistic_available_area <= 0:
@@ -634,28 +637,41 @@ def _calculate_bound(remaining_parts: list, current_score: float, config: Dict[s
     if packing_density == 0: packing_density = 0.9
     predicted_sheets = math.ceil(remaining_area / (packing_density * reference_area)) if reference_area > 0 else float('inf')
 
-    waste_rate = 1.0 - packing_density
-    predicted_waste_area = predicted_sheets * reference_area * waste_rate
+    # Predict future waste AND offcuts based on learned rates
+    predicted_total_sheet_area = predicted_sheets * reference_area
+    predicted_unused_area = max(0, predicted_total_sheet_area - remaining_area)
+    offcut_ratio = learned_rates.get('offcut_ratio', 0.1)
+    
+    predicted_offcut_area = predicted_unused_area * offcut_ratio
+    predicted_waste_area = predicted_unused_area * (1 - offcut_ratio)
     
     cuts_per_part = learned_rates.get('cuts_per_part', 1.2)
     predicted_cuts = len(remaining_parts) * cuts_per_part
+
+    # Predict future quantity_bonus based on a learned rate
+    avg_quantity_bonus_per_sheet = learned_rates.get('avg_quantity_bonus_per_sheet', 0.0)
+    raw_quantity_bonus = avg_quantity_bonus_per_sheet * predicted_sheets
 
     optimistic_new_layouts = _predict_number_of_new_sheet_layouts(remaining_parts, used_signatures, reference_area, config)
     raw_stock_bonus = _calculate_optimistic_stock_bonus(
         remaining_parts, optional_parts_data_for_bound, live_stock_counts, config, reference_area
     )
 
+    # Calculate all score components
     area_penalty = (predicted_waste_area / max_values['waste_area']) * config.get('w_waste', 1.0)
+    offcut_penalty = (predicted_offcut_area / max_values['offcut_area']) * config.get('w_offcut', 0.5)
     stock_bonus = (raw_stock_bonus / max_values['stock_bonus']) * config.get('w_stock_fill', 1.0)
+    quantity_bonus = (raw_quantity_bonus / max_values['quantity_bonus']) * config.get('w_quantity', 0.1)
     sheets_penalty = (predicted_sheets / max_values['sheets']) * config.get('w_sheets', 1.0)
     layouts_penalty = (optimistic_new_layouts / max_values['layouts']) * config.get('w_unique_layouts', 0.5)
     cuts_penalty = (predicted_cuts / max_values['cuts']) * config.get('w_cuts', 0.2)
 
-    upper_bound = (current_score + stock_bonus - area_penalty - sheets_penalty - layouts_penalty - cuts_penalty)
+    upper_bound = (current_score + stock_bonus + quantity_bonus - area_penalty - offcut_penalty - sheets_penalty - layouts_penalty - cuts_penalty)
 
     if debugger:
         debugger.log_predicted_scores({
-            'area_score': -area_penalty, 'stock_bonus': stock_bonus, 'quantity_bonus': 0.0,
+            'area_score': -area_penalty - offcut_penalty,
+            'stock_bonus': stock_bonus, 'quantity_bonus': quantity_bonus,
             'priority_bonus': 0.0, 'sheets_penalty': -sheets_penalty,
             'layouts_penalty': -layouts_penalty, 'cuts_penalty': -cuts_penalty
         })
@@ -775,6 +791,7 @@ def _update_bounding_parameters_from_solution(solution_layouts: list, config: di
     max_values dictionary used for score normalization and bounding.
     """
     updated_max_values = current_max_values.copy()
+    min_offcut_dim = config['min_offcut_dim']
     
     total_parts_in_solution = sum(len(l['placed_parts']) for l in solution_layouts)
     total_cuts_in_solution = sum(_count_guillotine_cuts(l) for l in solution_layouts)
@@ -783,31 +800,47 @@ def _update_bounding_parameters_from_solution(solution_layouts: list, config: di
     sheet_count = len(solution_layouts)
     total_placed_area = sum(p['length'] * p['width'] for l in solution_layouts for p in l['placed_parts'])
     total_sheet_area = sheet_count * reference_area
-    packing_density = total_placed_area / total_sheet_area * 1.1 if total_sheet_area > 0 else 0.95
     
+    base_density = total_placed_area / total_sheet_area if total_sheet_area > 0 else 0.85
+    stable_density = (base_density * 0.7) + (0.85 * 0.3)
+    packing_density = min(stable_density + 0.1, 0.98)
+    
+    total_offcut_area = sum(o['length'] * o['width'] for l in solution_layouts for o in l['offcuts'] if o['length'] >= min_offcut_dim and o['width'] >= min_offcut_dim)
+    total_unused_area = total_sheet_area - total_placed_area
+    offcut_ratio = total_offcut_area / total_unused_area if total_unused_area > 0 else 0.0
+    
+    # Learn the average raw quantity bonus achieved per sheet
+    raw_quantity_bonus = sum(float(l['sheet_info'].get('quantity', 1)) for l in solution_layouts if l['sheet_info'].get('type') != 'Default')
+    avg_quantity_bonus_per_sheet = raw_quantity_bonus / sheet_count if sheet_count > 0 else 0.0
+
     layout_count = len({get_layout_signature(l, required_only=False) for l in solution_layouts})
     layouts_per_sheet_ratio = layout_count / sheet_count if sheet_count > 0 else 1.0
 
     new_learned_rates = {
         'packing_density': packing_density,
-        'cuts_per_part': cuts_per_part_ratio
+        'cuts_per_part': cuts_per_part_ratio,
+        'offcut_ratio': offcut_ratio,
+        'avg_quantity_bonus_per_sheet': avg_quantity_bonus_per_sheet
     }
 
     absolute_max_parts = total_initial_parts + len(optional_parts_list)
-    projected_max_cuts = (absolute_max_parts * cuts_per_part_ratio) #* 1.25 # 25% buffer
+    projected_max_cuts = (absolute_max_parts * cuts_per_part_ratio)
     updated_max_values['cuts'] = max(current_max_values.get('cuts', 0), projected_max_cuts)
     
     total_possible_parts_area = sum(p['length'] * p['width'] for p in (optional_parts_list or []))
     if 'total_initial_parts_area' in current_max_values:
         total_possible_parts_area += current_max_values['total_initial_parts_area']
     
-    projected_density = packing_density * 1.1   # Assume the optimal can be 10% better
+    projected_density = packing_density
     if projected_density > 0 and reference_area > 0:
         projected_max_sheets = math.ceil(total_possible_parts_area / (projected_density * reference_area))
         updated_max_values['sheets'] = max(current_max_values.get('sheets', 0), projected_max_sheets)
 
     projected_max_layouts = math.ceil(updated_max_values['sheets'] * layouts_per_sheet_ratio) + 1
     updated_max_values['layouts'] = max(current_max_values.get('layouts', 0), projected_max_layouts)
+
+    updated_max_values['waste_area'] = max(current_max_values.get('waste_area', 0), updated_max_values['sheets'] * reference_area)
+    updated_max_values['offcut_area'] = max(current_max_values.get('offcut_area', 0), updated_max_values['sheets'] * reference_area)
 
     return updated_max_values, new_learned_rates
 
@@ -998,6 +1031,12 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
         
         print("\n--- Greedy Solution (Renormalized for B&B) ---")
         print(f"  - Final Greedy Score (Renormalized): {renormalized_score:.3f}")
+        # --- START: Added Diagnostic Printout ---
+        print("  - Score Breakdown:")
+        for key, value in sorted(renormalized_components.items()):
+            if value != 0:
+                print(f"    - {key:<20}: {value:.3f}")
+        # --- END: Added Diagnostic Printout ---
         print("--------------------------------------------\n")
 
         best_solution = (greedy_layouts, [])

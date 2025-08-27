@@ -230,6 +230,10 @@
                                     <label for="branching_factor">Branching Factor <span class="tooltip" data-tooltip="Number of random layouts to generate at each search step. Higher values explore more options but are slower.">[?]</span></label>
                                     <input type="number" step="1" min="1" id="branching_factor" name="branching_factor" value="{{ config.branching_factor }}">
                                 </div>
+                                <div>
+                                    <label for="max_unique_layouts">Max Unique Layouts <span class="tooltip" data-tooltip="Limits the total number of unique cutting patterns in the solution. Set to 0 for no limit.">[?]</span></label>
+                                    <input type="number" step="1" min="0" id="max_unique_layouts" name="max_unique_layouts" value="{{ config.max_unique_layouts }}">
+                                </div>
                             </div>
                             <div class="checkbox-grid">
                                 <label class="checkbox-group" for="allow_rotation"><input type="checkbox" id="allow_rotation" name="allow_rotation" value="true" {% if config.allow_rotation %}checked{% endif %}>Allow Rotation</label>
@@ -276,10 +280,6 @@
                                 <div>
                                     <label for="w_priority_offcut">Priority Offcut Bonus<span class="tooltip" data-tooltip="Large bonus for using a priority offcut.">[?]</span></label>
                                     <input type="number" step="any" id="w_priority_offcut" name="w_priority_offcut" value="{{ config.w_priority_offcut }}">
-                                </div>
-                                <div>
-                                    <label for="max_unique_layouts">Max Unique Layouts <span class="tooltip" data-tooltip="Limits the total number of unique cutting patterns in the solution. Set to 0 for no limit.">[?]</span></label>
-                                    <input type="number" step="1" min="0" id="max_unique_layouts" name="max_unique_layouts" value="{{ config.max_unique_layouts }}">
                                 </div>
                             </div>
                         </section>
