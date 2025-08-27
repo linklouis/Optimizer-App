@@ -346,12 +346,16 @@ def prepare_results_for_render(layouts, remaining_parts, final_score, config, el
         else:
             grouped_layouts[signature]['quantity'] += 1
     
-    total_placed_area_final = sum(l['quantity'] * sum(p['length'] * p['width'] for p in l['placed_parts']) for l in grouped_layouts.values())
-    total_sheet_area_final = sum(l['quantity'] * l['sheet_info']['length'] * l['sheet_info']['width'] for l in grouped_layouts.values())
+    # Convert to list and sort by sheet area (smallest to largest)
+    layouts_list = list(grouped_layouts.values())
+    layouts_list.sort(key=lambda l: l['sheet_info']['length'] * l['sheet_info']['width'])
+    
+    total_placed_area_final = sum(l['quantity'] * sum(p['length'] * p['width'] for p in l['placed_parts']) for l in layouts_list)
+    total_sheet_area_final = sum(l['quantity'] * l['sheet_info']['length'] * l['sheet_info']['width'] for l in layouts_list)
     overall_yield = (total_placed_area_final / total_sheet_area_final) * 100 if total_sheet_area_final > 0 else 0
             
     return {
-        'layouts': list(grouped_layouts.values()), 'remaining_parts': remaining_parts,
+        'layouts': layouts_list, 'remaining_parts': remaining_parts,
         'final_score': final_score, 'ideal_score': ideal_score, 'score_percentage': score_percentage,
         'overall_yield': overall_yield, 'num_unique_layouts': len(grouped_layouts),
         'elapsed_time': elapsed_time,
