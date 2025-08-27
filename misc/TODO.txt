@@ -111,16 +111,14 @@ BUGS
     - ✓ Select All & Deselect All buttons don't work on the Manage Stock Parts and Manage Offcuts lists.
     - ✓ The optimizing progress card should not display in the Configuration tab.
     - ✓ Optimization suddenly taking multiple minutes rather than 10s of seconds??
+    - ✓ Changing the multiplier in File Paths doesn't update the values for each part in Loaded Parts Lists.
+    - X Hitting optimize again while in the middle of an optimization doesn't cancle the previous one, so it's still running in the background.
+    - ✓ Tree visualizer fucking explodes when using a branching factor >1
 
 Here are the next bugs/updates to address, as well as the current versions of the files.
     - The calculated ideal score is several orders of magnitude smaller than the true score.
     - The stock part standardization doesn't seem to affect the final score.
-    - Hitting optimize again while in the middle of an optimization doesn't cancle the previous one, so it's still running in the background.
     - Reset to defaults button only works once, and then you have to reload the page if you want to use it again?
-    - THIS-------------------> Changing the multiplier in File Paths doesn't update the values for each part in Loaded Parts Lists.
-    - ------> Tree visualizer fucking explodes when using a branching factor >1
-    
-    - Stock part standardizing should affect the final score.
 
 MISC
     - X Change default branching factor to 2 or 3.
@@ -198,7 +196,7 @@ General Rules:
 
 - SOME SCORING LOGIC IS DUPLICATED OR OVERCOMPLICATED?
 
-- Make springs stronger when they're more stretched? (would better resist further stretching without pulling already close nodes even closer)
+- ✓ Make springs stronger when they're more stretched? (would better resist further stretching without pulling already close nodes even closer)
 - When spawning in a node, run one tick of only it being affected. (at least when doing spawn all)
 
 - X normalized_sheet_penalty & normalized_layout_penalty should make it clear that they're the weight (I think they are anyway)
@@ -207,7 +205,7 @@ General Rules:
 - ---> How does the time limiting on run_single_sheet_optimization work? Can we make it ignore options that definitely won't work?
 - ----> Greedy heuristic in _place_parts_in_rects, can we incorporate it into the B&B?
 
-- Cancle button not actually stopping optimization
+- ✓ Cancle button not actually stopping optimization
 
 - Do required stock parts add the same ammount to the score as normal required parts, or as stock parts?
 

@@ -65,7 +65,10 @@ function setupFormControls() {
         
         const defaultWeights = JSON.parse(weightsDataEl.textContent);
         for (const key in defaultWeights) {
-            document.getElementById(key)?.setAttribute('value', defaultWeights[key]);
+            const inputEl = document.getElementById(key);
+            if (inputEl) {
+                inputEl.value = defaultWeights[key];
+            }
         }
     });
 
