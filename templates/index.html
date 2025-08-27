@@ -335,16 +335,7 @@
                                     </div>
                             </div>
                             
-                            <p class="loading-tip">
-                                <!-- TODO have these be chosen randomly -->
-                                <strong>Tip:</strong> Allowing more search time can improve material yield and reduce waste.
-                                <strong>Tip:</strong> The visualization on the right shows the optimizer's search path in real-time.
-                                <strong>Tip:</strong> You can stop the optimization early and accept the best solution found so far.
-                                <strong>Tip:</strong> The "Branching Factor" setting controls how many layout options are explored at each step. Higher values may yield better results but take longer.
-                                <strong>Tip:</strong> The "Max Unique Layouts" setting limits the number of different cutting patterns used. Setting it to 0 removes the limit.
-                                <strong>Tip:</strong> You can adjust scoring weights to prioritize different aspects of the solution, such as minimizing waste or using offcuts.
-                                <strong>Tip:</strong> The scoring system adapts as better solutions are found. A new "best score" might look lower than a previous one because the normalization scale has become stricter. The Solution Log provides a direct, apples-to-apples comparison.
-                            </p>
+                            <p id="loading-tip-text" class="loading-tip"></p>
                             
                             <div class="loading-actions">
                                 <button id="accept-solution-btn" class="btn-accept" disabled><i class="fa-solid fa-check-circle"></i> Accept Best Solution</button>

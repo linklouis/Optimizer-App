@@ -1,4 +1,4 @@
-const RENDER_THRESHOLD = 0.1; // Min pixels a node must move to trigger a DOM update
+const RENDER_THRESHOLD = 1; // Min pixels a node must move to trigger a DOM update
 class TreeVisualizer {
     constructor(svgId) {
         this.svg = document.getElementById(svgId);
@@ -496,24 +496,39 @@ class TreeVisualizer {
         for (const node of nodes) {
             const parent = this.nodes[node.parent];
             if (parent) {
-                // Non-linear attraction force (stronger at longer distances)
+                // Attraction force with linear and exponential regions
                 const dx = parent.x - node.x;
                 const dy = parent.y - node.y;
-                const distance = Math.pow(dx * dx + dy * dy, 0.3) + 1e-6; // Add small epsilon to prevent issues at zero distance
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                const epsilon = 1e-6;
 
-                // Scale the linear force by the distance, making the final force proportional to distance squared.
-                // TODO figure out some way to have this increase approximately linearly for small to mid distances, but then be much larger for very large distances.
-                const dx_attract = dx * kAttract * distance;
-                const dy_attract = dy * kAttract * distance;
+                const linearThreshold = 100.0;
+                const kLinearAttract = 0.5; // Strength in the linear region.
+                const kExponentialFactor = 0.1; // Growth rate after the threshold.
+
+                let forceMagnitude;
+
+                if (distance < linearThreshold) {
+                    // Force is linear with distance up to the threshold.
+                    forceMagnitude = kLinearAttract * distance;
+                } else {
+                    // After the threshold, a quadratic term is added for smooth, exponential-like growth.
+                    const excessDistance = distance - linearThreshold;
+                    forceMagnitude = (kLinearAttract * distance) + (kExponentialFactor * Math.pow(excessDistance, 2));
+                }
+                
+                const forceX = (dx / (distance + epsilon)) * forceMagnitude;
+                const forceY = (dy / (distance + epsilon)) * forceMagnitude;
 
                 if (parent === nodes[0]) {
-                    node.fx += dx_attract * 2;
-                    node.fy += dy_attract * 2;
+                    // Children of the root node are pulled stronger to prevent them from drifting too far.
+                    node.fx += forceX * 2;
+                    node.fy += forceY * 2;
                 } else {
-                    node.fx += dx_attract;
-                    node.fy += dy_attract;
-                    parent.fx -= dx_attract;
-                    parent.fy -= dy_attract;
+                    node.fx += forceX;
+                    node.fy += forceY;
+                    parent.fx -= forceX;
+                    parent.fy -= forceY;
                 }
 
 

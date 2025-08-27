@@ -199,6 +199,21 @@ document.addEventListener('DOMContentLoaded', function() {
             document.querySelector('.tab-button[data-tab="results"]')?.click();
             document.getElementById('results-container').innerHTML = '';
 
+            const loadingTipElement = document.getElementById('loading-tip-text');
+            if (loadingTipElement) {
+                const tips = [
+                    "Allowing more search time can improve material yield and reduce waste.",
+                    "The visualization on the right shows the optimizer's search path in real-time.",
+                    "You can stop the optimization early and accept the best solution found so far.",
+                    "The 'Branching Factor' setting controls how many layout options are explored at each step. Higher values may yield better results but take longer.",
+                    "The 'Max Unique Layouts' setting limits the number of different cutting patterns used. Setting it to 0 removes the limit.",
+                    "You can adjust scoring weights to prioritize different aspects of the solution, such as minimizing waste or using offcuts.",
+                    "The scoring system adapts as better solutions are found. A new 'best score' might look lower than a previous one because the normalization scale has become stricter. The Solution Log provides a direct, apples-to-apples comparison."
+                ];
+                const randomIndex = Math.floor(Math.random() * tips.length);
+                loadingTipElement.innerHTML = `<strong>Tip:</strong> ${tips[randomIndex]}`;
+            }
+
             const visualizerSvgId = 'path-visualization-svg'; 
             treeVisualizer = new TreeVisualizer(visualizerSvgId);
             treeVisualizer.start();
