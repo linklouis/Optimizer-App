@@ -208,7 +208,13 @@ document.addEventListener('DOMContentLoaded', function() {
                     "The 'Branching Factor' setting controls how many layout options are explored at each step. Higher values may yield better results but take longer.",
                     "The 'Max Unique Layouts' setting limits the number of different cutting patterns used. Setting it to 0 removes the limit.",
                     "You can adjust scoring weights to prioritize different aspects of the solution, such as minimizing waste or using offcuts.",
-                    "The scoring system adapts as better solutions are found. A new 'best score' might look lower than a previous one because the normalization scale has become stricter. The Solution Log provides a direct, apples-to-apples comparison."
+                    "The scoring system adapts as better solutions are found. A new 'best score' might look lower than a previous one because the normalization scale has become stricter. The Solution Log provides a direct, apples-to-apples comparison.",
+                    'Tip: You can copy a file\'s path by right-clicking it (or Shift+Right-clicking on Windows for "Copy as path") and pasting it into the input fields.',
+                    "Tip: A negative score is normal! Scores are relative values used to compare options. The Overall Score % in the results provides a more intuitive measure of success.",
+                    "Tip: The search path visualizer uses color to indicate a path's quality. Greener nodes represent better potential solutions, while redder nodes are less promising.",
+                    "Tip: Hover over the [?] icons in the results summary for more details about each metric.",
+                    "Tip: You can remove individual parts or offcuts from a layout by clicking on them.",
+                    "Tip: Made a change to the results you didn't like? Use the Undo button or press Ctrl+Z to revert your last modification."
                 ];
                 const randomIndex = Math.floor(Math.random() * tips.length);
                 loadingTipElement.innerHTML = `<strong>Tip:</strong> ${tips[randomIndex]}`;

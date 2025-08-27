@@ -34,31 +34,31 @@ FEATURES
         - ✓ Hitting enter while in a field in File Paths should automatically Load/Refresh Files
         - ✓ Add Unprioritize All button to Manage Offcuts in the same place as Reset Quantities on the Manage Stock Parts card
         - ✓ HHOS file multiplier should be displayed on the file's header in Loaded Parts List like the number of parts is.
+        - ✓ Cancle optimization button on Optimizing Layouts... loading card
+        - ✓ Add an "accept early" button to the Optimizing Layouts... loading card?
+        - X✓ Allow greedy algorithm as fallback
 
         - Allow uploading a temp Offcut List that doesn't override the current one?
-        - Save offcuts
+        - Save offcuts (Maybe only save after export?)
         - Clear Offcut List File input space after optimization
         - Notes section for offcuts
         - Tell user when the files they're pointing to don't exist
         - Allow the quantity of a given layout to be adjusted manually after optimization?
         - Be aware of whether the parts in an HHOS file are labeled as stock for checking if a sheet is only stock parts
         - [ASK] Make a way to automatically pick all of the most needed stock parts for a stock-only job?
-        - -----> Cancle optimization button on Optimizing Layouts... loading card
-        - -----> Add an "accept early" button to the Optimizing Layouts... loading card?
         - Allow the user to apply Stock Part Layout standardization post-opimization?
         - Be able to click to make an area an offcut
-        - Click to remove Offcut as sheets. (Would have to run optimization again?)
-        - Allow greedy algorithm as fallback
+        - Click to remove Offcut from availible sheets. (Would have to run optimization again?)
     
     Optimizer
         - ✓ Only keep reusing a layout of stock parts until another layout is better because the number of the original stock parts needed has been filled.
         - X Rerun the optimizor on the remaining parts after a set of sheet layouts have been standardized?
         - ✓ Add number of layouts penalty
+        - X Needs to be smarter about handling jobs with high quantities
+        - ✓ Improve calculate_bound function for speedup
+        - ✓ Fix ideal score calculation
 
-        - Needs to be smarter about handling jobs with high quantities
-        - Penalize higher numbers of unique default sheet layouts more than offcut sheets?
-        - -----> Improve calculate_bound function for speedup
-        - -----> Fix ideal score calculation
+        - Penalize higher numbers of unique default sheet layouts more than layouts on offcut sheets?
 
     Visual
         - ✓ Add measurements to layout display
@@ -72,11 +72,11 @@ FEATURES
         - ✓ Sort sheet layouts by size
         - ✓ Parts on the Results tab should always be displayed at the same size
         - ✓ Display the lines for the cuts
+        - ✓ Make more loading screen tips, or have the time limit one only appear when there is a time limit?
 
         - Make the Loaded Parts List section look better
         - Add line break before 'Note:' in search time tooltip
         - Make dimensions text more readable on patterned backgrounds
-        - Make more loading screen tips, or have the time limit one only appear when there is a time limit?
         - The symbols on the theme switcher aren't perfectly vertically alligned with the switch.
         - Hovering over a part should highlight it in red, so it's obvious clicking will delete it.
         - -----> All nodes directly attached to the root freeze after like 300 ticks?
@@ -88,6 +88,7 @@ CODE
     - Add header comments in helper files
     - ---> Remove print & tracking functions from Optimizer
     - -> Can/should we combine the code in geometry_utils.py with some of the stuff in opitimizer.py?
+    - Probably repetitive code, especially regarding scoring, in optimizer.py, results_manager.py, geometry_utils.py, and scoring_utils.py
 
 BUGS
     - ✓ Allow part rotation check box not working?
@@ -116,11 +117,12 @@ BUGS
     - X Hitting optimize again while in the middle of an optimization doesn't cancle the previous one, so it's still running in the background.
     - ✓ Tree visualizer fucking explodes when using a branching factor >1
     - ✓ Reset to defaults button only works once, and then you have to reload the page if you want to use it again?
+    - X Only ever seems to show the same tip?
 
     - The calculated ideal score is several orders of magnitude smaller than the true score.
     - The stock part standardization doesn't seem to affect the final score.
-    - Only ever seems to show the same tip?
-    - Solutions don't always have offcuts where they could. Maybe manually add offcuts where possible when scoring a complete solution?
+    - -------> Solutions don't always have offcuts where they could. Maybe manually add offcuts where possible when scoring a complete solution?
+               Could make the change to prioritize larger waste areas useless in find_guillotine_cuts. If all offcuts are placed as best as possible, we only need to worry about making the least cuts possible. https://g.co/gemini/share/c34e4f61fb14
 
 MISC
     - X Change default branching factor to 2 or 3.

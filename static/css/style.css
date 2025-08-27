@@ -363,12 +363,12 @@ th .select-all-parts-in-file { cursor: pointer; }
 .cut-line {
     stroke: var(--dim-line-color);
     stroke-width: 0.25;
-    /* stroke-dasharray: 2, 2; */
+    stroke-dasharray: 2, 2;
     opacity: 0.8;
 }
 
 .interactive-item:hover > rect {
-    stroke: var(--primary);
+    stroke: var(--dim-line-color);
     stroke-width: 0.6px;
     stroke-opacity: 1;
 }
