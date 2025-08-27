@@ -120,6 +120,7 @@ BUGS
     - The calculated ideal score is several orders of magnitude smaller than the true score.
     - The stock part standardization doesn't seem to affect the final score.
     - Only ever seems to show the same tip?
+    - Solutions don't always have offcuts where they could. Maybe manually add offcuts where possible when scoring a complete solution?
 
 MISC
     - X Change default branching factor to 2 or 3.

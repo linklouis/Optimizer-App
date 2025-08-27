@@ -94,11 +94,11 @@ def consolidate_empty_space(rects: list, kerf: float) -> list:
             
     return rects
 
-
 def find_guillotine_cuts(sheet_info: dict, placed_parts: list) -> list:
     """
     Finds the precise segments of each guillotine cut by recursively subdividing the sheet,
     ensuring each cut is valid and including final trim cuts around single parts.
+    This version prioritizes cuts that produce larger, more square-shaped offcuts.
     """
     if not placed_parts:
         return []
@@ -117,19 +117,6 @@ def find_guillotine_cuts(sheet_info: dict, placed_parts: list) -> list:
 
         part_bounds = [_get_part_bounds(p) for p in parts_in_rect]
         
-        # Handle final trim cuts when only one part remains in a rectangle
-        if len(parts_in_rect) == 1:
-            x, y, w, l = part_bounds[0]
-            rect_x, rect_y, rect_w, rect_l = current_rect['x'], current_rect['y'], current_rect['width'], current_rect['length']
-            # Top trim cut
-            if y + l < rect_y + rect_l - TOLERANCE:
-                all_cuts.append({'x1': x, 'y1': y + l, 'x2': x + w, 'y2': y + l})
-            # Right trim cut
-            if x + w < rect_x + rect_w - TOLERANCE:
-                all_cuts.append({'x1': x + w, 'y1': y, 'x2': x + w, 'y2': y + l})
-            return
-
-        # Find potential internal cuts from all unique part edges
         x_coords, y_coords = set(), set()
         for x, y, w, l in part_bounds:
             if x > current_rect['x'] + TOLERANCE: x_coords.add(x)
@@ -138,17 +125,31 @@ def find_guillotine_cuts(sheet_info: dict, placed_parts: list) -> list:
             if y + l < current_rect['y'] + current_rect['length'] - TOLERANCE: y_coords.add(y + l)
         
         best_cut = None
-        min_coord = float('inf')
+        best_score = -1.0
+        BONUS_WEIGHT = 10.0
+        rect_x, rect_y, rect_w, rect_l = current_rect['x'], current_rect['y'], current_rect['width'], current_rect['length']
 
         for cut_x in sorted(list(x_coords)):
-            if cut_x >= min_coord: continue
             if all(not (b[0] < cut_x - TOLERANCE and b[0] + b[2] > cut_x + TOLERANCE) for b in part_bounds):
-                min_coord, best_cut = cut_x, ('v', cut_x)
+                w1 = cut_x - rect_x
+                w2 = rect_w - w1
+                base_score = min(min(w1, rect_l), min(w2, rect_l))
+                bonus = sum(1 for b in part_bounds if abs((b[0] + b[2]) - cut_x) < TOLERANCE or abs(b[0] - cut_x) < TOLERANCE)
+                score = base_score + (bonus * BONUS_WEIGHT)
+                if score > best_score:
+                    best_score = score
+                    best_cut = ('v', cut_x)
         
         for cut_y in sorted(list(y_coords)):
-            if cut_y >= min_coord: continue
             if all(not (b[1] < cut_y - TOLERANCE and b[1] + b[3] > cut_y + TOLERANCE) for b in part_bounds):
-                min_coord, best_cut = cut_y, ('h', cut_y)
+                l1 = cut_y - rect_y
+                l2 = rect_l - l1
+                base_score = min(min(rect_w, l1), min(rect_w, l2))
+                bonus = sum(1 for b in part_bounds if abs((b[1] + b[3]) - cut_y) < TOLERANCE or abs(b[1] - cut_y) < TOLERANCE)
+                score = base_score + (bonus * BONUS_WEIGHT)
+                if score > best_score:
+                    best_score = score
+                    best_cut = ('h', cut_y)
 
         if not best_cut: return
 
@@ -161,7 +162,7 @@ def find_guillotine_cuts(sheet_info: dict, placed_parts: list) -> list:
             right_parts = [p for p, b in zip(parts_in_rect, part_bounds) if b[0] >= cut_coord - TOLERANCE]
             _find_cut_segments_recursive(left_rect, left_parts)
             _find_cut_segments_recursive(right_rect, right_parts)
-        else:
+        else: # 'h'
             all_cuts.append({'x1': current_rect['x'], 'y1': cut_coord, 'x2': current_rect['x'] + current_rect['width'], 'y2': cut_coord})
             bottom_rect = {**current_rect, 'length': cut_coord - current_rect['y']}
             top_rect = {**current_rect, 'y': cut_coord, 'length': current_rect['y'] + current_rect['length'] - cut_coord}
