@@ -5,34 +5,9 @@ import pandas as pd
 # NOTE: The dependency on optimizer is now broken. All shared utils are in scoring_utils.
 from optimizer import calculate_layout_score
 from scoring_utils import get_layout_signature, calculate_solution_score
+from geometry_utils import find_all_empty_rectangles, consolidate_empty_space, find_guillotine_cuts
 
 # --- NEW HELPERS FOR NORMALIZED SCORE CALCULATION ---
-
-def _count_guillotine_cuts(layout: dict) -> int:
-    """
-    Accurately counts the number of unique guillotine cuts by identifying all
-    unique internal horizontal and vertical cut lines.
-    """
-    sheet_info = layout['sheet_info']
-    placed_parts = layout.get('placed_parts', [])
-    if not placed_parts:
-        return 0
-
-    TOLERANCE = 1e-6
-    x_coords, y_coords = set(), set()
-
-    for part in placed_parts:
-        p_len = part['width'] if part.get('rotated') else part['length']
-        p_wid = part['length'] if part.get('rotated') else part['width']
-        x_coords.add(part['x'])
-        x_coords.add(part['x'] + p_wid)
-        y_coords.add(part['y'])
-        y_coords.add(part['y'] + p_len)
-        
-    unique_x_cuts = {round(x, 4) for x in x_coords if x > TOLERANCE and x < sheet_info['width'] - TOLERANCE}
-    unique_y_cuts = {round(y, 4) for y in y_coords if y > TOLERANCE and y < sheet_info['length'] - TOLERANCE}
-
-    return len(unique_x_cuts) + len(unique_y_cuts)
 
 def _estimate_max_values(all_parts: list, optional_stock_parts: list, offcut_df: pd.DataFrame, config: dict) -> dict:
     """
@@ -334,6 +309,8 @@ def prepare_results_for_render(layouts, remaining_parts, final_score, config, el
             total_placed_area = sum(p['length'] * p['width'] for p in layout['placed_parts'])
             min_offcut_dim = config.get('min_offcut_dim', 0)
             
+            layout['cuts'] = find_guillotine_cuts(sheet_info, layout['placed_parts'])
+            
             grouped_layouts[signature] = {
                 'signature': signature,
                 'placed_parts': layout['placed_parts'],
@@ -341,7 +318,8 @@ def prepare_results_for_render(layouts, remaining_parts, final_score, config, el
                 'yield_percentage': (total_placed_area / sheet_area) * 100 if sheet_area > 0 else 0,
                 'usable_offcuts': [r for r in layout.get('offcuts', []) if r['length'] >= min_offcut_dim and r['width'] >= min_offcut_dim],
                 'quantity': 1,
-                'offcuts': layout.get('offcuts', [])
+                'offcuts': layout.get('offcuts', []),
+                'cuts': layout.get('cuts', [])
             }
         else:
             grouped_layouts[signature]['quantity'] += 1

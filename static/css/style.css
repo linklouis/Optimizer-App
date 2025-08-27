@@ -360,6 +360,13 @@ th .select-all-parts-in-file { cursor: pointer; }
 .inner-dim-text { font-size: 2px; fill: var(--text-primary); opacity: 0.7; }
 .cut-line { stroke: magenta; stroke-width: 0.4; stroke-linecap: round; opacity: 0.7; }
 
+.cut-line {
+    stroke: var(--dim-line-color);
+    stroke-width: 0.25;
+    stroke-dasharray: 2, 2;
+    opacity: 0.8;
+}
+
 .interactive-item:hover > rect {
     stroke: var(--primary);
     stroke-width: 0.6px;

@@ -93,3 +93,84 @@ def consolidate_empty_space(rects: list, kerf: float) -> list:
             break
             
     return rects
+
+
+def find_guillotine_cuts(sheet_info: dict, placed_parts: list) -> list:
+    """
+    Finds the precise segments of each guillotine cut by recursively subdividing the sheet,
+    ensuring each cut is valid and including final trim cuts around single parts.
+    """
+    if not placed_parts:
+        return []
+    
+    all_cuts = []
+    TOLERANCE = 1e-6
+
+    def _get_part_bounds(part):
+        p_len = part['width'] if part.get('rotated') else part['length']
+        p_wid = part['length'] if part.get('rotated') else part['width']
+        return part['x'], part['y'], p_wid, p_len
+
+    def _find_cut_segments_recursive(current_rect, parts_in_rect):
+        if not parts_in_rect:
+            return
+
+        part_bounds = [_get_part_bounds(p) for p in parts_in_rect]
+        
+        # Handle final trim cuts when only one part remains in a rectangle
+        if len(parts_in_rect) == 1:
+            x, y, w, l = part_bounds[0]
+            rect_x, rect_y, rect_w, rect_l = current_rect['x'], current_rect['y'], current_rect['width'], current_rect['length']
+            # Top trim cut
+            if y + l < rect_y + rect_l - TOLERANCE:
+                all_cuts.append({'x1': x, 'y1': y + l, 'x2': x + w, 'y2': y + l})
+            # Right trim cut
+            if x + w < rect_x + rect_w - TOLERANCE:
+                all_cuts.append({'x1': x + w, 'y1': y, 'x2': x + w, 'y2': y + l})
+            return
+
+        # Find potential internal cuts from all unique part edges
+        x_coords, y_coords = set(), set()
+        for x, y, w, l in part_bounds:
+            if x > current_rect['x'] + TOLERANCE: x_coords.add(x)
+            if x + w < current_rect['x'] + current_rect['width'] - TOLERANCE: x_coords.add(x + w)
+            if y > current_rect['y'] + TOLERANCE: y_coords.add(y)
+            if y + l < current_rect['y'] + current_rect['length'] - TOLERANCE: y_coords.add(y + l)
+        
+        best_cut = None
+        min_coord = float('inf')
+
+        for cut_x in sorted(list(x_coords)):
+            if cut_x >= min_coord: continue
+            if all(not (b[0] < cut_x - TOLERANCE and b[0] + b[2] > cut_x + TOLERANCE) for b in part_bounds):
+                min_coord, best_cut = cut_x, ('v', cut_x)
+        
+        for cut_y in sorted(list(y_coords)):
+            if cut_y >= min_coord: continue
+            if all(not (b[1] < cut_y - TOLERANCE and b[1] + b[3] > cut_y + TOLERANCE) for b in part_bounds):
+                min_coord, best_cut = cut_y, ('h', cut_y)
+
+        if not best_cut: return
+
+        cut_type, cut_coord = best_cut
+        if cut_type == 'v':
+            all_cuts.append({'x1': cut_coord, 'y1': current_rect['y'], 'x2': cut_coord, 'y2': current_rect['y'] + current_rect['length']})
+            left_rect = {**current_rect, 'width': cut_coord - current_rect['x']}
+            right_rect = {**current_rect, 'x': cut_coord, 'width': current_rect['x'] + current_rect['width'] - cut_coord}
+            left_parts = [p for p, b in zip(parts_in_rect, part_bounds) if b[0] + b[2] <= cut_coord + TOLERANCE]
+            right_parts = [p for p, b in zip(parts_in_rect, part_bounds) if b[0] >= cut_coord - TOLERANCE]
+            _find_cut_segments_recursive(left_rect, left_parts)
+            _find_cut_segments_recursive(right_rect, right_parts)
+        else:
+            all_cuts.append({'x1': current_rect['x'], 'y1': cut_coord, 'x2': current_rect['x'] + current_rect['width'], 'y2': cut_coord})
+            bottom_rect = {**current_rect, 'length': cut_coord - current_rect['y']}
+            top_rect = {**current_rect, 'y': cut_coord, 'length': current_rect['y'] + current_rect['length'] - cut_coord}
+            bottom_parts = [p for p, b in zip(parts_in_rect, part_bounds) if b[1] + b[3] <= cut_coord + TOLERANCE]
+            top_parts = [p for p, b in zip(parts_in_rect, part_bounds) if b[1] >= cut_coord - TOLERANCE]
+            _find_cut_segments_recursive(bottom_rect, bottom_parts)
+            _find_cut_segments_recursive(top_rect, top_parts)
+
+    initial_rect = {'x': 0, 'y': 0, 'length': sheet_info['length'], 'width': sheet_info['width']}
+    _find_cut_segments_recursive(initial_rect, placed_parts)
+    
+    return all_cuts

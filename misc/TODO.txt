@@ -70,15 +70,15 @@ FEATURES
         - ✓ ADD SECOND PROGRESS BAR FOR WHEN THERE'S A TIME LIMIT
         - X Also have a thinner progress bar for the time under the Part Placement Progress bar, so you can tell which will happen first?
         - ✓ Sort sheet layouts by size
+        - ✓ Parts on the Results tab should always be displayed at the same size
+        - ✓ Display the lines for the cuts
 
         - Make the Loaded Parts List section look better
         - Add line break before 'Note:' in search time tooltip
         - Make dimensions text more readable on patterned backgrounds
         - Make more loading screen tips, or have the time limit one only appear when there is a time limit?
         - The symbols on the theme switcher aren't perfectly vertically alligned with the switch.
-        - Parts on the Results tab should always be displayed at the same size
         - Hovering over a part should highlight it in red, so it's obvious clicking will delete it.
-        - ---------> Display the lines for the cuts
         - -----> All nodes directly attached to the root freeze after like 300 ticks?
 
 CODE

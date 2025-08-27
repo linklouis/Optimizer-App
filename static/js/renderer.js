@@ -105,6 +105,12 @@ function renderResults(result) {
                             ${dimLabels}
                         </g>`;
         });
+
+        (layout.cuts || []).forEach(cut => {
+            const svg_y1 = sheet.length - cut.y1;
+            const svg_y2 = sheet.length - cut.y2;
+            svgContent += `<line class="cut-line" x1="${cut.x1}" y1="${svg_y1}" x2="${cut.x2}" y2="${svg_y2}" />`;
+        });
         
         sheetBg.insertAdjacentHTML('afterend', svgContent);
         grid.appendChild(card);
