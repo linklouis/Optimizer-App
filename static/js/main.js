@@ -253,20 +253,25 @@ document.addEventListener('DOMContentLoaded', function() {
             if (loadingTipElement) {
                 const tips = [
                     "Allowing more search time can improve material yield and reduce waste.",
-                    "The visualization on the right shows the optimizer's search path in real-time.",
+                    "The optimizer will often find at least 2 good solutions quickly, then take (much) longer to find smaller improvements. Consider stopping early if you're happy with the current results.",
                     "You can stop the optimization early and accept the best solution found so far.",
-                    "The 'Branching Factor' setting controls how many layout options are explored at each step. Higher values may yield better results but take longer.",
-                    "The 'Max Unique Layouts' setting limits the number of different cutting patterns used. Setting it to 0 removes the limit.",
+                    "The visualization on the right shows the optimizer's search path in (delayed) real-time.",
+                    "The search path visualizer can get complex with many nodes. You can disable it in General Settings to improve local performance.",
+                    "The search path visualizer is interactive! You can zoom and pan to explore the search tree.",
+                    "The search path visualizer can lag behind the optimizer. The 'Pending' counter shows how many updates are waiting to be drawn.",
+                    "The search path visualizer uses color to indicate a path's quality. Greener nodes represent better potential solutions, while redder nodes are less promising.",
+                    'The "Branching Factor" setting controls how many layout options are explored at each step. Higher values may yield better results but take longer.',
+                    'The "Max Unique Layouts" setting limits the number of different cutting patterns used. Setting it to 0 removes the limit.',
                     "You can adjust scoring weights to prioritize different aspects of the solution, such as minimizing waste or using offcuts.",
                     "The scoring system adapts as better solutions are found. A new 'best score' might look lower than a previous one because the normalization scale has become stricter. The Solution Log provides a direct, apples-to-apples comparison.",
-                    'You can copy a file\'s path by right-clicking it (or Shift+Right-clicking on Windows for "Copy as path") and pasting it into the input fields.',
+                    "In Windows File Explorer, you can select a file and press Ctrl+Shift+C to copy its path to paste into the input fields.",
                     "A negative score is normal! Scores are relative values used to compare options. The Overall Score % in the results provides a more intuitive measure of success.",
-                    "The search path visualizer uses color to indicate a path's quality. Greener nodes represent better potential solutions, while redder nodes are less promising.",
                     "Hover over the [?] icons in the results summary for more details about each metric.",
                     "You can remove individual parts or offcuts from a layout by clicking on them.",
                     "Made a change to the results you didn't like? Use the Undo button or press Ctrl+Z to revert your last modification.",
                     "The progress bar indicates how many parts have been placed in the current layout being explored, not the overall optimization progress. Expect it to fluctuate!",
-                    "This app runs a faster, but worst algorithm first, so expect an initial startup time. This time will increase with more parts, though the complexity of the job has little effect, unlike with the full algorithm."
+                    "This app runs a faster, but worse algorithm first, so expect an initial startup time. This time will increase with more parts, though the complexity of the job has little effect, unlike with the full algorithm.",
+                    "Cards containing lists of items (like parts or stock sheets) can be resized by dragging the handle on the bottom edge."
                 ];
                 const randomIndex = Math.floor(Math.random() * tips.length);
                 loadingTipElement.innerHTML = `<strong>Tip:</strong> ${tips[randomIndex]}`;

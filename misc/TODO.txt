@@ -50,6 +50,7 @@ FEATURES
         - Be able to click to make an area an offcut
         - Click to remove an Offcut sheet as an available stock sheet? (Would have to run optimization again?)
         - Add [?] to Standardize Stock Layouts, Min. Useable Offcut Width, prioritize (Manage Offcuts card), and Required Quantity (Manage Stock Parts card)
+        - Add a way for the user to change the default value of a setting? (Could be useful if, for example, we start using a new saw, and we don't want it constantly defaulting to the wrong kerf.)
     
     Optimizer
         - ✓ Only keep reusing a layout of stock parts until another layout is better because the number of the original stock parts needed has been filled.

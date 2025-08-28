@@ -60,7 +60,9 @@
         "26",
         "27"
     ],
-    "prioritized_offcuts": [],
+    "prioritized_offcuts": [
+        "7"
+    ],
     "selected_stock_parts": [
         "OSB-15-126126",
         "OSB-15-140126",
@@ -104,7 +106,7 @@
     "min_offcut_dim": 12.0,
     "search_time_limit": 0.0,
     "branching_factor": 1,
-    "max_unique_layouts": 5,
+    "max_unique_layouts": 0,
     "allow_rotation": true,
     "use_offcuts": true,
     "add_stock_parts": true,

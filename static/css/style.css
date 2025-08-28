@@ -234,7 +234,7 @@ input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 2px
     margin-top: 0.25rem;
 }
 .dimension-input-group .dimension-inputs input {
-    text-align: center;
+    text-align: left;
 }
 .dimension-input-group .dimension-inputs span {
     font-weight: 600;

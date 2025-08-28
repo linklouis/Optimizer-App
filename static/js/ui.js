@@ -176,6 +176,8 @@ function setupCollapsibleSections() {
     // Accordions
     document.querySelectorAll('details.animated-accordion').forEach((accordion) => {
         const content = accordion.querySelector('.collapsible-content');
+        if (!content) return;
+        
         if (accordion.open) {
             content.style.maxHeight = content.scrollHeight + 'px';
         }
@@ -186,31 +188,40 @@ function setupCollapsibleSections() {
 
     // Resizable cards
     document.querySelectorAll('.resizable-card .resize-handle').forEach(handle => {
-        const selectorList = handle.parentElement.querySelector('.stock-selector');
         const collapsibleContent = handle.closest('.collapsible-content');
+        if (!collapsibleContent) return;
+        
+        const isJobPartsCard = !!handle.parentElement.querySelector('#loaded-parts-accordion');
 
         handle.addEventListener('mousedown', function(e) {
             e.preventDefault();
             const accordion = handle.closest('details.animated-accordion');
             if (!accordion || !accordion.open) return;
 
+            // Determine the target(s) for resizing based on the card type
+            const resizeTargets = isJobPartsCard
+                ? collapsibleContent.querySelectorAll('.accordion-item[open] .table-container')
+                : collapsibleContent.querySelectorAll('.stock-selector');
+            
+            if (resizeTargets.length === 0) return;
+
             const startY = e.clientY;
-            const startHeight = selectorList.offsetHeight;
+            const startHeight = resizeTargets[0].offsetHeight;
             const originalTransition = collapsibleContent.style.transition;
             collapsibleContent.style.transition = 'none';
             
             const doDrag = (e) => {
                 const newHeight = Math.max(50, startHeight + e.clientY - startY);
-                selectorList.style.height = `${newHeight}px`;
-                if (collapsibleContent) {
-                    collapsibleContent.style.maxHeight = `${collapsibleContent.scrollHeight}px`;
-                }
+                resizeTargets.forEach(target => {
+                    // Set height on the specific targets
+                    target.style.height = `${newHeight}px`;
+                });
+                // Update the main container to ensure it fits the new content
+                collapsibleContent.style.maxHeight = `${collapsibleContent.scrollHeight}px`;
             };
 
             const stopDrag = () => {
-                if (collapsibleContent) {
-                    collapsibleContent.style.transition = originalTransition;
-                }
+                collapsibleContent.style.transition = originalTransition;
                 document.documentElement.removeEventListener('mousemove', doDrag);
                 document.documentElement.removeEventListener('mouseup', stopDrag);
             };
@@ -219,4 +230,29 @@ function setupCollapsibleSections() {
             document.documentElement.addEventListener('mouseup', stopDrag, { once: true });
         });
     });
+
+    // Logic for conditional resize handle and auto-resizing of Job Parts card
+    const jobPartsAccordion = document.getElementById('loaded-parts-accordion');
+    if (jobPartsAccordion) {
+        const mainCollapsibleContent = jobPartsAccordion.closest('.animated-accordion > .collapsible-content');
+        const resizeHandle = jobPartsAccordion.closest('.resizable-card')?.querySelector('.resize-handle');
+
+        const updateParentContainer = () => {
+            // Update resize handle visibility
+            if (resizeHandle) {
+                const anyAccordionOpen = jobPartsAccordion.querySelector('details[open]');
+                resizeHandle.style.display = anyAccordionOpen ? 'flex' : 'none';
+            }
+            // Adjust parent container height to fit new content if it's open
+            if (mainCollapsibleContent) {
+                const parentAccordion = mainCollapsibleContent.closest('details.animated-accordion');
+                if (parentAccordion && parentAccordion.open) {
+                    mainCollapsibleContent.style.maxHeight = mainCollapsibleContent.scrollHeight + 'px';
+                }
+            }
+        };
+
+        jobPartsAccordion.addEventListener('toggle', updateParentContainer, true);
+        updateParentContainer(); // Initial check on page load
+    }
 }

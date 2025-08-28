@@ -17,7 +17,7 @@ DEFAULT_CONFIG = {
     'selected_stock_parts': [],
     'required_stock_quantities': {},
 
-    'default_length': 96.000, 'default_width': 48.000, 'kerf': 0.125, 'min_offcut_dim': 12.0,
+    'default_length': 96.000, 'default_width': 48.000, 'kerf': 0.17, 'min_offcut_dim': 12.0,
     'search_time_limit': 5.0, 'branching_factor': 1, 'max_unique_layouts': 0,
     'allow_rotation': True, 'use_offcuts': True, 'add_stock_parts': True, 'standardize_stock_layouts': False,
 

@@ -57,7 +57,7 @@
                     {% endwith %}
 
                     <section class="card">
-                        <details class="collapsible-section">
+                        <details class="collapsible-section animated-accordion">
                             <summary class="card-title">
                                 <i class="fa-solid fa-file-alt"></i> File Paths
                                 <span class="tooltip" data-tooltip="Pro Tip: In Windows File Explorer, you can select a file and press Ctrl+Shift+C to copy its full path to paste here.">[?]</span>
@@ -98,11 +98,11 @@
                     </section>
                     
                     {% if hhos_file_contents %}
-                    <section class="card">
-                         <details class="collapsible-section">
+                    <section class="card resizable-card">
+                         <details class="collapsible-section animated-accordion">
                             <summary class="card-title"><i class="fa-solid fa-list-check"></i> Manage Job Parts</summary>
                             <div class="collapsible-content">
-                                <div class="accordion" id="loaded-parts-accordion">
+                                <div class="accordion resizable-list" id="loaded-parts-accordion">
                                     {% for file_content in hhos_file_contents %}
                                     <details class="accordion-item">
                                         <summary class="accordion-header">
@@ -142,6 +142,7 @@
                                     </details>
                                     {% endfor %}
                                 </div>
+                                <div class="resize-handle"><i class="fa-solid fa-grip-lines"></i></div>
                             </div>
                         </details>
                     </section>
@@ -251,10 +252,10 @@
                                 </div>
                             </div>
                             <div class="checkbox-grid">
-                                <label class="checkbox-group" for="allow_rotation"><input type="checkbox" id="allow_rotation" name="allow_rotation" value="true" {% if config.allow_rotation %}checked{% endif %}>Allow Rotation</label>
-                                <label class="checkbox-group" for="use_offcuts"><input type="checkbox" id="use_offcuts" name="use_offcuts" value="true" {% if config.use_offcuts %}checked{% endif %}>Use Available Offcuts</label>
+                                <label class="checkbox-group" for="allow_rotation"><input type="checkbox" id="allow_rotation" name="allow_rotation" value="true" {% if config.allow_rotation %}checked{% endif %}><span class="tooltip" data-tooltip="Not likely to be useful, but you never know">[?]</span> Allow Rotation</label>
+                                <label class="checkbox-group" for="use_offcuts"><input type="checkbox" id="use_offcuts" name="use_offcuts" value="true" {% if config.use_offcuts %}checked{% endif %}>Use Offcuts</label>
                                 <label class="checkbox-group" for="add_stock_parts"><input type="checkbox" id="add_stock_parts" name="add_stock_parts" value="true" {% if config.add_stock_parts %}checked{% endif %}>Add Stock Parts</label>
-                                <label class="checkbox-group" for="standardize_stock_layouts"><input type="checkbox" id="standardize_stock_layouts" name="standardize_stock_layouts" value="true" {% if config.standardize_stock_layouts %}checked{% endif %}><span class="tooltip" data-tooltip="Forces sheets with the same layout of required parts to use the same layout of stock parts. Can reduce the number of unique cutting patterns and sometimes improve scores. Applied after optimization.">[?]</span>Standardize Stock Layouts</label>
+                                <label class="checkbox-group" for="standardize_stock_layouts"><input type="checkbox" id="standardize_stock_layouts" name="standardize_stock_layouts" value="true" {% if config.standardize_stock_layouts %}checked{% endif %}><span class="tooltip" data-tooltip="Forces sheets with the same layout of required parts to use the same layout of stock parts. Can reduce the number of unique cutting patterns and sometimes improve scores. Applied after optimization.">[?]</span> Standardize Stock Layouts</label>
                             </div>
                         </section>
 
