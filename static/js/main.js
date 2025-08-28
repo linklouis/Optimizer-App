@@ -125,6 +125,50 @@ document.addEventListener('DOMContentLoaded', function() {
             console.error("Error sending cancellation request:", error);
         }
     }
+
+
+    function setupResetButtons() {
+        const resetWeightsBtn = document.getElementById('reset-weights-btn');
+        if (resetWeightsBtn) {
+            resetWeightsBtn.addEventListener('click', () => {
+                const defaults = JSON.parse(document.getElementById('default-weights-data').textContent);
+                for (const key in defaults) {
+                    const input = document.getElementById(key);
+                    if (input) input.value = defaults[key];
+                }
+            });
+        }
+
+        const resetGeneralBtn = document.getElementById('reset-general-btn');
+        if (resetGeneralBtn) {
+            const generalDefaults = {
+                'default_length': 96, 'default_width': 48, 'kerf': 0.17,
+                'min_offcut_dim': 12.0, 'search_time_limit': 5.0,
+                'branching_factor': 1, 'max_unique_layouts': 0
+            };
+            const checkboxDefaults = {
+                'allow_rotation': true, 'use_offcuts': true, 
+                'add_stock_parts': true, 'standardize_stock_layouts': false
+            };
+            
+            resetGeneralBtn.addEventListener('click', () => {
+                for (const key in generalDefaults) {
+                    const input = document.getElementById(key);
+                    if (input) input.value = generalDefaults[key];
+                }
+                for (const key in checkboxDefaults) {
+                    const input = document.getElementById(key);
+                    if (input) input.checked = checkboxDefaults[key];
+                }
+                const noTimeLimitCb = document.getElementById('no-time-limit-cb');
+                if (noTimeLimitCb) {
+                    noTimeLimitCb.checked = false;
+                    // Dispatch the change event to ensure the UI updates correctly.
+                    noTimeLimitCb.dispatchEvent(new Event('change'));
+                }
+            });
+        }
+    }
         
     // --- Event Listeners and Initial Setup ---
     
@@ -156,7 +200,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 const cardTitle = parentCard?.querySelector('.card-title')?.textContent || '';
                 
                 if (cardTitle.includes('General Settings') || cardTitle.includes('Scoring Weights')) {
-                } else if (cardTitle.includes('File Paths')) {
+                } else if (cardTitle.includes('File Paths [?]')) {
                     e.preventDefault();
                     document.querySelector('button[value="refresh_files"]')?.click();
                 } else {
@@ -209,12 +253,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     "The 'Max Unique Layouts' setting limits the number of different cutting patterns used. Setting it to 0 removes the limit.",
                     "You can adjust scoring weights to prioritize different aspects of the solution, such as minimizing waste or using offcuts.",
                     "The scoring system adapts as better solutions are found. A new 'best score' might look lower than a previous one because the normalization scale has become stricter. The Solution Log provides a direct, apples-to-apples comparison.",
-                    'Tip: You can copy a file\'s path by right-clicking it (or Shift+Right-clicking on Windows for "Copy as path") and pasting it into the input fields.',
-                    "Tip: A negative score is normal! Scores are relative values used to compare options. The Overall Score % in the results provides a more intuitive measure of success.",
-                    "Tip: The search path visualizer uses color to indicate a path's quality. Greener nodes represent better potential solutions, while redder nodes are less promising.",
-                    "Tip: Hover over the [?] icons in the results summary for more details about each metric.",
-                    "Tip: You can remove individual parts or offcuts from a layout by clicking on them.",
-                    "Tip: Made a change to the results you didn't like? Use the Undo button or press Ctrl+Z to revert your last modification."
+                    'You can copy a file\'s path by right-clicking it (or Shift+Right-clicking on Windows for "Copy as path") and pasting it into the input fields.',
+                    "A negative score is normal! Scores are relative values used to compare options. The Overall Score % in the results provides a more intuitive measure of success.",
+                    "The search path visualizer uses color to indicate a path's quality. Greener nodes represent better potential solutions, while redder nodes are less promising.",
+                    "Hover over the [?] icons in the results summary for more details about each metric.",
+                    "You can remove individual parts or offcuts from a layout by clicking on them.",
+                    "Made a change to the results you didn't like? Use the Undo button or press Ctrl+Z to revert your last modification.",
+                    "The progress bar indicates how many parts have been placed in the current layout being explored, not the overall optimization progress. Expect it to fluctuate!",
+                    "This app runs a faster, but worst algorithm first, so expect an initial startup time. This time will increase with more parts, though the complexity of the job has little effect, unlike with the full algorithm."
                 ];
                 const randomIndex = Math.floor(Math.random() * tips.length);
                 loadingTipElement.innerHTML = `<strong>Tip:</strong> ${tips[randomIndex]}`;
@@ -382,6 +428,7 @@ if (data.log_entry) {
 
     setupThemeToggle();
     setupTabs();
+    setupResetButtons();
     setupFormControls();
     setupCollapsibleSections();
     restoreAccordionStates();

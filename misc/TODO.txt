@@ -36,11 +36,11 @@ FEATURES
         - ✓ HHOS file multiplier should be displayed on the file's header in Loaded Parts List like the number of parts is.
         - ✓ Cancle optimization button on Optimizing Layouts... loading card
         - ✓ Add an "accept early" button to the Optimizing Layouts... loading card?
-        - X✓ Allow greedy algorithm as fallback
+        - X/✓ Allow greedy algorithm as fallback
 
         - Allow uploading a temp Offcut List that doesn't override the current one?
         - Save offcuts (Maybe only save after export?)
-        - Clear Offcut List File input space after optimization
+        - Clear Offcut List file input space after optimization
         - Notes section for offcuts
         - Tell user when the files they're pointing to don't exist
         - Allow the quantity of a given layout to be adjusted manually after optimization?
@@ -48,7 +48,8 @@ FEATURES
         - [ASK] Make a way to automatically pick all of the most needed stock parts for a stock-only job?
         - Allow the user to apply Stock Part Layout standardization post-opimization?
         - Be able to click to make an area an offcut
-        - Click to remove Offcut from availible sheets. (Would have to run optimization again?)
+        - Click to remove an Offcut sheet as an available stock sheet? (Would have to run optimization again?)
+        - Add [?] to Standardize Stock Layouts, Min. Useable Offcut Width, prioritize (Manage Offcuts card), and Required Quantity (Manage Stock Parts card)
     
     Optimizer
         - ✓ Only keep reusing a layout of stock parts until another layout is better because the number of the original stock parts needed has been filled.
@@ -58,7 +59,10 @@ FEATURES
         - ✓ Improve calculate_bound function for speedup
         - ✓ Fix ideal score calculation
 
-        - Penalize higher numbers of unique default sheet layouts more than layouts on offcut sheets?
+        - Penalize higher numbers of unique Default sheet layouts more than layouts on Offcut sheets?
+        - ------> Greedy heuristic in _place_parts_in_rects, can we incorporate it into the B&B?
+        - w_stock_fill_item_bonus? The bonus provided by using stock parts is in creating less waste. Do we really need this?
+
 
     Visual
         - ✓ Add measurements to layout display
@@ -73,12 +77,12 @@ FEATURES
         - ✓ Parts on the Results tab should always be displayed at the same size
         - ✓ Display the lines for the cuts
         - ✓ Make more loading screen tips, or have the time limit one only appear when there is a time limit?
+        - ✓ Hovering over a part should highlight it in red, so it's obvious clicking will delete it.
 
         - Make the Loaded Parts List section look better
         - Add line break before 'Note:' in search time tooltip
         - Make dimensions text more readable on patterned backgrounds
         - The symbols on the theme switcher aren't perfectly vertically alligned with the switch.
-        - Hovering over a part should highlight it in red, so it's obvious clicking will delete it.
         - -----> All nodes directly attached to the root freeze after like 300 ticks?
 
 CODE
@@ -126,10 +130,10 @@ BUGS
 
 MISC
     - X Change default branching factor to 2 or 3.
+    - X Ask the AI to just make the ideal score predictor more sophisticated?
 
     - Change Stock Part Inv. Bonus tooltip to something like "Should usually be a larger number(i.e., 2-5), since setting it heigher doesn't negatively impact the effects of other weights, and we want to make sure that the more important stock is prioritized."
     - Why are the absolute scores in the hundreds?
-    - Ask the AI to just make the ideal score predictor more sophisticated?
 
 IDEAS
     - X Try every combination of cut order for every sheet? 
@@ -207,7 +211,6 @@ General Rules:
 - make the fallback value for getting things from the config the default value
 - ✓ have the algorithm be more likely to find a satisfactory solution early on, and then allow it to work on finding better ones?
 - ---> How does the time limiting on run_single_sheet_optimization work? Can we make it ignore options that definitely won't work?
-- ----> Greedy heuristic in _place_parts_in_rects, can we incorporate it into the B&B?
 
 - ✓ Cancle button not actually stopping optimization
 

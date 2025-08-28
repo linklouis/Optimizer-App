@@ -226,6 +226,21 @@ input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 2px
     flex-shrink: 0;
 }
 
+
+.dimension-input-group .dimension-inputs {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.25rem;
+}
+.dimension-input-group .dimension-inputs input {
+    text-align: center;
+}
+.dimension-input-group .dimension-inputs span {
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
 /* Dynamic File Inputs */
 .dynamic-file-list { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 0.75rem; }
 .file-input-group { display: flex; align-items: center; gap: 0.5rem; }
@@ -243,10 +258,24 @@ input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 2px
 .tooltip { position: relative; display: inline-block; cursor: pointer; border-bottom: 1px dotted var(--text-secondary); color: var(--text-secondary); }
 .tooltip::before {
     content: attr(data-tooltip); position: absolute; width: 220px; background-color: #333; color: #fff;
-    text-align: center; padding: 8px; border-radius: 6px; z-index: 1; bottom: 125%; left: 50%;
+    text-align: center; padding: 8px; border-radius: 6px; z-index: 100; bottom: 125%; left: 50%;
     margin-left: -110px; opacity: 0; transition: opacity 0.3s; font-size: 0.8rem; font-weight: 400; pointer-events: none;
 }
 .tooltip:hover::before { opacity: 1; }
+
+/* Fix for tooltips inside scrollable lists being cut off */
+.stock-item .tooltip::before {
+    /* Position to the left of the element */
+    right: 100%;
+    left: auto;
+    margin-left: 0; /* Reset horizontal margin */
+    margin-right: 0.75rem; /* Add some space from the element */
+
+    /* Vertically center it */
+    top: 50%;
+    bottom: auto; /* Reset bottom positioning */
+    transform: translateY(-50%);
+}
 
 /* --- Resizable Card Styles --- */
 .resizable-card .collapsible-content {
@@ -812,4 +841,62 @@ body.dark-mode .btn-accept:hover:not(:disabled) {
 
 .log-entry .log-score.old {
     opacity: 0.8;
+}
+
+
+
+/* --- Inner List Scrollbar Styles --- */
+.stock-selector,
+.table-container,
+.solution-log-entries {
+    /* For Firefox */
+    scrollbar-width: thin;
+    scrollbar-color: var(--secondary) var(--bg-primary);
+}
+
+/* For Webkit browsers (Chrome, Safari, etc.) */
+.stock-selector::-webkit-scrollbar,
+.table-container::-webkit-scrollbar,
+.solution-log-entries::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+.stock-selector::-webkit-scrollbar-track,
+.table-container::-webkit-scrollbar-track,
+.solution-log-entries::-webkit-scrollbar-track {
+    background: var(--bg-primary);
+}
+
+.stock-selector::-webkit-scrollbar-thumb,
+.table-container::-webkit-scrollbar-thumb,
+.solution-log-entries::-webkit-scrollbar-thumb {
+    background-color: var(--secondary);
+    border-radius: 5px;
+    border: 2px solid var(--bg-primary);
+}
+
+.stock-selector::-webkit-scrollbar-thumb:hover,
+.table-container::-webkit-scrollbar-thumb:hover,
+.solution-log-entries::-webkit-scrollbar-thumb:hover {
+    background-color: var(--primary);
+}
+
+/* --- Global Scrollbar Styles --- */
+body::-webkit-scrollbar {
+    width: 16px;
+}
+
+body::-webkit-scrollbar-track {
+    background: var(--bg-primary);
+}
+
+body::-webkit-scrollbar-thumb {
+    background-color: var(--secondary);
+    border-radius: 8px;
+    border: 4px solid var(--bg-primary);
+}
+
+body::-webkit-scrollbar-thumb:hover {
+    background-color: var(--secondary);
 }

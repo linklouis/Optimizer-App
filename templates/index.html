@@ -55,7 +55,10 @@
 
                     <section class="card">
                         <details class="collapsible-section">
-                            <summary class="card-title"><i class="fa-solid fa-file-alt"></i> File Paths</summary>
+                            <summary class="card-title">
+                                <i class="fa-solid fa-file-alt"></i> File Paths
+                                <span class="tooltip" data-tooltip="Pro Tip: In Windows File Explorer, you can select a file and press Ctrl+Shift+C to copy its full path to paste here.">[?]</span>
+                            </summary>
                             <div class="collapsible-content">
                                 <div id="hhos-file-list" class="dynamic-file-list">
                                     <label class="form-label">HHOS Part Lists</label>
@@ -94,7 +97,7 @@
                     {% if hhos_file_contents %}
                     <section class="card">
                          <details class="collapsible-section">
-                            <summary class="card-title"><i class="fa-solid fa-list-check"></i> Loaded Part Lists</summary>
+                            <summary class="card-title"><i class="fa-solid fa-list-check"></i> Manage Job Parts</summary>
                             <div class="collapsible-content">
                                 <div class="accordion" id="loaded-parts-accordion">
                                     {% for file_content in hhos_file_contents %}
@@ -163,7 +166,7 @@
                                         </div>
                                         <div class="stock-item-qty">
                                             <label class="checkbox-group" for="prio_offcut_{{ offcut.id }}">
-                                                <input type="checkbox" name="prioritized_offcuts" id="prio_offcut_{{ offcut.id }}" value="{{ offcut.id }}" {% if offcut.id in config.prioritized_offcuts %}checked{% endif %}> Prioritize
+                                                <input type="checkbox" name="prioritized_offcuts" id="prio_offcut_{{ offcut.id }}" value="{{ offcut.id }}" {% if offcut.id in config.prioritized_offcuts %}checked{% endif %}> Prioritize <span class="tooltip" data-tooltip="Gives a large bonus to any layout that uses this specific offcut, making it much more likely to be selected.">[?]</span>
                                             </label>
                                         </div>
                                     </div>
@@ -197,7 +200,7 @@
                                             <span class="stock-status">(Need: {{ (part.target_stock - part.current_stock) | int }})</span>
                                         </div>
                                         <div class="stock-item-qty">
-                                            <label for="req_qty_{{ part.internal_ref }}">Required Qty:</label>
+                                            <label for="req_qty_{{ part.internal_ref }}">Required Qty: <span class="tooltip" data-tooltip="Specify a quantity of this stock part that MUST be included in the job. These are treated as required job parts, not optional fillers.">[?]</span></label>
                                             <input type="number" name="required_qty_{{ part.internal_ref }}" id="req_qty_{{ part.internal_ref }}" class="required-qty-input" value="{{ config.required_stock_quantities.get(part.internal_ref, '') }}" min="0" placeholder="0" {% if part.internal_ref not in config.selected_stock_parts %}disabled{% endif %}>
                                         </div>
                                     </label>
@@ -211,12 +214,21 @@
                     
                     <div class="settings-grid">
                         <section class="card">
-                            <h2 class="card-title"><i class="fa-solid fa-cogs"></i> General Settings</h2>
+                            <h2 class="card-title">
+                                <i class="fa-solid fa-cogs"></i> General Settings
+                                <button type="button" class="btn-secondary btn-header-action" id="reset-general-btn">Reset to Defaults</button>
+                            </h2>
                             <div class="form-grid">
-                                <div><label for="default_length">Default Sheet Length</label><input type="number" step="any" id="default_length" name="default_length" value="{{ config.default_length }}"></div>
-                                <div><label for="default_width">Default Sheet Width</label><input type="number" step="any" id="default_width" name="default_width" value="{{ config.default_width }}"></div>
+                                <div class="dimension-input-group">
+                                    <label>Default Sheet Dimensions <span class="tooltip" data-tooltip="This should always be the largest sheet available.">[?]</span></label>
+                                    <div class="dimension-inputs">
+                                        <input type="number" step="any" id="default_length" name="default_length" value="{{ config.default_length }}" title="Sheet Length">
+                                        <span>&times;</span>
+                                        <input type="number" step="any" id="default_width" name="default_width" value="{{ config.default_width }}" title="Sheet Width">
+                                    </div>
+                                </div>
                                 <div><label for="kerf">Kerf <span class="tooltip" data-tooltip="The width of the saw blade.">[?]</span></label><input type="number" step="any" id="kerf" name="kerf" value="{{ config.kerf }}"></div>
-                                <div><label for="min_offcut_dim">Min. Usable Offcut Width</label><input type="number" step="any" id="min_offcut_dim" name="min_offcut_dim" value="{{ config.min_offcut_dim }}"></div>
+                                <div><label for="min_offcut_dim">Min. Usable Offcut Width <span class="tooltip" data-tooltip="Offcuts smaller than this in either dimension will be considered waste.">[?]</span></label><input type="number" step="any" id="min_offcut_dim" name="min_offcut_dim" value="{{ config.min_offcut_dim }}"></div>
                                 <div>
                                     <label for="search_time_limit">Search Time (s) <span class="tooltip" data-tooltip="Total time for the optimizer to run. Longer times allow for a more thorough search and better results.&#013;Note: Ideally, the algorithm will finish before the time runs out. If it doesn't, it will pick the best option it's found so far. If it hasn't found a viable option yet, an error will occur.">[?]</span></label>
                                     <div class="input-with-toggle">
@@ -239,13 +251,14 @@
                                 <label class="checkbox-group" for="allow_rotation"><input type="checkbox" id="allow_rotation" name="allow_rotation" value="true" {% if config.allow_rotation %}checked{% endif %}>Allow Rotation</label>
                                 <label class="checkbox-group" for="use_offcuts"><input type="checkbox" id="use_offcuts" name="use_offcuts" value="true" {% if config.use_offcuts %}checked{% endif %}>Use Available Offcuts</label>
                                 <label class="checkbox-group" for="add_stock_parts"><input type="checkbox" id="add_stock_parts" name="add_stock_parts" value="true" {% if config.add_stock_parts %}checked{% endif %}>Add Stock Parts</label>
-                                <label class="checkbox-group" for="standardize_stock_layouts"><input type="checkbox" id="standardize_stock_layouts" name="standardize_stock_layouts" value="true" {% if config.standardize_stock_layouts %}checked{% endif %}>Standardize Stock Layouts</label>
+                                <label class="checkbox-group" for="standardize_stock_layouts"><input type="checkbox" id="standardize_stock_layouts" name="standardize_stock_layouts" value="true" {% if config.standardize_stock_layouts %}checked{% endif %}><span class="tooltip" data-tooltip="Forces sheets with the same layout of required parts to use the same layout of stock parts. Can reduce the number of unique cutting patterns and sometimes improve scores. Applied after optimization.">[?]</span>Standardize Stock Layouts</label>
                             </div>
                         </section>
 
                         <section class="card">
                             <h2 class="card-title">
                                 <i class="fa-solid fa-balance-scale"></i> Scoring Weights
+                                <span class="tooltip" data-tooltip="These values control the optimizer's priorities. Higher values make the optimizer care more about that factor.">[?]</span>
                                 <button type="button" class="btn-secondary btn-header-action" id="reset-weights-btn">Reset to Default</button>
                             </h2>
                             <div class="form-grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));">

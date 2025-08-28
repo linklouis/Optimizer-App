@@ -34,6 +34,7 @@ class TreeVisualizer {
         this.tickCounter = 0;
         this.tickRate = 0;
         this.tickRateIntervalId = null;
+        this.totalTicks = 0;
 
         this.nodeList = [];
         this.isNodeListDirty = true;
@@ -102,6 +103,7 @@ class TreeVisualizer {
         }
         this.tickCounter = 0;
         this.tickRate = 0;
+        this.totalTicks = 0;
         this.nodes = {};
         this.pendingNodes = [];
         this.svgNodes = {};
@@ -150,6 +152,7 @@ class TreeVisualizer {
     _simulationLoop() {
         // This fast loop handles data processing and physics
         this.tickCounter++;
+        this.totalTicks++;
         this._introducePendingNodes();
         this.childCounts = this._calculateChildCounts();
         this._runLayoutSimulation(this.childCounts);
@@ -460,9 +463,9 @@ class TreeVisualizer {
 
         const kRepel = 2500;
         const kAttract = 0.03;
-        const kAlign = 1;
+        const kAlign = 50;
         const damping = 0.01;
-        const directionalForce = 0;
+        const directionalForce = 30;
 
         // 1. Repulsion Force Calculation.
         // Assumes forces were reset to 0 at the end of the last tick.
@@ -503,8 +506,8 @@ class TreeVisualizer {
                 const epsilon = 1e-6;
 
                 const linearThreshold = 100.0;
-                const kLinearAttract = 0.5; // Strength in the linear region.
-                const kExponentialFactor = 0.1; // Growth rate after the threshold.
+                const kLinearAttract = 0.8; // Strength in the linear region.
+                const kExponentialFactor = 0.4; // Growth rate after the threshold.
 
                 let forceMagnitude;
 
@@ -559,24 +562,39 @@ class TreeVisualizer {
                 const flow_magnitude = Math.sqrt(total_flow_dx * total_flow_dx + total_flow_dy * total_flow_dy);
 
                 if (flow_magnitude > 0.1) {
-                    // Normalize the averaged flow vector to get a pure direction.
+                    // 1. Get the desired direction vector (normalized ancestor flow)
                     const norm_flow_dx = total_flow_dx / flow_magnitude;
                     const norm_flow_dy = total_flow_dy / flow_magnitude;
 
-                    // Get the child's current distance from its parent.
+                    // 2. Get the current direction vector (from parent to node)
                     const current_relative_dx = node.x - parent.x;
                     const current_relative_dy = node.y - parent.y;
-                    const current_distance = Math.sqrt(current_relative_dx * current_relative_dx + current_relative_dy * current_relative_dy) * 0.85;
+                    const current_distance = Math.sqrt(current_relative_dx * current_relative_dx + current_relative_dy * current_relative_dy);
 
-                    // Calculate the ideal target position for rotation.
-                    const target_x = parent.x + norm_flow_dx * current_distance;
-                    const target_y = parent.y + norm_flow_dy * current_distance;
+                    if (current_distance > 1e-6) {
+                        const norm_current_dx = current_relative_dx / current_distance;
+                        const norm_current_dy = current_relative_dy / current_distance;
 
-                    // Apply a force pulling the node towards this rotational target.
-                    const nodeChildCount = childCounts[node.id] || 0;
-                    const alignmentStrength = 1 + Math.log1p(nodeChildCount);
-                    node.fx += (target_x - node.x) * kAlign * alignmentStrength;
-                    node.fy += (target_y - node.y) * kAlign * alignmentStrength;
+                        // 3. Calculate the angle between the two vectors using dot product
+                        // Clamp the dot product to avoid Math.acos errors from floating point inaccuracies
+                        const dot_product = Math.max(-1, Math.min(1, norm_flow_dx * norm_current_dx + norm_flow_dy * norm_current_dy));
+                        const angle = Math.acos(dot_product);
+
+                        // 4. Determine the direction of rotation using the 2D cross product's sign
+                        const cross_product_z = norm_current_dx * norm_flow_dy - norm_current_dy * norm_flow_dx;
+
+                        // 5. The corrective force is tangential to the node's circular path around its parent
+                        const tangent_dx = -norm_current_dy;
+                        const tangent_dy = norm_current_dx;
+
+                        // 6. Apply the force, scaled by the angle and corrected by the cross product's direction
+                        const nodeChildCount = childCounts[node.id] || 0;
+                        const alignmentStrength = 1 + Math.log1p(nodeChildCount);
+                        const force_magnitude = angle * kAlign * alignmentStrength;
+
+                        node.fx += tangent_dx * force_magnitude * Math.sign(cross_product_z);
+                        node.fy += tangent_dy * force_magnitude * Math.sign(cross_product_z);
+                    }
                 }
             }
             
@@ -592,6 +610,19 @@ class TreeVisualizer {
         const max_velocity = 20;
         for (let i = 1; i < nodes.length; i++) {
             const node = nodes[i];
+
+            // New logic to freeze direct children of the root node after a certain number of ticks
+            if (node.parent === 0 && this.totalTicks > 3000) {
+                node.isFrozen = true;
+            }
+
+            if (node.isFrozen) {
+                node.vx = 0;
+                node.vy = 0;
+                node.fx = 0;
+                node.fy = 0;
+                continue;
+            }
 
             node.vx = (node.vx || 0) * damping + node.fx * 0.011;
             node.vy = (node.vy || 0) * damping + node.fy * 0.011;
