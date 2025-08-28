@@ -128,6 +128,9 @@ BUGS
     - ✓ Reset to defaults button only works once, and then you have to reload the page if you want to use it again?
     - X Only ever seems to show the same tip?
     - ✓ Cuts don't update when parts are removed on results page
+    - ✓? Offcut finding isn't always 100% perfect file:///C:/Users/louis/Downloads/Screenshot_28-8-2025_142929_127.0.0.1.jpeg
+    - ✓ Manage Offcuts card only shows up if you have a file path entered? It should used the saved file.
+    - ✓ Changing the multiplier on the File Paths card doesn't *always* update the Manage Job Parts card. Every time Load / Refresh Files is clicked, the multipliers in Manage Job Parts should update to match the ones in File Paths.
 
     - The calculated ideal score is several orders of magnitude smaller than the true score.
     - The stock part standardization doesn't seem to affect the final score.
@@ -135,9 +138,6 @@ BUGS
                Could make the change to prioritize larger waste areas useless in find_guillotine_cuts. If all offcuts are placed as best as possible, we only need to worry about making the least cuts possible. https://g.co/gemini/share/c34e4f61fb14
     - Canceling an optimization doesn't always stop it from running in the background, at least not right away.
     - Greedy solution sometimes takes a really long time?
-    - Offcut finding isn't always 100% perfect file:///C:/Users/louis/Downloads/Screenshot_28-8-2025_142929_127.0.0.1.jpeg
-    - Changing the multiplier on the File Paths card doesn't *always* update the Manage Job Parts card. Every time Load / Refresh Files is clicked, the multipliers in Manage Job Parts should update to match the ones in File Paths.
-    - Manage Offcuts card only shows up if you have a file path entered? It should used the saved file.
     - The content of the loading card can get pushed off the bottom
     - X? Are we re-evaluating the offcuts each time a layout is completed AND each time a solution is found?
 
@@ -148,6 +148,7 @@ MISC
     - Change Stock Part Inv. Bonus tooltip to something like "Should usually be a larger number(i.e., 2-5), since setting it heigher doesn't negatively impact the effects of other weights, and we want to make sure that the more important stock is prioritized."
     - Why are the absolute scores in the hundreds?
     - -------> TEST Temporary OPTION ON OFFCUT LIST INPUT
+    - Does the consolidate_empty_space run for all sheets or just all layouts?
 
 IDEAS
     - X Try every combination of cut order for every sheet? 

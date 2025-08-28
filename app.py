@@ -219,25 +219,10 @@ def home():
 
         config = update_config_from_form(config, request.form)
         
-        new_multipliers = {f['path']: f.get('multiplier', 1) for f in config.get('hhos_files', [])}
-        
-        DELIMITER = ':::'
-        part_quantities_to_clear = []
-
-        # Identify parts whose file-level multiplier has changed
-        for path, new_mult in new_multipliers.items():
-            old_mult = old_multipliers.get(path)
-            # If a multiplier changed, clear any manual overrides for parts from that file
-            if old_mult is not None and int(old_mult) != int(new_mult):
-                if 'part_quantities' in config:
-                    for part_id in config['part_quantities']:
-                        if part_id.startswith(f"{path}{DELIMITER}"):
-                            part_quantities_to_clear.append(part_id)
-        
-        # Reset the quantities for those parts so the new multiplier takes effect
-        if part_quantities_to_clear and 'part_quantities' in config:
-            for part_id in part_quantities_to_clear:
-                config['part_quantities'].pop(part_id, None)
+        # Always clear all manual quantity overrides on refresh to force a full
+        # resynchronization with the file-level multipliers.
+        if 'part_quantities' in config:
+            config['part_quantities'] = {}
 
         save_config(config)
         # Redirect to the GET route to show the updated page
