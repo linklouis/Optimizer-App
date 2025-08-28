@@ -283,7 +283,12 @@ def home():
             config['selected_hhos_parts'].extend(newly_selected_parts)
 
     try:
-        _, offcut_df, stock_inv_df = process_uploaded_files(config.get('hhos_files', []), config['offcut_path'], config['stock_inv_path'], config['default_length'], config['default_width'])
+        DEFAULT_OFFCUT_PATH = 'managed_offcut_list.csv'
+        effective_offcut_path = config.get('offcut_path', '').strip()
+        if not effective_offcut_path:
+            effective_offcut_path = DEFAULT_OFFCUT_PATH
+
+        _, offcut_df, stock_inv_df = process_uploaded_files(config.get('hhos_files', []), effective_offcut_path, config['stock_inv_path'], config['default_length'], config['default_width'])
         if stock_inv_df is not None: all_stock_parts_list = stock_inv_df.to_dict('records')
         if offcut_df is not None:
             if not config.get('selected_offcuts') and config.get('offcut_path'): config['selected_offcuts'] = [str(i) for i in offcut_df.index]
@@ -310,6 +315,30 @@ def home():
 def start_optimization():
     config = load_config()
     
+    form_offcut_path = request.form.get('offcut_path', '').strip(' "')
+    is_temporary = request.form.get('temporary_offcut_path') == 'true'
+    DEFAULT_OFFCUT_PATH = 'managed_offcut_list.csv'
+
+    if form_offcut_path and not is_temporary and os.path.exists(form_offcut_path):
+        try:
+            from data_processing import standardize_sheet_data
+            
+            reader = pd.read_csv if form_offcut_path.lower().endswith('.csv') else pd.read_excel
+            user_offcut_df = reader(form_offcut_path)
+            
+            temp_config = update_config_from_form(load_config(), request.form)
+
+            if not user_offcut_df.empty:
+                standardized_df = standardize_sheet_data(
+                    user_offcut_df, "Offcut",
+                    temp_config['default_length'],
+                    temp_config['default_width']
+                )
+                standardized_df.to_csv(DEFAULT_OFFCUT_PATH, index=False)
+        except Exception as e:
+            traceback.print_exc()
+            return jsonify({"error": f"Failed to process and overwrite managed offcut list: {e}"}), 400
+    
     # Manually grab the offcut path and temporary flag from the form
     form_offcut_path = request.form.get('offcut_path', '').strip(' "')
     
@@ -317,8 +346,11 @@ def start_optimization():
     config = update_config_from_form(config, request.form)
     save_config(config)
 
-    # Now, for THIS RUN ONLY, set the config to use the path from the form.
-    config['offcut_path'] = form_offcut_path
+    # Now, for THIS RUN ONLY, determine the effective path and set it in the config.
+    effective_run_path = form_offcut_path
+    if not effective_run_path:
+        effective_run_path = DEFAULT_OFFCUT_PATH
+    config['offcut_path'] = effective_run_path
 
     task_id = str(uuid.uuid4())
     with tasks_lock:

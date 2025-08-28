@@ -6,7 +6,7 @@
             "multiplier": 15
         },
         {
-            "path": "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv",
+            "path": "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv",
             "multiplier": 6
         }
     ],
@@ -19,16 +19,12 @@
         "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv:::3",
         "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv:::4",
         "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv:::5",
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv:::0",
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv:::1",
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv:::2",
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv:::3",
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv:::4",
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv:::5",
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv:::6",
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv:::7",
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv:::8",
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv:::9"
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv:::0",
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv:::1",
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv:::2",
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv:::3",
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv:::4",
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv:::5"
     ],
     "selected_offcuts": [
         "0",
@@ -103,7 +99,7 @@
     "kerf": 0.17,
     "min_offcut_dim": 12.0,
     "search_time_limit": 0.0,
-    "branching_factor": 1,
+    "branching_factor": 10,
     "max_unique_layouts": 0,
     "allow_rotation": true,
     "use_offcuts": true,
