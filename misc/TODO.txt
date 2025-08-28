@@ -39,10 +39,10 @@ FEATURES
         - X/✓ Allow greedy algorithm as fallback
         - ✓ Add [?] to Standardize Stock Layouts, Min. Useable Offcut Width, prioritize (Manage Offcuts card), and Required Quantity (Manage Stock Parts card)
         - ✓ toggleable isualization
+        - ✓ Allow uploading a temp Offcut List that doesn't override the current one? Maybe have a "Temporary" check box next to the "Offcut List" label?
+        - ✓ Clear Offcut List file input space after optimization?
 
-        - Allow uploading a temp Offcut List that doesn't override the current one?
         - Save offcuts (Maybe only save after export?)
-        - Clear Offcut List file input space after optimization?
         - Notes section for offcuts
         - Tell user when the files they're pointing to don't exist
         - Allow the quantity of a given layout to be adjusted manually after optimization?
@@ -138,6 +138,7 @@ MISC
 
     - Change Stock Part Inv. Bonus tooltip to something like "Should usually be a larger number(i.e., 2-5), since setting it heigher doesn't negatively impact the effects of other weights, and we want to make sure that the more important stock is prioritized."
     - Why are the absolute scores in the hundreds?
+    - -------> TEST Temporary OPTION ON OFFCUT LIST INPUT
 
 IDEAS
     - X Try every combination of cut order for every sheet? 

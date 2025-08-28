@@ -87,7 +87,15 @@
 
                                 <div class="form-grid">
                                     <div><label for="stock_inv_path">Stock Part Inventory</label><input type="text" id="stock_inv_path" name="stock_inv_path" value="{{ config.stock_inv_path }}"></div>
-                                    <div><label for="offcut_path">Offcut List (Optional)</label><input type="text" id="offcut_path" name="offcut_path" value="{{ config.offcut_path }}"></div>
+                                    <div class="input-with-side-label">
+                                        <div class="main-label-group">
+                                            <label for="offcut_path">Offcut List (Optional)</label>
+                                            <label class="checkbox-group side-checkbox">
+                                                <input type="checkbox" id="temporary_offcut_path" name="temporary_offcut_path" value="true"> Temporary
+                                            </label>
+                                        </div>
+                                        <input type="text" id="offcut_path" name="offcut_path" value="{{ config.offcut_path }}">
+                                    </div>
                                 </div>
                                 
                                 <hr class="form-divider">

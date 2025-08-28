@@ -309,8 +309,16 @@ def home():
 @app.route('/start_optimization', methods=['POST'])
 def start_optimization():
     config = load_config()
+    
+    # Manually grab the offcut path and temporary flag from the form
+    form_offcut_path = request.form.get('offcut_path', '').strip(' "')
+    
+    # Update and save the persistent config (this will skip saving the offcut path if temporary)
     config = update_config_from_form(config, request.form)
     save_config(config)
+
+    # Now, for THIS RUN ONLY, set the config to use the path from the form.
+    config['offcut_path'] = form_offcut_path
 
     task_id = str(uuid.uuid4())
     with tasks_lock:

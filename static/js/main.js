@@ -335,6 +335,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
 
                 if (!startResponse.ok) throw new Error('Failed to start optimization task.');
+
+                // Clear the offcut path input and temporary checkbox after successful submission
+                const offcutPathInput = document.getElementById('offcut_path');
+                const tempOffcutCb = document.getElementById('temporary_offcut_path');
+                if (offcutPathInput) offcutPathInput.value = '';
+                if (tempOffcutCb) tempOffcutCb.checked = false;
                 
                 const { task_id } = await startResponse.json();
                 const eventSource = new EventSource(`/stream/${task_id}`);

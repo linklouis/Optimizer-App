@@ -48,7 +48,9 @@ def update_config_from_form(config, form_data):
             multiplier = int(mult_str) if mult_str.isdigit() else 1
             config['hhos_files'].append({'path': path, 'multiplier': multiplier})
 
-    if 'offcut_path' in form_data: config['offcut_path'] = form_data.get('offcut_path', '').strip(' "')
+    is_temporary_offcut = form_data.get('temporary_offcut_path') in ['true', 'on']
+    if not is_temporary_offcut and 'offcut_path' in form_data:
+        config['offcut_path'] = form_data.get('offcut_path', '').strip(' "')
     if 'stock_inv_path' in form_data: config['stock_inv_path'] = form_data.get('stock_inv_path', '').strip(' "')
     if 'default_length' in form_data: config['default_length'] = form_data.get('default_length', type=float)
     if 'default_width' in form_data: config['default_width'] = form_data.get('default_width', type=float)
