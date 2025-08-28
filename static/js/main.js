@@ -279,7 +279,39 @@ document.addEventListener('DOMContentLoaded', function() {
 
             const visualizerSvgId = 'path-visualization-svg'; 
             treeVisualizer = new TreeVisualizer(visualizerSvgId);
-            treeVisualizer.start();
+            
+            const vizPanelRight = document.querySelector('.loading-panel-right');
+            const vizPanelLeft = document.querySelector('.loading-panel-left');
+            const liveVizToggle = document.getElementById('viz-live-toggle');
+            
+            const isVizEnabledByDefault = localStorage.getItem('visualizationEnabled') !== 'false';
+            liveVizToggle.checked = isVizEnabledByDefault;
+
+            if (isVizEnabledByDefault) {
+                treeVisualizer.start();
+                vizPanelRight.classList.remove('viz-hidden');
+                vizPanelLeft.classList.remove('viz-full-width');
+            } else {
+                vizPanelRight.classList.add('viz-hidden');
+                vizPanelLeft.classList.add('viz-full-width');
+            }
+            
+            const liveVizToggleListener = function() {
+                if (this.checked) {
+                    if (!treeVisualizer.animationFrameId) treeVisualizer.start();
+                    else if (treeVisualizer.isPaused) treeVisualizer.resume();
+                    vizPanelRight.classList.remove('viz-hidden');
+                    vizPanelLeft.classList.remove('viz-full-width');
+                } else {
+                    if (treeVisualizer && !treeVisualizer.isPaused) treeVisualizer.pause();
+                    vizPanelRight.classList.add('viz-hidden');
+                    vizPanelLeft.classList.add('viz-full-width');
+                }
+            };
+            const newLiveVizToggle = liveVizToggle.cloneNode(true);
+            liveVizToggle.parentNode.replaceChild(newLiveVizToggle, liveVizToggle);
+            newLiveVizToggle.addEventListener('change', liveVizToggleListener);
+
 
             progressBarFill.style.width = '0%';
             partProgressPercent.textContent = '0%';
@@ -354,7 +386,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         renderResults(data.best_solution_preview); // Render preview (non-interactive)
                     }
 
-if (data.log_entry) {
+                    if (data.log_entry) {
                         const logContainer = document.getElementById('solution-log-entries');
                         if (logContainer) {
                             const entry = document.createElement('div');
@@ -389,7 +421,7 @@ if (data.log_entry) {
                         }
                     }
 
-                    if (data.tree_update && treeVisualizer) {
+                    if (data.tree_update && treeVisualizer && !treeVisualizer.isPaused) {
                         treeVisualizer.addOrUpdateNodes(data.tree_update);
                     }
                     if (treeVisualizer) {
@@ -441,6 +473,7 @@ if (data.log_entry) {
     setupTabs();
     setupResetButtons();
     setupFormControls();
+    setupVisualizationToggle();
     setupCollapsibleSections();
     restoreAccordionStates();
 

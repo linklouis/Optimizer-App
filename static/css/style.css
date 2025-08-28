@@ -683,6 +683,56 @@ input:checked + .slider:before { transform: translateX(20px); }
     stroke-width: 2px;
 }
 
+/* --- Visualization Toggle Styles --- */
+.viz-toggle-wrapper {
+    margin-left: auto;
+}
+
+.mini-switch {
+    position: relative;
+    display: inline-block;
+    width: 34px;
+    height: 20px;
+}
+.mini-switch input { display: none; }
+
+.mini-switch .slider {
+    position: absolute;
+    cursor: pointer;
+    inset: 0;
+    background-color: var(--secondary);
+    transition: .4s;
+    border-radius: 20px;
+}
+
+.mini-switch .slider:before {
+    position: absolute;
+    content: "";
+    height: 12px;
+    width: 12px;
+    left: 4px;
+    bottom: 4px;
+    background-color: white;
+    transition: .4s;
+    border-radius: 50%;
+}
+
+.mini-switch input:checked + .slider {
+    background-color: var(--primary);
+}
+
+.mini-switch input:checked + .slider:before {
+    transform: translateX(14px);
+}
+
+.loading-panel-right.viz-hidden {
+    display: none;
+}
+
+.loading-panel-left.viz-full-width {
+    flex: 1 1 100%;
+}
+
 
 
 .loading-actions {

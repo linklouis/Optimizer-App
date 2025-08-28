@@ -18,6 +18,7 @@ class TreeVisualizer {
         this.animationFrameId = null;
         this.simulationLoopId = null; // ID for the fast simulation loop
         this.simulationInterval = 0;  // 4 = target ~250 ticks per second for the simulation
+        this.isPaused = false;
 
         this.solutionNodeId = null;
         this.lastAddedNodeId = null;
@@ -87,9 +88,33 @@ class TreeVisualizer {
         }
         this._updatePositions(this._calculateChildCounts());
     }
-    
-    addOrUpdateNodes(nodeList) {
-        this.pendingNodes.push(...nodeList);
+
+    pause() {
+        if (this.isPaused) return;
+        this.isPaused = true;
+        if (this.tickRateIntervalId) {
+            clearInterval(this.tickRateIntervalId);
+            this.tickRateIntervalId = null;
+        }
+        if (this.simulationLoopId) {
+            clearInterval(this.simulationLoopId);
+            this.simulationLoopId = null;
+        }
+        if (this.animationFrameId) {
+             cancelAnimationFrame(this.animationFrameId);
+             this.animationFrameId = null;
+        }
+    }
+
+    resume() {
+        if (!this.isPaused || this.animationFrameId) return;
+        this.isPaused = false;
+        this.simulationLoopId = setInterval(this._simulationLoop.bind(this), this.simulationInterval);
+        this.tickRateIntervalId = setInterval(() => {
+            this.tickRate = this.tickCounter; // Ticks per second
+            this.tickCounter = 0;
+        }, 1000);
+        this._animationLoop();
     }
 
     clear() {
@@ -118,6 +143,10 @@ class TreeVisualizer {
         this.framesSinceLastSpawn = 0;
         const { width, height } = this.svg.parentElement.getBoundingClientRect();
         this.zoom = { x: width / 2, y: height / 2, scale: 0.5 };
+    }
+
+    addOrUpdateNodes(nodeList) {
+        this.pendingNodes.push(...nodeList);
     }
 
     getPendingNodeCount() {

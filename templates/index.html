@@ -251,11 +251,12 @@
                                     <input type="number" step="1" min="0" id="max_unique_layouts" name="max_unique_layouts" value="{{ config.max_unique_layouts }}">
                                 </div>
                             </div>
-                            <div class="checkbox-grid">
+                            <div class="checkbox-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
                                 <label class="checkbox-group" for="allow_rotation"><input type="checkbox" id="allow_rotation" name="allow_rotation" value="true" {% if config.allow_rotation %}checked{% endif %}><span class="tooltip" data-tooltip="Not likely to be useful, but you never know">[?]</span> Allow Rotation</label>
                                 <label class="checkbox-group" for="use_offcuts"><input type="checkbox" id="use_offcuts" name="use_offcuts" value="true" {% if config.use_offcuts %}checked{% endif %}>Use Offcuts</label>
                                 <label class="checkbox-group" for="add_stock_parts"><input type="checkbox" id="add_stock_parts" name="add_stock_parts" value="true" {% if config.add_stock_parts %}checked{% endif %}>Add Stock Parts</label>
                                 <label class="checkbox-group" for="standardize_stock_layouts"><input type="checkbox" id="standardize_stock_layouts" name="standardize_stock_layouts" value="true" {% if config.standardize_stock_layouts %}checked{% endif %}><span class="tooltip" data-tooltip="Forces sheets with the same layout of required parts to use the same layout of stock parts. Can reduce the number of unique cutting patterns and sometimes improve scores. Applied after optimization.">[?]</span> Standardize Stock Layouts</label>
+                                <label class="checkbox-group" for="enable_visualization"><input type="checkbox" id="enable_visualization"> Enable Visualization</label>
                             </div>
                         </section>
 
@@ -313,6 +314,12 @@
                             <div class="loading-header">
                                 <i class="fa-solid fa-gears fa-spin"></i>
                                 <h2>Optimizing Layouts...</h2>
+                                <div class="viz-toggle-wrapper">
+                                        <label class="theme-switch mini-switch" for="viz-live-toggle">
+                                            <input type="checkbox" id="viz-live-toggle">
+                                            <span class="slider round"></span>
+                                        </label>
+                                    </div>
                             </div>
                     
                             <div class="main-progress">

@@ -256,3 +256,18 @@ function setupCollapsibleSections() {
         updateParentContainer(); // Initial check on page load
     }
 }
+
+
+function setupVisualizationToggle() {
+    const vizToggle = document.getElementById('enable_visualization');
+    if (!vizToggle) return;
+
+    // Set initial state from localStorage (defaults to true/enabled)
+    const isEnabled = localStorage.getItem('visualizationEnabled') !== 'false';
+    vizToggle.checked = isEnabled;
+
+    // Save state when changed
+    vizToggle.addEventListener('change', () => {
+        localStorage.setItem('visualizationEnabled', vizToggle.checked);
+    });
+}
