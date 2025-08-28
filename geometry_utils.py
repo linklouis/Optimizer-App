@@ -1,104 +1,180 @@
 def find_all_empty_rectangles(sheet_info: dict, placed_parts: list) -> list:
     """
-    Finds all empty space on the sheet by creating a grid from all part edges
-    and identifying the empty cells.
+    Finds a set of non-overlapping rectangles that cover all empty space by
+    iteratively subtracting placed parts from the initial sheet area.
     """
     TOLERANCE = 1e-6
-    # Collect all unique x and y coordinates from the sheet and part boundaries
-    all_x = {0, sheet_info['width']}
-    all_y = {0, sheet_info['length']}
+    empty_rects = [{
+        'x': 0, 'y': 0,
+        'width': sheet_info['width'], 'length': sheet_info['length']
+    }]
 
     for part in placed_parts:
         p_len = part['width'] if part.get('rotated') else part['length']
         p_wid = part['length'] if part.get('rotated') else part['width']
-        all_x.add(part['x'])
-        all_x.add(part['x'] + p_wid)
-        all_y.add(part['y'])
-        all_y.add(part['y'] + p_len)
+        
+        next_empty_rects = []
+        for rect in empty_rects:
+            # Check for intersection between part and rect
+            if (part['x'] >= rect['x'] + rect['width'] - TOLERANCE or
+                part['x'] + p_wid <= rect['x'] + TOLERANCE or
+                part['y'] >= rect['y'] + rect['length'] - TOLERANCE or
+                part['y'] + p_len <= rect['y'] + TOLERANCE):
+                next_empty_rects.append(rect) # No intersection, keep the rect
+                continue
+            
+            # Top rect (above the part's area within the current rect)
+            if rect['y'] < part['y'] - TOLERANCE:
+                next_empty_rects.append({'x': rect['x'], 'y': rect['y'], 'width': rect['width'], 'length': part['y'] - rect['y']})
+            # Bottom rect (below the part's area within the current rect)
+            if rect['y'] + rect['length'] > part['y'] + p_len + TOLERANCE:
+                next_empty_rects.append({'x': rect['x'], 'y': part['y'] + p_len, 'width': rect['width'], 'length': (rect['y'] + rect['length']) - (part['y'] + p_len)})
+            # Left rect (left of the part's area within the current rect)
+            if rect['x'] < part['x'] - TOLERANCE:
+                next_empty_rects.append({'x': rect['x'], 'y': part['y'], 'width': part['x'] - rect['x'], 'length': p_len})
+            # Right rect (right of the part's area within the current rect)
+            if rect['x'] + rect['width'] > part['x'] + p_wid + TOLERANCE:
+                next_empty_rects.append({'x': part['x'] + p_wid, 'y': part['y'], 'width': (rect['x'] + rect['width']) - (part['x'] + p_wid), 'length': p_len})
+
+        empty_rects = next_empty_rects
     
-    sorted_x = sorted([x for x in all_x if x <= sheet_info['width'] + TOLERANCE])
-    sorted_y = sorted([y for y in all_y if y <= sheet_info['length'] + TOLERANCE])
+    return empty_rects
 
-    empty_cells = []
-    # Iterate through the grid cells to find empty ones
-    for i in range(len(sorted_x) - 1):
-        for j in range(len(sorted_y) - 1):
-            x, y = sorted_x[i], sorted_y[j]
-            w, l = sorted_x[i+1] - x, sorted_y[j+1] - y
+def consolidate_empty_space(rects: list, config: dict) -> list:
+    """
+    Iteratively finds the largest and most square-like rectangular offcuts 
+    from a set of tiled empty spaces by finding the maximal empty rectangle 
+    in the remaining area in each step.
+    """
+    TOLERANCE = 1e-6
+    min_offcut_dim = config.get('min_offcut_dim', 0)
 
-            if w < TOLERANCE or l < TOLERANCE:
+    if not rects:
+        return []
+
+    current_empty_rects = [r for r in rects if r['width'] > TOLERANCE and r['length'] > TOLERANCE]
+    final_offcuts = []
+
+    while True:
+        if not current_empty_rects:
+            break
+
+        # 1. Define a grid from all rectangle vertices
+        all_x = set()
+        all_y = set()
+        for r in current_empty_rects:
+            all_x.add(r['x'])
+            all_x.add(r['x'] + r['width'])
+            all_y.add(r['y'])
+            all_y.add(r['y'] + r['length'])
+        
+        sorted_x = sorted(list(all_x))
+        sorted_y = sorted(list(all_y))
+
+        if len(sorted_x) <= 1 or len(sorted_y) <= 1:
+            break
+
+        x_map = {val: i for i, val in enumerate(sorted_x)}
+        y_map = {val: i for i, val in enumerate(sorted_y)}
+        
+        # 2. Create a binary grid representing the empty space
+        grid_rows = len(sorted_y) - 1
+        grid_cols = len(sorted_x) - 1
+        grid = [[0] * grid_cols for _ in range(grid_rows)]
+
+        for r in current_empty_rects:
+            start_x_idx, end_x_idx = x_map.get(r['x']), x_map.get(r['x'] + r['width'])
+            start_y_idx, end_y_idx = y_map.get(r['y']), y_map.get(r['y'] + r['length'])
+
+            for i in range(start_y_idx, end_y_idx):
+                for j in range(start_x_idx, end_x_idx):
+                    grid[i][j] = 1
+
+        # 3. Find the largest, most-square rectangle in the grid using the histogram method
+        heights = [0] * (grid_cols + 1)
+        best_rect_info = {'score': -1.0}
+
+        for i in range(grid_rows):
+            for j in range(grid_cols):
+                heights[j] = heights[j] + 1 if grid[i][j] == 1 else 0
+            
+            stack = [-1]
+            for j, h in enumerate(heights):
+                while stack[-1] != -1 and heights[stack[-1]] >= h:
+                    H = heights[stack.pop()]
+                    W_start_idx = stack[-1] + 1
+                    
+                    y_start_idx = i - H + 1
+                    
+                    real_y = sorted_y[y_start_idx]
+                    real_x = sorted_x[W_start_idx]
+                    real_length = sorted_y[i + 1] - sorted_y[y_start_idx]
+                    real_width = sorted_x[j] - sorted_x[W_start_idx]
+                    
+                    area = real_width * real_length
+                    score = 0
+                    if real_width > TOLERANCE and real_length > TOLERANCE:
+                        min_dim = min(real_width, real_length)
+                        max_dim = max(real_width, real_length)
+                        # This new score properly balances total area with a bonus for a better
+                        # aspect ratio, ensuring larger offcuts are prioritized.
+                        score = area * (min_dim / max_dim)**0.5
+
+                    if score > best_rect_info['score']:
+                        best_rect_info = {
+                            'score': score, 'x': real_x, 'y': real_y, 
+                            'width': real_width, 'length': real_length
+                        }
+                stack.append(j)
+        
+        if best_rect_info['score'] < 0:
+            break
+
+        best_offcut = best_rect_info
+        if min(best_offcut['width'], best_offcut['length']) < min_offcut_dim:
+            break
+
+        final_offcuts.append({
+            'x': best_offcut['x'], 'y': best_offcut['y'],
+            'width': best_offcut['width'], 'length': best_offcut['length']
+        })
+
+        # 4. Subtract the found offcut from the current empty space
+        next_empty_rects = []
+        offcut_x2 = best_offcut['x'] + best_offcut['width']
+        offcut_y2 = best_offcut['y'] + best_offcut['length']
+
+        for rect in current_empty_rects:
+            rect_x2 = rect['x'] + rect['width']
+            rect_y2 = rect['y'] + rect['length']
+
+            ix1 = max(rect['x'], best_offcut['x'])
+            iy1 = max(rect['y'], best_offcut['y'])
+            ix2 = min(rect_x2, offcut_x2)
+            iy2 = min(rect_y2, offcut_y2)
+
+            if ix1 >= ix2 - TOLERANCE or iy1 >= iy2 - TOLERANCE:
+                next_empty_rects.append(rect)
                 continue
 
-            # Check if the center of the cell is occupied by a placed part
-            cell_center_x = x + w / 2
-            cell_center_y = y + l / 2
-            is_occupied = False
-            for part in placed_parts:
-                p_len = part['width'] if part.get('rotated') else part['length']
-                p_wid = part['length'] if part.get('rotated') else part['width']
-                if (part['x'] - TOLERANCE <= cell_center_x < part['x'] + p_wid + TOLERANCE and
-                    part['y'] - TOLERANCE <= cell_center_y < part['y'] + p_len + TOLERANCE):
-                    is_occupied = True
-                    break
-            
-            if not is_occupied:
-                empty_cells.append({'x': x, 'y': y, 'width': w, 'length': l})
+            if rect['y'] < iy1 - TOLERANCE:
+                next_empty_rects.append({'x': rect['x'], 'y': rect['y'], 'width': rect['width'], 'length': iy1 - rect['y']})
+            if rect_y2 > iy2 + TOLERANCE:
+                next_empty_rects.append({'x': rect['x'], 'y': iy2, 'width': rect['width'], 'length': rect_y2 - iy2})
+            if rect['x'] < ix1 - TOLERANCE:
+                next_empty_rects.append({'x': rect['x'], 'y': iy1, 'width': ix1 - rect['x'], 'length': iy2 - iy1})
+            if rect_x2 > ix2 + TOLERANCE:
+                next_empty_rects.append({'x': ix2, 'y': iy1, 'width': rect_x2 - ix2, 'length': iy2 - iy1})
 
-    return empty_cells
+        current_empty_rects = [r for r in next_empty_rects if r['width'] > TOLERANCE and r['length'] > TOLERANCE]
 
-def consolidate_empty_space(rects: list, kerf: float) -> list:
-    """
-    Consolidates a list of rectangles by merging perfectly aligned adjacent ones.
-    This process is repeated until no more merges can be made.
-    """
-    if len(rects) < 2:
-        return rects
-
-    TOLERANCE = 1e-6
-    
-    while True:
-        merged_in_pass = False
-        i = 0
-        while i < len(rects):
-            j = i + 1
-            while j < len(rects):
-                r1, r2 = rects[i], rects[j]
-                
-                merged_rect = None
-
-                # Check for vertical merge (must have same width and x-coordinate)
-                if abs(r1['x'] - r2['x']) < TOLERANCE and abs(r1['width'] - r2['width']) < TOLERANCE:
-                    if abs(r1['y'] + r1['length'] - r2['y']) < TOLERANCE: # r2 is above r1
-                        merged_rect = {'x': r1['x'], 'y': r1['y'], 'length': r1['length'] + r2['length'], 'width': r1['width']}
-                    elif abs(r2['y'] + r2['length'] - r1['y']) < TOLERANCE: # r1 is above r2
-                        merged_rect = {'x': r2['x'], 'y': r2['y'], 'length': r1['length'] + r2['length'], 'width': r1['width']}
-
-                # Check for horizontal merge (must have same length and y-coordinate)
-                if not merged_rect and abs(r1['y'] - r2['y']) < TOLERANCE and abs(r1['length'] - r2['length']) < TOLERANCE:
-                    if abs(r1['x'] + r1['width'] - r2['x']) < TOLERANCE: # r2 is to the right of r1
-                        merged_rect = {'x': r1['x'], 'y': r1['y'], 'length': r1['length'], 'width': r1['width'] + r2['width']}
-                    elif abs(r2['x'] + r2['width'] - r1['x']) < TOLERANCE: # r1 is to the right of r2
-                        merged_rect = {'x': r2['x'], 'y': r2['y'], 'length': r1['length'], 'width': r1['width'] + r2['width']}
-                
-                if merged_rect:
-                    rects.pop(j)
-                    rects[i] = merged_rect
-                    merged_in_pass = True
-                    j = i + 1 
-                else:
-                    j += 1
-            i += 1
-
-        if not merged_in_pass:
-            break
-            
-    return rects
+    return final_offcuts
 
 def find_guillotine_cuts(sheet_info: dict, placed_parts: list) -> list:
     """
-    Finds the precise segments of each guillotine cut by recursively subdividing the sheet,
-    ensuring each cut is valid and including final trim cuts around single parts.
-    This version prioritizes cuts that produce larger, more square-shaped offcuts.
+    Finds the precise segments of each guillotine cut by recursively subdividing 
+    the sheet. This version prioritizes cuts that align with part edges to 
+    minimize the total number of cuts.
     """
     if not placed_parts:
         return []
@@ -126,27 +202,17 @@ def find_guillotine_cuts(sheet_info: dict, placed_parts: list) -> list:
         
         best_cut = None
         best_score = -1.0
-        BONUS_WEIGHT = 10.0
-        rect_x, rect_y, rect_w, rect_l = current_rect['x'], current_rect['y'], current_rect['width'], current_rect['length']
 
         for cut_x in sorted(list(x_coords)):
             if all(not (b[0] < cut_x - TOLERANCE and b[0] + b[2] > cut_x + TOLERANCE) for b in part_bounds):
-                w1 = cut_x - rect_x
-                w2 = rect_w - w1
-                base_score = min(min(w1, rect_l), min(w2, rect_l))
-                bonus = sum(1 for b in part_bounds if abs((b[0] + b[2]) - cut_x) < TOLERANCE or abs(b[0] - cut_x) < TOLERANCE)
-                score = base_score + (bonus * BONUS_WEIGHT)
+                score = sum(1 for b in part_bounds if abs((b[0] + b[2]) - cut_x) < TOLERANCE or abs(b[0] - cut_x) < TOLERANCE)
                 if score > best_score:
                     best_score = score
                     best_cut = ('v', cut_x)
         
         for cut_y in sorted(list(y_coords)):
             if all(not (b[1] < cut_y - TOLERANCE and b[1] + b[3] > cut_y + TOLERANCE) for b in part_bounds):
-                l1 = cut_y - rect_y
-                l2 = rect_l - l1
-                base_score = min(min(rect_w, l1), min(rect_w, l2))
-                bonus = sum(1 for b in part_bounds if abs((b[1] + b[3]) - cut_y) < TOLERANCE or abs(b[1] - cut_y) < TOLERANCE)
-                score = base_score + (bonus * BONUS_WEIGHT)
+                score = sum(1 for b in part_bounds if abs((b[1] + b[3]) - cut_y) < TOLERANCE or abs(b[1] - cut_y) < TOLERANCE)
                 if score > best_score:
                     best_score = score
                     best_cut = ('h', cut_y)

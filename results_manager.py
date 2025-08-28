@@ -309,7 +309,10 @@ def prepare_results_for_render(layouts, remaining_parts, final_score, config, el
             total_placed_area = sum(p['length'] * p['width'] for p in layout['placed_parts'])
             min_offcut_dim = config.get('min_offcut_dim', 0)
             
-            layout['cuts'] = find_guillotine_cuts(sheet_info, layout['placed_parts'])
+            min_offcut_dim = config.get('min_offcut_dim', 0)
+            usable_offcuts = [r for r in layout.get('offcuts', []) if r['length'] >= min_offcut_dim and r['width'] >= min_offcut_dim]
+            all_items_to_cut = layout['placed_parts'] + usable_offcuts
+            layout['cuts'] = find_guillotine_cuts(sheet_info, all_items_to_cut)
             
             grouped_layouts[signature] = {
                 'signature': signature,

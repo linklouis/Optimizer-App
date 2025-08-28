@@ -64,6 +64,7 @@ FEATURES
         - Penalize higher numbers of unique Default sheet layouts more than layouts on Offcut sheets?
         - ------> Greedy heuristic in _place_parts_in_rects, can we incorporate it into the B&B?
         - w_stock_fill_item_bonus? The bonus provided by using stock parts is in creating less waste. Do we really need this?
+        - I made some changes at one point that handled cases of scoring incomplete layouts, but I don't think that actually ever happens.
 
 
     Visual
@@ -131,6 +132,13 @@ BUGS
     - -------> Solutions don't always have offcuts where they could. Maybe manually add offcuts where possible when scoring a complete solution?
                Could make the change to prioritize larger waste areas useless in find_guillotine_cuts. If all offcuts are placed as best as possible, we only need to worry about making the least cuts possible. https://g.co/gemini/share/c34e4f61fb14
     - Canceling an optimization doesn't always stop it from running in the background, at least not right away.
+    - Greedy solution sometimes takes a really long time?
+    - Cuts don't update when parts are removed on results page
+    - Offcut finding isn't always 100% perfect file:///C:/Users/louis/Downloads/Screenshot_28-8-2025_142929_127.0.0.1.jpeg
+    - Changing the multiplier on the File Paths card doesn't *always* update the Manage Job Parts card.
+    - Manage Offcuts card only shows up if you have a file path entered? It should used the saved file.
+    - The content of the loading card can get pushed off the bottom
+    - Are we re-evaluating the offcuts each time a layout is completed AND each time a solution is found?
 
 MISC
     - X Change default branching factor to 2 or 3.

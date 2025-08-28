@@ -399,7 +399,14 @@ th .select-all-parts-in-file { cursor: pointer; }
 }
 .part-label { font-size: 3px; fill: white; font-weight: 600; paint-order: stroke; stroke: rgba(0,0,0,0.3); stroke-width:0.5px; }
 .offcut-label { font-size: 3px; fill: var(--text-primary); font-weight: 500; }
-.inner-dim-text { font-size: 2px; fill: var(--text-primary); opacity: 0.7; }
+.inner-dim-text {
+    font-size: 1.5px;
+    fill: var(--text-primary);
+    stroke: var(--sheet-fill);
+    stroke-width: 0.6px;
+    paint-order: stroke;
+    opacity: 0.9;
+}
 .cut-line { stroke: magenta; stroke-width: 0.4; stroke-linecap: round; opacity: 0.7; }
 
 .cut-line {

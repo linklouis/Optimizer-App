@@ -3,15 +3,15 @@
     "hhos_files": [
         {
             "path": "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv",
-            "multiplier": 100
+            "multiplier": 15
         },
         {
             "path": "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv",
-            "multiplier": 99
+            "multiplier": 6
         }
     ],
     "stock_inv_path": "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\Stock Part Inventory.xlsx",
-    "offcut_path": "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\Offcut list.xlsx",
+    "offcut_path": "",
     "selected_hhos_parts": [
         "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv:::0",
         "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv:::1",
@@ -115,7 +115,7 @@
     "w_quantity": 0.3,
     "w_sheets": 0.5,
     "w_stock_fill": 0.6,
-    "w_unique_layouts": 0.5,
+    "w_unique_layouts": 0.6,
     "w_priority_offcut": 1.0,
     "expected_max_cuts_per_sheet": 10.0,
     "expected_yield": 0.86,
@@ -172,33 +172,33 @@
         "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv_3": 5,
         "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv_4": 5,
         "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv_5": 5,
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv:::0": 6,
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv:::1": 6,
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv:::2": 6,
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv:::3": 6,
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv:::4": 6,
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv:::5": 6,
         "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220820.csv:::0": 20,
         "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220820.csv:::1": 20,
         "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220820.csv:::2": 20,
         "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220820.csv:::3": 20,
         "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220820.csv:::4": 20,
         "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220820.csv:::5": 20,
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv:::0": 100,
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv:::1": 100,
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv:::2": 100,
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv:::3": 100,
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv:::4": 100,
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv:::5": 100,
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv:::0": 99,
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv:::1": 99,
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv:::2": 99,
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv:::3": 99,
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv:::4": 99,
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv:::5": 99,
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv:::6": 99,
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv:::7": 99,
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv:::8": 99,
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv:::9": 99
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv:::0": 5,
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv:::1": 5,
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv:::2": 5,
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv:::3": 5,
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv:::4": 5,
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv:::5": 5,
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv:::6": 5,
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv:::7": 5,
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv:::8": 5,
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv:::9": 5,
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv:::0": 6,
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv:::1": 6,
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv:::2": 6,
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv:::3": 6,
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv:::4": 6,
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv:::5": 6,
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv:::0": 15,
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv:::1": 15,
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv:::2": 15,
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv:::3": 15,
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv:::4": 15,
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv:::5": 15
     }
 }

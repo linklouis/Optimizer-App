@@ -12,7 +12,7 @@ import threading
 from data_processing import process_uploaded_files, extract_hhos_data
 from optimizer import optimize_multiple_sheets, _update_bounding_parameters_from_solution
 from config_manager import load_config, save_config, update_config_from_form, DEFAULT_CONFIG
-from geometry_utils import find_all_empty_rectangles, consolidate_empty_space
+from geometry_utils import find_all_empty_rectangles, consolidate_empty_space, find_guillotine_cuts
 from results_manager import (
     calculate_ideal_score, 
     recalculate_global_summary,
@@ -397,13 +397,19 @@ def update_layout():
             result['layouts'] = [lo for lo in result['layouts'] if lo.get('signature') != layout_sig]
         else:
             tiled_empty_space = find_all_empty_rectangles(layout_to_modify['sheet_info'], layout_to_modify['placed_parts'])
-            new_offcuts = consolidate_empty_space(tiled_empty_space, config['kerf'])
+            new_offcuts = consolidate_empty_space(tiled_empty_space, config)
             layout_to_modify['offcuts'] = new_offcuts
+            
+            # Recalculate cuts based on remaining parts and new offcuts
+            min_offcut_dim = config.get('min_offcut_dim', 0)
+            usable_offcuts = [r for r in new_offcuts if r['length'] >= min_offcut_dim and r['width'] >= min_offcut_dim]
+            all_items_to_cut = layout_to_modify['placed_parts'] + usable_offcuts
+            layout_to_modify['cuts'] = find_guillotine_cuts(layout_to_modify['sheet_info'], all_items_to_cut)
             
             # This needs get_layout_signature, which is in optimizer.py.
             # For simplicity, we can keep it here or import it.
             # Let's assume an import is better.
-            from optimizer import get_layout_signature
+            from scoring_utils import get_layout_signature
             use_req_sig = config.get('standardize_stock_layouts', False)
             new_signature = get_layout_signature(layout_to_modify, required_only=use_req_sig)
             layout_to_modify['signature'] = new_signature

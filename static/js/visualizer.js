@@ -269,7 +269,7 @@ class TreeVisualizer {
                 initialX = 0;
                 initialY = 0;
             } else if (parentPos) {
-                const spawn_distance = Math.random() * 20 + 10; // Random distance between 10 and 30 pixels
+                const spawn_distance = Math.random() * 50 + 30; // Random distance between 10 and 30 pixels
 
                 // Calculate spawn direction based on recent ancestor flow
                 let total_flow_dx = 0;

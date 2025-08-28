@@ -14,6 +14,7 @@ Rect = Dict[str, float]
 
 # Import the new consolidated scoring and utility functions
 from scoring_utils import get_layout_signature, count_guillotine_cuts, calculate_solution_score
+from geometry_utils import find_all_empty_rectangles, consolidate_empty_space
 from config_manager import DEFAULT_CONFIG
 
 
@@ -76,6 +77,22 @@ class ScoreDebugger:
 # --- End of Debugging Class ---
 
 # --- Consolidated & Optimized Helper Functions ---
+
+def _finalize_layout_offcuts(layout: Dict[str, Any], config: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Takes a layout with placed parts and correctly calculates and attaches the final,
+    consolidated offcuts.
+    """
+    if 'placed_parts' not in layout or 'sheet_info' not in layout:
+        layout['offcuts'] = []
+        return layout
+
+    tiled_empty_space = find_all_empty_rectangles(layout['sheet_info'], layout['placed_parts'])
+    consolidated_offcuts = consolidate_empty_space(tiled_empty_space, config)
+    layout['offcuts'] = consolidated_offcuts
+    
+    return layout
+
 
 @numba.jit(nopython=True)
 def find_best_fit(part_length: float, part_width: float, empty_rects_np: np.ndarray) -> int:
@@ -313,6 +330,9 @@ def run_single_sheet_optimization(sheet_info: Dict, required_parts: List[Part], 
                 best_score = candidate_score
                 best_layout = candidate_layout
     
+    # Finalize the offcuts for the chosen best layout before returning.
+    best_layout = _finalize_layout_offcuts(best_layout, config)
+
     return best_layout
 
 @numba.jit(nopython=True)
