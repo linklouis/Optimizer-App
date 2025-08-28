@@ -128,44 +128,50 @@ document.addEventListener('DOMContentLoaded', function() {
 
 
     function setupResetButtons() {
-        const resetWeightsBtn = document.getElementById('reset-weights-btn');
-        if (resetWeightsBtn) {
-            resetWeightsBtn.addEventListener('click', () => {
-                const defaults = JSON.parse(document.getElementById('default-weights-data').textContent);
-                for (const key in defaults) {
+        const defaultConfigDataEl = document.getElementById('default-config-data');
+        if (!defaultConfigDataEl) return;
+        const DEFAULT_CONFIG = JSON.parse(defaultConfigDataEl.textContent);
+
+        // --- General Settings Reset ---
+        const resetGeneralBtn = document.getElementById('reset-general-btn');
+        if (resetGeneralBtn) {
+            resetGeneralBtn.addEventListener('click', () => {
+                const generalKeys = [
+                    'default_length', 'default_width', 'kerf', 'min_offcut_dim', 
+                    'search_time_limit', 'branching_factor', 'max_unique_layouts',
+                    'allow_rotation', 'use_offcuts', 'add_stock_parts', 'standardize_stock_layouts'
+                ];
+
+                generalKeys.forEach(key => {
                     const input = document.getElementById(key);
-                    if (input) input.value = defaults[key];
+                    if (input && key in DEFAULT_CONFIG) {
+                        const defaultValue = DEFAULT_CONFIG[key];
+                        if (input.type === 'checkbox') {
+                            input.checked = defaultValue;
+                        } else {
+                            input.value = defaultValue;
+                        }
+                    }
+                });
+
+                const noTimeLimitCb = document.getElementById('no-time-limit-cb');
+                if (noTimeLimitCb) {
+                    noTimeLimitCb.checked = (DEFAULT_CONFIG['search_time_limit'] <= 0);
+                    noTimeLimitCb.dispatchEvent(new Event('change'));
                 }
             });
         }
-
-        const resetGeneralBtn = document.getElementById('reset-general-btn');
-        if (resetGeneralBtn) {
-            const generalDefaults = {
-                'default_length': 96, 'default_width': 48, 'kerf': 0.17,
-                'min_offcut_dim': 12.0, 'search_time_limit': 5.0,
-                'branching_factor': 1, 'max_unique_layouts': 0
-            };
-            const checkboxDefaults = {
-                'allow_rotation': true, 'use_offcuts': true, 
-                'add_stock_parts': true, 'standardize_stock_layouts': false
-            };
-            
-            resetGeneralBtn.addEventListener('click', () => {
-                for (const key in generalDefaults) {
-                    const input = document.getElementById(key);
-                    if (input) input.value = generalDefaults[key];
-                }
-                for (const key in checkboxDefaults) {
-                    const input = document.getElementById(key);
-                    if (input) input.checked = checkboxDefaults[key];
-                }
-                const noTimeLimitCb = document.getElementById('no-time-limit-cb');
-                if (noTimeLimitCb) {
-                    noTimeLimitCb.checked = false;
-                    // Dispatch the change event to ensure the UI updates correctly.
-                    noTimeLimitCb.dispatchEvent(new Event('change'));
-                }
+        
+        // --- Scoring Weights Reset ---
+        const resetWeightsBtn = document.getElementById('reset-weights-btn');
+        if (resetWeightsBtn) {
+            const card = resetWeightsBtn.closest('.card');
+            resetWeightsBtn.addEventListener('click', () => {
+                card.querySelectorAll('input[type="number"]').forEach(input => {
+                    if (input.id in DEFAULT_CONFIG) {
+                        input.value = DEFAULT_CONFIG[input.id];
+                    }
+                });
             });
         }
     }

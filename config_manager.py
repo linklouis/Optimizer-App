@@ -4,25 +4,25 @@ import os
 # --- Constants ---
 CONFIG_FILE = 'config.json'
 DEFAULT_CONFIG = {
-    'default_length': 96, 'default_width': 48, 'hhos_files': [], 'offcut_path': '',
-    'stock_inv_path': '', 'kerf': 0.125, 'allow_rotation': True,
-    'min_offcut_dim': 4.0, 'use_offcuts': True, 'add_stock_parts': False,
-    'search_time_limit': 5.0,
-    'branching_factor': 1,
-    'expected_max_cuts_per_sheet': 10.0,
-    'max_unique_layouts': 0,
-    'selected_stock_parts': [],
-    'required_stock_quantities': {},
     'dark_mode': False,
-    'w_waste': 1.0, 'w_offcut': 0.65, 'w_cuts': 0.2, 'w_quantity': 0.3,
-    'w_sheets': 0.5,
-    'w_stock_fill': 0.6,
-    'w_unique_layouts': 0.5,
-    'standardize_stock_layouts': True,
+
+    'hhos_files': [],
+    'stock_inv_path': '', 'offcut_path': '',
+    
+    'selected_hhos_parts': [],
+
     'selected_offcuts': [],
     'prioritized_offcuts': [],
-    'w_priority_offcut': 1.0,
-    'selected_hhos_parts': []
+
+    'selected_stock_parts': [],
+    'required_stock_quantities': {},
+
+    'default_length': 96.000, 'default_width': 48.000, 'kerf': 0.125, 'min_offcut_dim': 12.0,
+    'search_time_limit': 5.0, 'branching_factor': 1, 'max_unique_layouts': 0,
+    'allow_rotation': True, 'use_offcuts': True, 'add_stock_parts': True, 'standardize_stock_layouts': False,
+
+    'w_waste': 1.0, 'w_offcut': 0.65, 'w_cuts': 0.2, 'w_quantity': 0.3,
+    'w_sheets': 0.5, 'w_stock_fill': 0.6, 'w_unique_layouts': 0.5, 'w_priority_offcut': 1.0
 }
 
 # --- Configuration Handling ---

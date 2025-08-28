@@ -303,7 +303,8 @@ def home():
                            all_stock_parts=all_stock_parts_list,
                            hhos_file_contents=hhos_file_contents,
                            all_offcuts=all_offcuts_list,
-                           default_weights=default_weights)
+                           default_weights=default_weights,
+                           default_config=DEFAULT_CONFIG)
 
 @app.route('/start_optimization', methods=['POST'])
 def start_optimization():

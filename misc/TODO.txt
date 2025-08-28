@@ -87,6 +87,7 @@ FEATURES
 
 CODE
     - ✓ Start separating some of the big files (index, app)
+    - Consistant default config values
 
     - Rename weights variables to be more intuitive
     - Add header comments in helper files
@@ -127,6 +128,7 @@ BUGS
     - The stock part standardization doesn't seem to affect the final score.
     - -------> Solutions don't always have offcuts where they could. Maybe manually add offcuts where possible when scoring a complete solution?
                Could make the change to prioritize larger waste areas useless in find_guillotine_cuts. If all offcuts are placed as best as possible, we only need to worry about making the least cuts possible. https://g.co/gemini/share/c34e4f61fb14
+    - Canceling an optimization doesn't always stop it from running in the background, at least not right away.
 
 MISC
     - X Change default branching factor to 2 or 3.

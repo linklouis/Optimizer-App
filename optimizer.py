@@ -14,6 +14,7 @@ Rect = Dict[str, float]
 
 # Import the new consolidated scoring and utility functions
 from scoring_utils import get_layout_signature, count_guillotine_cuts, calculate_solution_score
+from config_manager import DEFAULT_CONFIG
 
 
 # --- DEBUGGING CLASS (Easily Removable) ---
@@ -115,8 +116,8 @@ def calculate_layout_score(layout: Dict[str, Any], sheet_info: Dict[str, Any], c
     usable_offcuts = [o for o in layout['offcuts'] if o['length'] >= min_offcut_dim and o['width'] >= min_offcut_dim]
     offcut_area = sum(o['length'] * o['width'] for o in usable_offcuts)
     
-    area_based_score = -(((sheet_area - used_area - offcut_area) / reference_area * config.get('w_waste', 1.0)) +
-                         ((offcut_area / reference_area) * config.get('w_offcut', 0.5)))
+    area_based_score = -(((sheet_area - used_area - offcut_area) / reference_area * config.get('w_waste', DEFAULT_CONFIG['w_waste'])) +
+                         ((offcut_area / reference_area) * config.get('w_offcut', DEFAULT_CONFIG['w_offcut'])))
 
     is_lightly_used = len(layout['placed_parts']) <= 2
     if is_lightly_used and remaining_parts:
@@ -130,13 +131,13 @@ def calculate_layout_score(layout: Dict[str, Any], sheet_info: Dict[str, Any], c
 
     quantity_bonus = 0.0
     if sheet_info.get('type') != 'Default' and max_offcut_quantity > 0:
-        quantity_bonus = (float(sheet_info.get('quantity', 1)) / max_offcut_quantity) * config.get('w_quantity', 0.1)
+        quantity_bonus = (float(sheet_info.get('quantity', 1)) / max_offcut_quantity) * config.get('w_quantity', DEFAULT_CONFIG['w_quantity'])
 
     priority_bonus = 0.0
     if sheet_info.get('type') == 'Offcut':
         offcut_id_str = str(sheet_info.get('id', '')).replace('offcut_', '')
-        if offcut_id_str in config.get('prioritized_offcuts', []):
-            priority_bonus = config.get('w_priority_offcut', 10.0)
+        if offcut_id_str in config.get('prioritized_offcuts', DEFAULT_CONFIG['prioritized_offcuts']):
+            priority_bonus = config.get('w_priority_offcut', DEFAULT_CONFIG['w_priority_offcut'])
     
     return area_based_score + quantity_bonus + priority_bonus
 
@@ -352,8 +353,8 @@ def _calculate_optimistic_stock_bonus(remaining_parts: list, optional_parts_data
     if optimistic_available_area <= 0:
         return 0.0
 
-    w_stock_fill = config.get('w_stock_fill', 1.0)
-    flat_bonus_unit = config.get('w_stock_fill_item_bonus', 0.05)
+    w_stock_fill = config.get('w_stock_fill', DEFAULT_CONFIG['w_stock_fill'])
+    flat_bonus_unit = config.get('w_stock_fill_item_bonus', 0.05)   # Not actually in the config at the moment
     
     part_data = optional_parts_data
     refs = part_data[:, 0]
@@ -491,13 +492,13 @@ def _calculate_bound(remaining_parts: list, current_score: float, config: Dict[s
         remaining_parts, optional_parts_data_for_bound, live_stock_counts, config, reference_area
     )
 
-    area_penalty = (predicted_waste_area / max_values['waste_area']) * config.get('w_waste', 1.0)
-    offcut_penalty = (predicted_offcut_area / max_values['offcut_area']) * config.get('w_offcut', 0.5)
-    stock_bonus = (raw_stock_bonus / max_values['stock_bonus']) * config.get('w_stock_fill', 1.0)
-    quantity_bonus = (raw_quantity_bonus / max_values['quantity_bonus']) * config.get('w_quantity', 0.1)
-    sheets_penalty = (predicted_sheets / max_values['sheets']) * config.get('w_sheets', 1.0)
-    layouts_penalty = (optimistic_new_layouts / max_values['layouts']) * config.get('w_unique_layouts', 0.5)
-    cuts_penalty = (predicted_cuts / max_values['cuts']) * config.get('w_cuts', 0.2)
+    area_penalty = (predicted_waste_area / max_values['waste_area']) * config.get('w_waste', DEFAULT_CONFIG['w_waste'])
+    offcut_penalty = (predicted_offcut_area / max_values['offcut_area']) * config.get('w_offcut', DEFAULT_CONFIG['w_offcut'])
+    stock_bonus = (raw_stock_bonus / max_values['stock_bonus']) * config.get('w_stock_fill', DEFAULT_CONFIG['w_stock_fill'])
+    quantity_bonus = (raw_quantity_bonus / max_values['quantity_bonus']) * config.get('w_quantity', DEFAULT_CONFIG['w_quantity'])
+    sheets_penalty = (predicted_sheets / max_values['sheets']) * config.get('w_sheets', DEFAULT_CONFIG['w_sheets'])
+    layouts_penalty = (optimistic_new_layouts / max_values['layouts']) * config.get('w_unique_layouts', DEFAULT_CONFIG['w_unique_layouts'])
+    cuts_penalty = (predicted_cuts / max_values['cuts']) * config.get('w_cuts', DEFAULT_CONFIG['w_cuts'])
 
     upper_bound = (current_score + stock_bonus + quantity_bonus - area_penalty - offcut_penalty - sheets_penalty - layouts_penalty - cuts_penalty)
 
@@ -524,13 +525,13 @@ def _evaluate_layout_action(layout: Dict, current_parts_ids: set, live_stock_cou
 
     layout_sig = get_layout_signature(layout, required_only=False)
     is_new_signature = layout_sig not in used_signatures
-    max_layouts = config.get('max_unique_layouts', 0)
+    max_layouts = config.get('max_unique_layouts', DEFAULT_CONFIG['max_unique_layouts'])
     if is_new_signature and max_layouts > 0 and len(used_signatures) >= max_layouts:
         return None
 
     sheet_info = layout['sheet_info']
-    min_offcut_dim = config.get('min_offcut_dim', 0)
-    flat_bonus_unit = config.get('w_stock_fill_item_bonus', 0.05)
+    min_offcut_dim = config.get('min_offcut_dim', DEFAULT_CONFIG['min_offcut_dim'])
+    flat_bonus_unit = config.get('w_stock_fill_item_bonus', 0.05)   # Not actually in the config at the moment
 
     raw_components = Counter()
     usable_offcuts_area = sum(o['length'] * o['width'] for o in layout['offcuts'] if o['length'] >= min_offcut_dim and o['width'] >= min_offcut_dim)
@@ -541,7 +542,7 @@ def _evaluate_layout_action(layout: Dict, current_parts_ids: set, live_stock_cou
     if sheet_info.get('type') != 'Default':
         raw_components['quantity_bonus'] = float(sheet_info.get('quantity', 1))
         offcut_id_str = str(sheet_info.get('id', '')).replace('offcut_', '')
-        if offcut_id_str in config.get('prioritized_offcuts', []):
+        if offcut_id_str in config.get('prioritized_offcuts', DEFAULT_CONFIG['prioritized_offcuts']):
             raw_components['priority_bonus'] = 1.0
 
     raw_stock_bonus = 0.0
@@ -563,21 +564,21 @@ def _evaluate_layout_action(layout: Dict, current_parts_ids: set, live_stock_cou
     component_deltas = {}
     if max_values.get('waste_area', 0) > 0:
         component_deltas['area_score'] = -(
-            (raw_components['waste_area'] / max_values['waste_area']) * config.get('w_waste', 1.0) +
-            (raw_components['offcut_area'] / max_values['offcut_area']) * config.get('w_offcut', 0.5)
+            (raw_components['waste_area'] / max_values['waste_area']) * config.get('w_waste', DEFAULT_CONFIG['w_waste']) +
+            (raw_components['offcut_area'] / max_values['offcut_area']) * config.get('w_offcut', DEFAULT_CONFIG['w_offcut'])
         )
     if max_values.get('stock_bonus', 0) > 0:
-        component_deltas['stock_bonus'] = (raw_components['stock_bonus'] / max_values['stock_bonus']) * config.get('w_stock_fill', 1.0)
+        component_deltas['stock_bonus'] = (raw_components['stock_bonus'] / max_values['stock_bonus']) * config.get('w_stock_fill', DEFAULT_CONFIG['w_stock_fill'])
     if max_values.get('quantity_bonus', 0) > 0:
-        component_deltas['quantity_bonus'] = (raw_components['quantity_bonus'] / max_values['quantity_bonus']) * config.get('w_quantity', 0.1)
+        component_deltas['quantity_bonus'] = (raw_components['quantity_bonus'] / max_values['quantity_bonus']) * config.get('w_quantity', DEFAULT_CONFIG['w_quantity'])
     if max_values.get('priority_bonus', 0) > 0:
-        component_deltas['priority_bonus'] = (raw_components['priority_bonus'] / max_values['priority_bonus']) * config.get('w_priority_offcut', 10.0)
+        component_deltas['priority_bonus'] = (raw_components['priority_bonus'] / max_values['priority_bonus']) * config.get('w_priority_offcut', DEFAULT_CONFIG['w_priority_offcut'])
     if max_values.get('sheets', 0) > 0:
-        component_deltas['sheets_penalty'] = -(1.0 / max_values['sheets']) * config.get('w_sheets', 1.0)
+        component_deltas['sheets_penalty'] = -(1.0 / max_values['sheets']) * config.get('w_sheets', DEFAULT_CONFIG['w_sheets'])
     if max_values.get('cuts', 0) > 0:
-        component_deltas['cuts_penalty'] = -(raw_components['cuts'] / max_values['cuts']) * config.get('w_cuts', 0.2)
+        component_deltas['cuts_penalty'] = -(raw_components['cuts'] / max_values['cuts']) * config.get('w_cuts', DEFAULT_CONFIG['w_cuts'])
     if is_new_signature and max_values.get('layouts', 0) > 0:
-        component_deltas['layouts_penalty'] = -(1.0 / max_values['layouts']) * config.get('w_unique_layouts', 0.5)
+        component_deltas['layouts_penalty'] = -(1.0 / max_values['layouts']) * config.get('w_unique_layouts', DEFAULT_CONFIG['w_unique_layouts'])
 
     score_delta = sum(v for v in component_deltas.values() if v is not None)
 
@@ -738,9 +739,9 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
     Optimizes cutting stock using a Branch and Bound search with a "deep dive" strategy.
     """
     start_time = time.time()
-    time_limit = config.get('search_time_limit', 1.0)
-    branching_factor = config.get('branching_factor', 1)
-    reference_area = config.get('default_length', 96) * config.get('default_width', 48)
+    time_limit = config.get('search_time_limit', DEFAULT_CONFIG['search_time_limit'])
+    branching_factor = config.get('branching_factor', DEFAULT_CONFIG['branching_factor'])
+    reference_area = config.get('default_length', DEFAULT_CONFIG['default_length']) * config.get('default_width', DEFAULT_CONFIG['default_width'])
     last_update_time = start_time
     
     debugger = ScoreDebugger() if DEBUG_SCORES else None
@@ -790,12 +791,12 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
     total_parts_area = sum(p['length'] * p['width'] for p in initial_parts_dict.values())
     max_values['total_initial_parts_area'] = total_parts_area
     max_values['sheets'] = (math.ceil(total_parts_area / reference_area) if reference_area > 0 else 1) + 2
-    cuts_per_part_heuristic = config.get('cuts_per_part_heuristic', 4.0)
+    cuts_per_part_heuristic = config.get('cuts_per_part_heuristic', 4.0)    # Not actually in the config at the moment
     max_values['cuts'] = (total_initial_parts * cuts_per_part_heuristic) if total_initial_parts > 0 else 1.0
     max_values['layouts'] = max_values['sheets']
 
     max_raw_stock_bonus = 0.0
-    flat_bonus_unit = config.get('w_stock_fill_item_bonus', 0.05)
+    flat_bonus_unit = config.get('w_stock_fill_item_bonus', 0.05)   # Not actually in the config at the moment
     temp_counts = Counter()
     for part in sorted(optional_parts_list, key=lambda p: p['internal_ref']):
         ref = part['internal_ref']
