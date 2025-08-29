@@ -52,6 +52,9 @@ FEATURES
         - Be able to click to make an area an offcut
         - Click to remove an Offcut sheet as an available stock sheet? (Would have to run optimization again?)
         - Add a way for the user to change the default value of a setting? (Could be useful if, for example, we start using a new saw, and we don't want it constantly defaulting to the wrong kerf.)
+        - Make the way file loading works more intuitive? Esp. with having to hit Load / Refresh every time.
+        - When you start an optimization, the "Load / Refresh Files" button should be "pressed" automatically before starting.
+        - Manual adjustments to the Stock & Offcut part databases?
     
     Optimizer
         - ✓ Only keep reusing a layout of stock parts until another layout is better because the number of the original stock parts needed has been filled.
@@ -91,7 +94,7 @@ FEATURES
 
 CODE
     - ✓ Start separating some of the big files (index, app)
-    - Consistant default config values
+    - ✓ Consistant default config values
 
     - Rename weights variables to be more intuitive
     - Add header comments in helper files
@@ -133,11 +136,11 @@ BUGS
     - ✓ Changing the multiplier on the File Paths card doesn't *always* update the Manage Job Parts card. Every time Load / Refresh Files is clicked, the multipliers in Manage Job Parts should update to match the ones in File Paths.
     - ✓? The content of the loading card can get pushed off the bottom
     - ✓? Canceling an optimization doesn't always stop it from running in the background, at least not right away.
+    - ✓ -------> Solutions don't always have offcuts where they could. Maybe manually add offcuts where possible when scoring a complete solution?
+               Could make the change to prioritize larger waste areas useless in find_guillotine_cuts. If all offcuts are placed as best as possible, we only need to worry about making the least cuts possible. https://g.co/gemini/share/c34e4f61fb14
 
     - The calculated ideal score is several orders of magnitude smaller than the true score.
     - The stock part standardization doesn't seem to affect the final score.
-    - -------> Solutions don't always have offcuts where they could. Maybe manually add offcuts where possible when scoring a complete solution?
-               Could make the change to prioritize larger waste areas useless in find_guillotine_cuts. If all offcuts are placed as best as possible, we only need to worry about making the least cuts possible. https://g.co/gemini/share/c34e4f61fb14
     - Greedy solution sometimes takes a really long time?
     - X? Are we re-evaluating the offcuts each time a layout is completed AND each time a solution is found?
 
@@ -156,9 +159,9 @@ IDEAS
     - X In optimize_multiple_sheets, should we be optimizing by cost-per-part, or by the overall score of the layout?
     - X Does it treat stock parts as regular parts when they are added? -> No
     - X Shouldn't always add stock parts/should treat them the same as the other parts. Otherwise, things like the # of cuts aren't considered when adding stock parts.
+    - ✓? If we've already optimized the stock parts for one layout, no need to do it again
    
     - Does it prune a branch based on logic, like will the part fit, or just the score?
-    - If we've already optimized the stock parts for one layout, no need to do it again
     - Multithreading?
 
 QUESTIONS

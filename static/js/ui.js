@@ -161,6 +161,13 @@ function setupFormControls() {
             group.className = 'file-input-group';
             group.innerHTML = `<input type="text" name="hhos_paths" placeholder="Path to HHOS file..."><input type="number" name="hhos_multipliers" class="multiplier-input" value="1" min="1"><button type="button" class="btn-remove-file"><i class="fa-solid fa-trash"></i></button>`;
             hhosList.appendChild(group);
+
+            // Recalculate accordion height to fit the new element
+            const parentAccordion = hhosList.closest('details.animated-accordion');
+            const content = parentAccordion?.querySelector('.collapsible-content');
+            if (parentAccordion?.open && content) {
+                content.style.maxHeight = content.scrollHeight + 'px';
+            }
         });
         hhosList.addEventListener('click', (e) => {
             const removeBtn = e.target.closest('.btn-remove-file');
