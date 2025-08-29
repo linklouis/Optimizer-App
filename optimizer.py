@@ -1,5 +1,4 @@
 import time
-import random
 import heapq
 import math
 import threading
@@ -70,10 +69,6 @@ class ScoreDebugger:
             print(self._format_stats(key, values))
         print("--- End of Report ---\n")
 
-    def log_context_switch(self, bound: float, score: float, depth: int, remaining_parts: int, node_id: int):
-        """Logs the details of the new most promising node being explored."""
-        # print(f"[DEBUG] Switching to Node {node_id}: Predicted Score={bound:.3f}, Current Score={score:.3f}, Depth={depth}, Parts Left={remaining_parts}")
-
 # --- End of Debugging Class ---
 
 # --- Consolidated & Optimized Helper Functions ---
@@ -121,9 +116,7 @@ def find_best_fit(part_length: float, part_width: float, empty_rects_np: np.ndar
 def calculate_layout_score(layout: Dict[str, Any], sheet_info: Dict[str, Any], config: Dict[str, Any],
                            min_offcut_dim: float, reference_area: float, max_offcut_quantity: float,
                            is_stock_only_job: bool = False,
-                           remaining_parts: Optional[List[Part]] = None,
-                           live_stock_counts: Optional[Counter] = None,
-                           debugger: Optional['ScoreDebugger'] = None) -> float:
+                           remaining_parts: Optional[List[Part]] = None) -> float:
     """Calculates a score for a given sheet layout based on its own merits (waste, offcuts, etc.)."""
     sheet_area = sheet_info['length'] * sheet_info['width']
     if sheet_area == 0 or reference_area == 0:
@@ -160,23 +153,8 @@ def calculate_layout_score(layout: Dict[str, Any], sheet_info: Dict[str, Any], c
 
 
 @numba.jit(nopython=True)
-def _get_split_penalty(rect1_len: float, rect1_wid: float, rect2_len: float, rect2_wid: float) -> float:
-    """Calculates a penalty for splitting a rectangle. Optimized with Numba."""
-    
-    def get_ratio_penalty(r_len: float, r_wid: float) -> float:
-        min_dim = min(r_len, r_wid)
-        return max(r_len, r_wid) / min_dim if min_dim > 0 else 0.0
-        
-    return get_ratio_penalty(rect1_len, rect1_wid) + get_ratio_penalty(rect2_len, rect2_wid)
-
-
-@numba.jit(nopython=True)
-def _place_parts_in_rects_jit(
-    parts_to_place_np: np.ndarray,
-    initial_rects_np: np.ndarray,
-    kerf: float,
-    allow_rotation: bool,
-) -> Tuple[np.ndarray, np.ndarray]:
+def _place_parts_in_rects_jit(parts_to_place_np: np.ndarray, initial_rects_np: np.ndarray,
+                              kerf: float, allow_rotation: bool) -> Tuple[np.ndarray, np.ndarray]:
     """
     Core part placement algorithm, fully optimized with Numba to work on NumPy arrays.
     """
@@ -287,10 +265,7 @@ def _place_parts_in_rects(parts_to_place: List[Part], initial_rects: List[Rect],
 
 def run_single_sheet_optimization(sheet_info: Dict, required_parts: List[Part], config: Dict, 
                                   reference_area: float, max_offcut_quantity: float, 
-                                  optional_stock_parts: Optional[List[Part]] = None,
-                                  live_stock_counts: Optional[Counter] = None,
-                                  debugger: Optional['ScoreDebugger'] = None,
-                                  cancellation_event: Optional['threading.Event'] = None) -> Dict:
+                                  optional_stock_parts: Optional[List[Part]] = None) -> Dict:
     """
     Finds the best layout for a single sheet.
     """
@@ -308,7 +283,7 @@ def run_single_sheet_optimization(sheet_info: Dict, required_parts: List[Part], 
         "sheet_info": sheet_info,
         "total_placed_area": sum(p['length'] * p['width'] for p in placed_job_parts)
     }
-    best_score = calculate_layout_score(best_layout, sheet_info, config, config['min_offcut_dim'], reference_area, max_offcut_quantity, is_stock_only_job=is_stock_only_job, live_stock_counts=live_stock_counts, debugger=debugger)
+    best_score = calculate_layout_score(best_layout, sheet_info, config, config['min_offcut_dim'], reference_area, max_offcut_quantity, is_stock_only_job=is_stock_only_job)
 
     if optional_stock_parts and remaining_rects_after_job:
         fittable_parts = sorted(optional_stock_parts, key=lambda p: p['length'] * p['width'], reverse=True)
@@ -324,7 +299,7 @@ def run_single_sheet_optimization(sheet_info: Dict, required_parts: List[Part], 
                 "sheet_info": sheet_info,
                 "total_placed_area": sum(p['length'] * p['width'] for p in candidate_placed_parts)
             }
-            candidate_score = calculate_layout_score(candidate_layout, sheet_info, config, config['min_offcut_dim'], reference_area, max_offcut_quantity, is_stock_only_job=is_stock_only_job, live_stock_counts=live_stock_counts, debugger=debugger)
+            candidate_score = calculate_layout_score(candidate_layout, sheet_info, config, config['min_offcut_dim'], reference_area, max_offcut_quantity, is_stock_only_job=is_stock_only_job)
 
             if candidate_score > best_score:
                 best_score = candidate_score
@@ -355,8 +330,7 @@ def _calculate_made_counts_jit(refs: np.ndarray, unique_refs: np.ndarray, live_c
 
 
 def _calculate_optimistic_stock_bonus(remaining_parts: list, optional_parts_data: np.ndarray, 
-                                     live_stock_counts: Counter, config: Dict[str, Any], 
-                                     reference_area: float) -> float:
+                                     live_stock_counts: Counter, config: Dict[str, Any]) -> float:
     """
     Calculates a realistic upper bound for the stock fill bonus using vectorized NumPy operations.
     """
@@ -364,7 +338,7 @@ def _calculate_optimistic_stock_bonus(remaining_parts: list, optional_parts_data
     if optional_parts_data.shape[0] == 0 or (not remaining_parts and is_mixed_job):
         return 0.0
 
-    packing_density_for_stock = 0.75 
+    packing_density_for_stock = 0.75    # TODO Shouldn't this be learned from the best solutions??
     required_parts_area = sum(p['length'] * p['width'] for p in remaining_parts)
     total_future_area = (required_parts_area / packing_density_for_stock) if packing_density_for_stock > 0 else 0
 
@@ -374,7 +348,7 @@ def _calculate_optimistic_stock_bonus(remaining_parts: list, optional_parts_data
         return 0.0
 
     w_stock_fill = config.get('w_stock_fill', DEFAULT_CONFIG['w_stock_fill'])
-    flat_bonus_unit = config.get('w_stock_fill_item_bonus', 0.05)   # Not actually in the config at the moment
+    flat_bonus_unit = config.get('w_stock_fill_item_bonus', 0.05)   # TODO Not actually in the config at the moment. Why do we need this anyway, shouldn't the bonus from adding stock come from producing less waste?
     
     part_data = optional_parts_data
     refs = part_data[:, 0]
@@ -412,8 +386,7 @@ def _calculate_optimistic_stock_bonus(remaining_parts: list, optional_parts_data
     return predicted_bonus
 
 
-def _predict_number_of_new_sheet_layouts(remaining_parts: list, used_signatures: frozenset, 
-                                        reference_area: float, config: Dict) -> int:
+def _predict_number_of_new_sheet_layouts(remaining_parts: list, used_signatures: frozenset, config: Dict) -> int:
     """
     Predicts how many new, unique layouts will be required.
     """
@@ -459,8 +432,7 @@ def _predict_number_of_new_sheet_layouts(remaining_parts: list, used_signatures:
         
         while parts_to_simulate:
             layouts_needed += 1
-            sheet_sim = {'length': config['default_length'], 'width': config['default_width']}
-            initial_rects = [{'x': 0, 'y': 0, 'length': sheet_sim['length'], 'width': sheet_sim['width']}]
+            initial_rects = [{'x': 0, 'y': 0, 'length': config['default_length'], 'width': config['default_width']}]
             
             placed_in_sim, _ = _place_parts_in_rects(
                 parts_to_simulate, initial_rects, config['kerf'], config['allow_rotation']
@@ -507,10 +479,8 @@ def _calculate_bound(remaining_parts: list, current_score: float, config: Dict[s
     avg_quantity_bonus_per_sheet = learned_rates.get('avg_quantity_bonus_per_sheet', 0.0)
     raw_quantity_bonus = avg_quantity_bonus_per_sheet * predicted_sheets
 
-    optimistic_new_layouts = _predict_number_of_new_sheet_layouts(remaining_parts, used_signatures, reference_area, config)
-    raw_stock_bonus = _calculate_optimistic_stock_bonus(
-        remaining_parts, optional_parts_data_for_bound, live_stock_counts, config, reference_area
-    )
+    optimistic_new_layouts = _predict_number_of_new_sheet_layouts(remaining_parts, used_signatures, config)
+    raw_stock_bonus = _calculate_optimistic_stock_bonus(remaining_parts, optional_parts_data_for_bound, live_stock_counts, config)
 
     area_penalty = (predicted_waste_area / max_values['waste_area']) * config.get('w_waste', DEFAULT_CONFIG['w_waste'])
     offcut_penalty = (predicted_offcut_area / max_values['offcut_area']) * config.get('w_offcut', DEFAULT_CONFIG['w_offcut'])
@@ -611,6 +581,7 @@ def _evaluate_layout_action(layout: Dict, current_parts_ids: set, live_stock_cou
     }
 
 
+# TODO We're not using is_stock_only_job here (or anywhere?) Do we still need it? If a job is stock only, those parts would probably be listed as required, so we wouldn't need special handling?
 def _run_greedy_seed(initial_parts_dict: Dict[int, Part], stock_sheets: List[Dict], config: Dict,
                      optional_parts_list: List[Part], is_stock_only_job: bool, reference_area: float,
                      max_offcut_quantity: float, max_values: Dict[str, float],
@@ -636,10 +607,7 @@ def _run_greedy_seed(initial_parts_dict: Dict[int, Part], stock_sheets: List[Dic
             if cancellation_event and cancellation_event.is_set():
                 return None, -float('inf')
 
-            layout = run_single_sheet_optimization(
-                sheet_tpl, list(current_parts.values()), config, reference_area, max_offcut_quantity,
-                optional_parts_list, live_stock_counts, None, cancellation_event
-            )
+            layout = run_single_sheet_optimization(sheet_tpl, list(current_parts.values()), config, reference_area, max_offcut_quantity, optional_parts_list)
             
             eval_result = _evaluate_layout_action(
                 layout, current_parts_ids, live_stock_counts, used_signatures, max_values, config, debugger
@@ -735,6 +703,7 @@ def _rescore_top_nodes(pq: list, config: dict, reference_area: float, max_values
     """
     Implements an adaptive, iterative re-scoring of the top nodes in the priority queue.
     """
+    # TODO Does this work right? Could it be parallelized?
     if not pq:
         return []
     
@@ -885,9 +854,6 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
             if cancellation_event and cancellation_event.is_set(): break
             
             diving = False
-
-            if debugger:
-                debugger.log_context_switch(-_bound, current_score, len(used_layouts), len(current_parts), parent_node_id)
             
             tree_nodes[parent_node_id]["status"] = "explored"
             tree_update_batch[parent_node_id] = tree_nodes[parent_node_id].copy()
@@ -925,9 +891,7 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
             for sheet_tpl in unique_sheets:
                 for _ in range(branching_factor):
                     layout_attempt = run_single_sheet_optimization(
-                        sheet_tpl, remaining_primary_parts, config, reference_area, max_offcut_quantity,
-                        optional_parts_list, live_stock_counts, debugger, cancellation_event
-                    )
+                        sheet_tpl, remaining_primary_parts, config, reference_area, max_offcut_quantity, optional_parts_list)
                     if any(p.get('part_id') in current_parts for p in layout_attempt['placed_parts']):
                         candidate_actions.append({'type': 'generate', 'layout': layout_attempt})
             
