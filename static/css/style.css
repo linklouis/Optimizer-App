@@ -965,3 +965,21 @@ body::-webkit-scrollbar-thumb {
 body::-webkit-scrollbar-thumb:hover {
     background-color: var(--secondary);
 }
+
+
+/* --- File Input Error Styling --- */
+.file-input-group-wrapper {
+    margin-bottom: 12px;
+}
+
+.file-input-group-wrapper:last-child {
+    margin-bottom: 0;
+}
+
+.form-error {
+    display: block;
+    color: var(--danger-color);
+    font-size: 0.8rem;
+    margin-top: 4px;
+    padding-left: 2px;
+}

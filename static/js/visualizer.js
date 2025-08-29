@@ -1,3 +1,109 @@
+// --- Barnes-Hut Optimization Classes ---
+class Boundary {
+    constructor(x, y, width, height) {
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+    }
+
+    contains(node) {
+        return (
+            node.x >= this.x &&
+            node.x < this.x + this.width &&
+            node.y >= this.y &&
+            node.y < this.y + this.height
+        );
+    }
+}
+
+class QuadTree {
+    constructor(boundary, capacity = 4) {
+        this.boundary = boundary;
+        this.capacity = capacity;
+        this.nodes = [];
+        this.divided = false;
+
+        this.mass = 0;
+        this.massX = 0;
+        this.massY = 0;
+    }
+
+    subdivide() {
+        const { x, y, width, height } = this.boundary;
+        const hw = width / 2;
+        const hh = height / 2;
+        this.northeast = new QuadTree(new Boundary(x + hw, y, hw, hh), this.capacity);
+        this.northwest = new QuadTree(new Boundary(x, y, hw, hh), this.capacity);
+        this.southeast = new QuadTree(new Boundary(x + hw, y + hh, hw, hh), this.capacity);
+        this.southwest = new QuadTree(new Boundary(x, y + hh, hw, hh), this.capacity);
+        this.divided = true;
+    }
+
+    insert(node) {
+        if (!this.boundary.contains(node)) {
+            return false;
+        }
+
+        this.massX += node.x;
+        this.massY += node.y;
+        this.mass++;
+
+        if (this.nodes.length < this.capacity && !this.divided) {
+            this.nodes.push(node);
+            return true;
+        }
+
+        if (!this.divided) {
+            this.subdivide();
+            for (const p of this.nodes) {
+                this.northeast.insert(p) || this.northwest.insert(p) || this.southeast.insert(p) || this.southwest.insert(p);
+            }
+            this.nodes = [];
+        }
+        
+        return this.northeast.insert(node) || this.northwest.insert(node) || this.southeast.insert(node) || this.southwest.insert(node);
+    }
+
+    calculateRepulsionForce(targetNode, theta, kRepel) {
+        if (this.mass === 0) return;
+
+        const comX = this.massX / this.mass;
+        const comY = this.massY / this.mass;
+        let dx = targetNode.x - comX;
+        let dy = targetNode.y - comY;
+        let distance = Math.sqrt(dx * dx + dy * dy);
+
+        if (this.boundary.width / distance < theta) {
+            if (distance < 2) distance = 2;
+            const force = (kRepel * this.mass) / (distance * distance * distance);
+            targetNode.fx += dx * force;
+            targetNode.fy += dy * force;
+            return;
+        }
+
+        if (this.divided) {
+            this.northwest.calculateRepulsionForce(targetNode, theta, kRepel);
+            this.northeast.calculateRepulsionForce(targetNode, theta, kRepel);
+            this.southwest.calculateRepulsionForce(targetNode, theta, kRepel);
+            this.southeast.calculateRepulsionForce(targetNode, theta, kRepel);
+        } else {
+            for (const otherNode of this.nodes) {
+                if (otherNode !== targetNode) {
+                    dx = targetNode.x - otherNode.x;
+                    dy = targetNode.y - otherNode.y;
+                    distance = Math.sqrt(dx * dx + dy * dy);
+                    if (distance < 2) distance = 2;
+                    const force = kRepel / (distance * distance * distance);
+                    targetNode.fx += dx * force;
+                    targetNode.fy += dy * force;
+                }
+            }
+        }
+    }
+}
+
+
 const RENDER_THRESHOLD = 1; // Min pixels a node must move to trigger a DOM update
 class TreeVisualizer {
     constructor(svgId) {
@@ -491,36 +597,36 @@ class TreeVisualizer {
         if (nodes.length < 2) return;
 
         const kRepel = 2500;
-        const kAttract = 0.03;
         const kAlign = 50;
         const damping = 0.01;
         const directionalForce = 30;
+        const barnesHutTheta = 0.8; // Approximation threshold. 0 = no approximation, >1 = high approximation. 0.8 is a good balance.
 
-        // 1. Repulsion Force Calculation.
-        // Assumes forces were reset to 0 at the end of the last tick.
-        // We don't need to worry about the root node (id=0) since it's fixed at the center, and a constant repulsion is already applied later.
+        // 1. Repulsion Force Calculation (Barnes-Hut Optimization).
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
         for (let i = 1; i < nodes.length; i++) {
-            const n1 = nodes[i];
-            for (let j = i + 1; j < nodes.length; j++) {
-                const n2 = nodes[j];
+            const node = nodes[i];
+            if (node.x < minX) minX = node.x;
+            if (node.x > maxX) maxX = node.x;
+            if (node.y < minY) minY = node.y;
+            if (node.y > maxY) maxY = node.y;
+        }
 
-                const dx = n1.x - n2.x;
-                const dy = n1.y - n2.y;
-                let distance = Math.sqrt(dx * dx + dy * dy);
-                if (distance < 2) distance = 2;
+        if (minX === Infinity) { minX = -1; maxX = 1; minY = -1; maxY = 1; }
+        
+        const width = Math.max(maxX - minX, maxY - minY, 1) * 1.2;
+        const centerX = (minX + maxX) / 2;
+        const centerY = (minY + maxY) / 2;
 
-                // const force = kRepel / (Math.pow(distance, 2));
-                // const forceX = (dx / distance) * force;
-                // const forceY = (dy / distance) * force;
-                const force = kRepel / (Math.pow(distance, 3));
-                const forceX = dx * force;
-                const forceY = dy * force;                
-                
-                n1.fx += forceX;
-                n1.fy += forceY;
-                n2.fx -= forceX;
-                n2.fy -= forceY;
-            }
+        const boundary = new Boundary(centerX - width / 2, centerY - width / 2, width, width);
+        const qtree = new QuadTree(boundary);
+
+        for (let i = 1; i < nodes.length; i++) {
+            qtree.insert(nodes[i]);
+        }
+
+        for (let i = 1; i < nodes.length; i++) {
+            qtree.calculateRepulsionForce(nodes[i], barnesHutTheta, kRepel);
         }
         
 

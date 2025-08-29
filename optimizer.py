@@ -706,7 +706,6 @@ def _rescore_top_nodes(pq: list, config: dict, reference_area: float, max_values
     """
     Implements an adaptive, iterative re-scoring of the top nodes in the priority queue.
     """
-    # TODO Does this work right? Could it be parallelized?
     if not pq:
         return []
     

@@ -231,25 +231,35 @@ def home():
     # This is the existing GET request logic
     config = load_config()
     hhos_file_contents, all_stock_parts_list, all_offcuts_list = [], [], []
+    stock_inv_error, offcut_error = None, None
 
     all_hhos_part_ids = []
     # Use a more robust delimiter for unique IDs
     DELIMITER = ':::'
     for hhos_file in config.get('hhos_files', []):
-        path, content_item = hhos_file.get('path'), {'path': hhos_file.get('path'), 'parts': [], 'error': None}
+        path = hhos_file.get('path', '').strip()
+        content_item = {'path': path, 'parts': [], 'error': None}
         content_item['multiplier'] = hhos_file.get('multiplier', 1) # Add multiplier for display
-        if path and os.path.exists(path):
-            try:
-                temp_df = extract_hhos_data(pd.read_csv(path, header=None))
-                temp_df['quantity'] *= hhos_file.get('multiplier', 1)
-                temp_df['unique_id'] = [f"{path}{DELIMITER}{i}" for i in range(len(temp_df))]
-                all_hhos_part_ids.extend(temp_df['unique_id'].tolist())
-                part_quantities = config.get('part_quantities', {})
-                if part_quantities: temp_df['quantity'] = temp_df.apply(lambda r: part_quantities.get(r['unique_id'], r['quantity']), axis=1)
-                content_item['parts'] = temp_df.to_dict('records')
-            except Exception as e: content_item['error'] = str(e)
-        else: content_item['error'] = "File not found."
+
+        if path: # Only process if a path is provided
+            if os.path.exists(path):
+                try:
+                    temp_df = extract_hhos_data(pd.read_csv(path, header=None))
+                    temp_df['quantity'] *= hhos_file.get('multiplier', 1)
+                    temp_df['unique_id'] = [f"{path}{DELIMITER}{i}" for i in range(len(temp_df))]
+                    all_hhos_part_ids.extend(temp_df['unique_id'].tolist())
+                    part_quantities = config.get('part_quantities', {})
+                    if part_quantities: 
+                        temp_df['quantity'] = temp_df.apply(
+                            lambda r: part_quantities.get(r['unique_id'], r['quantity']), axis=1
+                        )
+                    content_item['parts'] = temp_df.to_dict('records')
+                except Exception as e: 
+                    content_item['error'] = str(e)
+            else:
+                content_item['error'] = "File not found."
         hhos_file_contents.append(content_item)
+
 
     # Auto-select parts from newly added files
     if config.get('hhos_files'):
@@ -268,12 +278,32 @@ def home():
             config['selected_hhos_parts'].extend(newly_selected_parts)
 
     try:
-        DEFAULT_OFFCUT_PATH = 'managed_offcut_list.csv'
-        effective_offcut_path = config.get('offcut_path', '').strip()
-        if not effective_offcut_path:
-            effective_offcut_path = DEFAULT_OFFCUT_PATH
+        # Check for non-existent files for stock and offcuts before processing
+        stock_path = config.get('stock_inv_path', '').strip()
+        if stock_path and not os.path.exists(stock_path):
+            stock_inv_error = "File not found."
 
-        _, offcut_df, stock_inv_df = process_uploaded_files(config.get('hhos_files', []), effective_offcut_path, config['stock_inv_path'], config['default_length'], config['default_width'])
+        offcut_path = config.get('offcut_path', '').strip()
+        if offcut_path and not os.path.exists(offcut_path):
+            offcut_error = "File not found."
+        
+        DEFAULT_OFFCUT_PATH = 'managed_offcut_list.csv'
+        
+        # Determine effective paths, but don't process if user path is invalid
+        stock_inv_path_to_process = stock_path if not stock_inv_error else ''
+        effective_offcut_path = offcut_path if not offcut_error else ''
+        if not offcut_path and not offcut_error:
+             effective_offcut_path = DEFAULT_OFFCUT_PATH
+
+        # Pass empty strings for paths if the file doesn't exist to prevent processing errors
+        _, offcut_df, stock_inv_df = process_uploaded_files(
+            [], # HHOS files already handled above
+            effective_offcut_path, 
+            stock_inv_path_to_process, 
+            config['default_length'], 
+            config['default_width']
+        )
+
         if stock_inv_df is not None: all_stock_parts_list = stock_inv_df.to_dict('records')
         if offcut_df is not None:
             if not config.get('selected_offcuts') and config.get('offcut_path'): config['selected_offcuts'] = [str(i) for i in offcut_df.index]
@@ -294,6 +324,8 @@ def home():
                            hhos_file_contents=hhos_file_contents,
                            all_offcuts=all_offcuts_list,
                            default_weights=default_weights,
+                           stock_inv_error=stock_inv_error,
+                           offcut_error=offcut_error,
                            default_config=DEFAULT_CONFIG)
 
 @app.route('/start_optimization', methods=['POST'])

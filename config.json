@@ -10,7 +10,7 @@
             "multiplier": 6
         },
         {
-            "path": "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv",
+            "path": "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-22081",
             "multiplier": 4
         }
     ],
@@ -28,17 +28,7 @@
         "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv:::2",
         "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv:::3",
         "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv:::4",
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv:::5",
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv:::0",
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv:::1",
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv:::2",
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv:::3",
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv:::4",
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv:::5",
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv:::6",
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv:::7",
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv:::8",
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv:::9"
+        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv:::5"
     ],
     "selected_offcuts": [
         "0",
@@ -114,7 +104,7 @@
     "min_offcut_dim": 12.0,
     "search_time_limit": 0.0,
     "branching_factor": 5,
-    "max_unique_layouts": 0,
+    "max_unique_layouts": 10,
     "allow_rotation": true,
     "use_offcuts": true,
     "add_stock_parts": true,
@@ -123,7 +113,7 @@
     "w_offcut": 0.65,
     "w_cuts": 0.2,
     "w_quantity": 0.3,
-    "w_sheets": 0.5,
+    "w_sheets": 6.0,
     "w_stock_fill": 0.6,
     "w_unique_layouts": 0.6,
     "w_priority_offcut": 1.0,
@@ -168,28 +158,5 @@
     "multi_pass": false,
     "use_offcuts_as_stock": true,
     "default_height": 48,
-    "part_quantities": {
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv:::0": 15,
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv:::1": 15,
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv:::2": 15,
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv:::3": 15,
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv:::4": 15,
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv:::5": 15,
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv:::0": 6,
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv:::1": 6,
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv:::2": 6,
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv:::3": 6,
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv:::4": 6,
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220818.csv:::5": 6,
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv:::0": 4,
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv:::1": 4,
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv:::2": 4,
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv:::3": 4,
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv:::4": 4,
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv:::5": 4,
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv:::6": 4,
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv:::7": 4,
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv:::8": 4,
-        "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv:::9": 4
-    }
+    "part_quantities": {}
 }

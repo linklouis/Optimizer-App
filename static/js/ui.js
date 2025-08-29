@@ -157,10 +157,15 @@ function setupFormControls() {
     const hhosList = document.getElementById('hhos-file-list');
     if (hhosList) {
         document.getElementById('add-hhos-file')?.addEventListener('click', () => {
-            const group = document.createElement('div');
-            group.className = 'file-input-group';
-            group.innerHTML = `<input type="text" name="hhos_paths" placeholder="Path to HHOS file..."><input type="number" name="hhos_multipliers" class="multiplier-input" value="1" min="1"><button type="button" class="btn-remove-file"><i class="fa-solid fa-trash"></i></button>`;
-            hhosList.appendChild(group);
+            const wrapper = document.createElement('div');
+            wrapper.className = 'file-input-group-wrapper';
+            wrapper.innerHTML = `
+                <div class="file-input-group">
+                    <input type="text" name="hhos_paths" placeholder="Path to HHOS file...">
+                    <input type="number" name="hhos_multipliers" class="multiplier-input" value="1" min="1">
+                    <button type="button" class="btn-remove-file"><i class="fa-solid fa-trash"></i></button>
+                </div>`;
+            hhosList.appendChild(wrapper);
 
             // Recalculate accordion height to fit the new element
             const parentAccordion = hhosList.closest('details.animated-accordion');
@@ -172,7 +177,7 @@ function setupFormControls() {
         hhosList.addEventListener('click', (e) => {
             const removeBtn = e.target.closest('.btn-remove-file');
             if (removeBtn) {
-                removeBtn.parentElement.remove();
+                removeBtn.closest('.file-input-group-wrapper').remove();
                 document.querySelector('button[value="refresh_files"]')?.click();
             }
         });

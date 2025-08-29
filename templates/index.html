@@ -67,17 +67,24 @@
                                     <label class="form-label">HHOS Part Lists</label>
                                     {% if config.hhos_files %}
                                         {% for file in config.hhos_files %}
-                                        <div class="file-input-group">
-                                            <input type="text" name="hhos_paths" placeholder="Path to HHOS file..." value="{{ file.path }}">
-                                            <input type="number" name="hhos_multipliers" class="multiplier-input" value="{{ file.multiplier }}" min="1">
-                                            <button type="button" class="btn-remove-file"><i class="fa-solid fa-trash"></i></button>
+                                        <div class="file-input-group-wrapper">
+                                            <div class="file-input-group">
+                                                <input type="text" name="hhos_paths" placeholder="Path to HHOS file..." value="{{ file.path }}">
+                                                <input type="number" name="hhos_multipliers" class="multiplier-input" value="{{ file.multiplier }}" min="1">
+                                                <button type="button" class="btn-remove-file"><i class="fa-solid fa-trash"></i></button>
+                                            </div>
+                                            {% if file.error %}
+                                                <small class="form-error">{{ file.error }}</small>
+                                            {% endif %}
                                         </div>
                                         {% endfor %}
                                     {% else %}
-                                        <div class="file-input-group">
-                                            <input type="text" name="hhos_paths" placeholder="Path to HHOS file...">
-                                            <input type="number" name="hhos_multipliers" class="multiplier-input" value="1" min="1">
-                                            <button type="button" class="btn-remove-file"><i class="fa-solid fa-trash"></i></button>
+                                        <div class="file-input-group-wrapper">
+                                            <div class="file-input-group">
+                                                <input type="text" name="hhos_paths" placeholder="Path to HHOS file...">
+                                                <input type="number" name="hhos_multipliers" class="multiplier-input" value="1" min="1">
+                                                <button type="button" class="btn-remove-file"><i class="fa-solid fa-trash"></i></button>
+                                            </div>
                                         </div>
                                     {% endif %}
                                 </div>
@@ -86,7 +93,13 @@
                                 <hr class="form-divider">
 
                                 <div class="form-grid">
-                                    <div><label for="stock_inv_path">Stock Part Inventory</label><input type="text" id="stock_inv_path" name="stock_inv_path" value="{{ config.stock_inv_path }}"></div>
+                                    <div>
+                                        <label for="stock_inv_path">Stock Part Inventory</label>
+                                        <input type="text" id="stock_inv_path" name="stock_inv_path" value="{{ config.stock_inv_path }}">
+                                        {% if stock_inv_error %}
+                                            <small class="form-error">{{ stock_inv_error }}</small>
+                                        {% endif %}
+                                    </div>
                                     <div class="input-with-side-label">
                                         <div class="main-label-group">
                                             <label for="offcut_path">Offcut List (Optional)</label>
@@ -95,6 +108,9 @@
                                             </label>
                                         </div>
                                         <input type="text" id="offcut_path" name="offcut_path" value="{{ config.offcut_path }}">
+                                        {% if offcut_error %}
+                                            <small class="form-error">{{ offcut_error }}</small>
+                                        {% endif %}
                                     </div>
                                 </div>
                                 

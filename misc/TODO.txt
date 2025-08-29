@@ -41,10 +41,10 @@ FEATURES
         - ✓ toggleable isualization
         - ✓ Allow uploading a temp Offcut List that doesn't override the current one? Maybe have a "Temporary" check box next to the "Offcut List" label?
         - ✓ Clear Offcut List file input space after optimization?
+        - ✓ [TEST] Tell user when the files they're pointing to don't exist
 
         - Save offcuts (Maybe only save after export?)
         - Notes section for offcuts
-        - Tell user when the files they're pointing to don't exist
         - Allow the quantity of a given layout to be adjusted manually after optimization?
         - Be aware of whether the parts in an HHOS file are labeled as stock for checking if a sheet is only stock parts
         - [ASK] Make a way to automatically pick all of the most needed stock parts for a stock-only job?
@@ -63,10 +63,10 @@ FEATURES
         - X Needs to be smarter about handling jobs with high quantities
         - ✓ Improve calculate_bound function for speedup
         - ✓ Fix ideal score calculation
+        - w_stock_fill_item_bonus? The bonus provided by using stock parts is in creating less waste. Do we really need this?
 
         - Penalize higher numbers of unique Default sheet layouts more than layouts on Offcut sheets?
         - ------> Greedy heuristic in _place_parts_in_rects, can we incorporate it into the B&B?
-        - w_stock_fill_item_bonus? The bonus provided by using stock parts is in creating less waste. Do we really need this?
         - I made some changes at one point that handled cases of scoring incomplete layouts, but I don't think that actually ever happens.
         - When chosing order of cuts, should also try to minimize total cutting distance?
 
@@ -86,11 +86,12 @@ FEATURES
         - ✓ Make more loading screen tips, or have the time limit one only appear when there is a time limit?
         - ✓ Hovering over a part should highlight it in red, so it's obvious clicking will delete it.
         - ✓ All nodes directly attached to the root freeze after like 300 ticks?
+        - ✓ Make dimensions text more readable on patterned backgrounds
+        - UGH X The symbols on the theme switcher aren't perfectly vertically alligned with the switch.
 
         - Make the Loaded Parts List section look better
         - Add line break before 'Note:' in search time tooltip
-        - Make dimensions text more readable on patterned backgrounds
-        - The symbols on the theme switcher aren't perfectly vertically alligned with the switch.
+        - Tell the user if a file doesn't exist also on the File Paths card?
 
 CODE
     - ✓ Start separating some of the big files (index, app)
@@ -208,6 +209,7 @@ For Minor Changes(<= a few lines):
 For Major Changes:
  - At your discretion, provide either the complete, updated function or the entire updated file.
  - Base your choice on the scale of the change and the length of the file.
+ - When providing an entire function or file, do not provide the original code.
 Exception for `style.css`: Given its length, never provide the full file. Instead, provide the specific snippet to be changed or added, with clear instructions.
 Keep Code Clean:
 - Do not add explanatory comments inside code blocks unless absolutely necessary.
@@ -253,3 +255,12 @@ stock_bonus solution chat: https://g.co/gemini/share/66382cfff71e
 - incorporate the greedy solution into the visualizer?
 
 - ✓ The 'Cancel Optimization' button doesn't always actually stop the optimization from continuing in the background, and most of the time, if you try to start a new run without reloading, it's super slow and laggy.
+
+
+
+
+
+
+- Does the saw take into account different sheets? If so, does it lay the parts out on all the sheets, or does it lay them out per-sheet?
+- Door description, Panel Name, Arch Name, Arch Patter, Customer Job Description, Job Saved as # Follow Panel Grain?
+- Didn't the last method bypass the saw's internal optimization? Wouldn't this be nicer since it would allow the user to directly see what the job will look like?
