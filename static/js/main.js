@@ -124,6 +124,8 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (error) {
             console.error("Error sending cancellation request:", error);
         }
+        
+        finalizeRender(null);
     }
 
 
@@ -471,6 +473,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.error("Optimization failed:", error);
                 alert(`Error: ${error.message}`);
                 statusPanel.style.display = 'none';
+                finalizeRender({ error: `Optimization failed: ${error.message}` });
             }
         });
     }
@@ -490,6 +493,8 @@ document.addEventListener('DOMContentLoaded', function() {
             currentState = initialData;
             finalizeRender(currentState);
             document.querySelector('.tab-button[data-tab="results"]')?.click();
+        } else {
+            finalizeRender(null);
         }
     }
 });

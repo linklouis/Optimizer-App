@@ -65,8 +65,8 @@ FEATURES
         - ✓ Improve calculate_bound function for speedup
         - ✓ Fix ideal score calculation
         - w_stock_fill_item_bonus? The bonus provided by using stock parts is in creating less waste. Do we really need this?
+        - X Penalize higher numbers of unique Default sheet layouts more than layouts on Offcut sheets? Or just add a flat bonus for every offcut used?
 
-        - Penalize higher numbers of unique Default sheet layouts more than layouts on Offcut sheets?
         - ------> Greedy heuristic in _place_parts_in_rects, can we incorporate it into the B&B?
         - I made some changes at one point that handled cases of scoring incomplete layouts, but I don't think that actually ever happens.
         - When chosing order of cuts, should also try to minimize total cutting distance?
@@ -141,12 +141,12 @@ BUGS
     - ✓? Canceling an optimization doesn't always stop it from running in the background, at least not right away.
     - ✓ -------> Solutions don't always have offcuts where they could. Maybe manually add offcuts where possible when scoring a complete solution?
                Could make the change to prioritize larger waste areas useless in find_guillotine_cuts. If all offcuts are placed as best as possible, we only need to worry about making the least cuts possible. https://g.co/gemini/share/c34e4f61fb14
+    - ✓ Results page isn't always showing the "nothing to display" message
 
     - The calculated ideal score is several orders of magnitude smaller than the true score.
     - The stock part standardization doesn't seem to affect the final score.
     - Greedy solution sometimes takes a really long time?
     - X? Are we re-evaluating the offcuts each time a layout is completed AND each time a solution is found?
-    - Results page isn't always showing the "nothing to display" message
 
 MISC
     - X Change default branching factor to 2 or 3.
@@ -221,6 +221,7 @@ General Rules:
 - Only include code from files that have actually been modified. If you need to mention code in an unchanged file, the function name should be sufficient.
 - When providing code snippets, make sure they are tabbed to the correct indent.
 - If a function needs to be deleted, simply provide the name of the function.
+- Don't change anything unless necessary.
 
 
 
