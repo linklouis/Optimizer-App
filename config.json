@@ -10,7 +10,7 @@
             "multiplier": 6
         },
         {
-            "path": "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-22081",
+            "path": "S:\\Temporary\\Louis Link - Temp\\Optimizer Project\\HHOS_SC-220819.csv",
             "multiplier": 4
         }
     ],
@@ -103,8 +103,8 @@
     "kerf": 0.17,
     "min_offcut_dim": 12.0,
     "search_time_limit": 0.0,
-    "branching_factor": 5,
-    "max_unique_layouts": 10,
+    "branching_factor": 1,
+    "max_unique_layouts": 0,
     "allow_rotation": true,
     "use_offcuts": true,
     "add_stock_parts": true,
@@ -113,9 +113,9 @@
     "w_offcut": 0.65,
     "w_cuts": 0.2,
     "w_quantity": 0.3,
-    "w_sheets": 6.0,
+    "w_sheets": 0.5,
     "w_stock_fill": 0.6,
-    "w_unique_layouts": 0.6,
+    "w_unique_layouts": 0.5,
     "w_priority_offcut": 1.0,
     "expected_max_cuts_per_sheet": 10.0,
     "expected_yield": 0.86,

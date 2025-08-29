@@ -206,7 +206,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 const cardTitle = parentCard?.querySelector('.card-title')?.textContent || '';
                 
                 if (cardTitle.includes('General Settings') || cardTitle.includes('Scoring Weights')) {
-                } else if (cardTitle.includes('File Paths [?]')) {
+                } else if (cardTitle.includes('File Paths')) {
                     e.preventDefault();
                     document.querySelector('button[value="refresh_files"]')?.click();
                 } else {

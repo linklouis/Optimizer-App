@@ -6,7 +6,6 @@ import traceback
 import time
 import uuid
 import cProfile
-import pstats
 import threading
 
 from data_processing import process_uploaded_files, extract_hhos_data

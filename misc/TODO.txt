@@ -42,6 +42,7 @@ FEATURES
         - ✓ Allow uploading a temp Offcut List that doesn't override the current one? Maybe have a "Temporary" check box next to the "Offcut List" label?
         - ✓ Clear Offcut List file input space after optimization?
         - ✓ [TEST] Tell user when the files they're pointing to don't exist
+        - ✓ Hitting enter in the File Paths card should hit Load / Refresh Files button.
 
         - Save offcuts (Maybe only save after export?)
         - Notes section for offcuts
@@ -91,7 +92,8 @@ FEATURES
 
         - Make the Loaded Parts List section look better
         - Add line break before 'Note:' in search time tooltip
-        - Tell the user if a file doesn't exist also on the File Paths card?
+        - Also tell the user if a file doesn't exist on the File Paths card?
+        - Make the titles of sheet cards on the results page look better
 
 CODE
     - ✓ Start separating some of the big files (index, app)
@@ -144,12 +146,13 @@ BUGS
     - The stock part standardization doesn't seem to affect the final score.
     - Greedy solution sometimes takes a really long time?
     - X? Are we re-evaluating the offcuts each time a layout is completed AND each time a solution is found?
+    - Results page isn't always showing the "nothing to display" message
 
 MISC
     - X Change default branching factor to 2 or 3.
     - X Ask the AI to just make the ideal score predictor more sophisticated?
+    - X Change Stock Part Inv. Bonus tooltip to something like "Should usually be a larger number(i.e., 2-5), since setting it heigher doesn't negatively impact the effects of other weights, and we want to make sure that the more important stock is prioritized."
 
-    - Change Stock Part Inv. Bonus tooltip to something like "Should usually be a larger number(i.e., 2-5), since setting it heigher doesn't negatively impact the effects of other weights, and we want to make sure that the more important stock is prioritized."
     - Why are the absolute scores in the hundreds?
     - -------> TEST Temporary OPTION ON OFFCUT LIST INPUT
     - Does the consolidate_empty_space run for all sheets or just all layouts?
