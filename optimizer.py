@@ -633,6 +633,9 @@ def _run_greedy_seed(initial_parts_dict: Dict[int, Part], stock_sheets: List[Dic
         current_parts_ids = set(current_parts.keys())
 
         for sheet_tpl in unique_sheets:
+            if cancellation_event and cancellation_event.is_set():
+                return None, -float('inf')
+
             layout = run_single_sheet_optimization(
                 sheet_tpl, list(current_parts.values()), config, reference_area, max_offcut_quantity,
                 optional_parts_list, live_stock_counts, None, cancellation_event
@@ -879,6 +882,8 @@ def optimize_multiple_sheets(parts_to_cut: List[Part], stock_sheets: List[Dict],
         
         diving = True
         while diving and (time_limit <= 0 or (time.time() - start_time) < time_limit):
+            if cancellation_event and cancellation_event.is_set(): break
+            
             diving = False
 
             if debugger:

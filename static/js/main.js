@@ -266,7 +266,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     "The scoring system adapts as better solutions are found. A new 'best score' might look lower than a previous one because the normalization scale has become stricter. The Solution Log provides a direct, apples-to-apples comparison.",
                     "In Windows File Explorer, you can select a file and press Ctrl+Shift+C to copy its path to paste into the input fields.",
                     "A negative score is normal! Scores are relative values used to compare options. The Overall Score % in the results provides a more intuitive measure of success.",
-                    "Hover over the [?] icons in the results summary for more details about each metric.",
+                    "Hover over the [?] icons for more details about some features.",
                     "You can remove individual parts or offcuts from a layout by clicking on them.",
                     "Made a change to the results you didn't like? Use the Undo button or press Ctrl+Z to revert your last modification.",
                     "The progress bar indicates how many parts have been placed in the current layout being explored, not the overall optimization progress. Expect it to fluctuate!",
