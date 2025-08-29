@@ -213,15 +213,18 @@ def home():
     if request.method == 'POST':
         # This branch handles the "Load / Refresh Files" submission
         config = load_config()
-        # Store old multipliers before updating to detect changes
-        old_multipliers = {f['path']: f.get('multiplier', 1) for f in config.get('hhos_files', [])}
-
-        config = update_config_from_form(config, request.form)
         
-        # Always clear all manual quantity overrides on refresh to force a full
-        # resynchronization with the file-level multipliers.
-        if 'part_quantities' in config:
-            config['part_quantities'] = {}
+        # Determine if a refresh of part quantities is needed by checking for
+        # changes in HHOS file paths or their multipliers.
+        old_hhos_map = {f['path']: f.get('multiplier', 1) for f in config.get('hhos_files', [])}
+        config = update_config_from_form(config, request.form)
+        new_hhos_map = {f['path']: f.get('multiplier', 1) for f in config.get('hhos_files', [])}
+
+        # If maps are different, a file was added/removed or a multiplier changed.
+        # In this case, clear manual quantity overrides to force a resync.
+        if old_hhos_map != new_hhos_map:
+            if 'part_quantities' in config:
+                config['part_quantities'] = {}
 
         save_config(config)
         # Redirect to the GET route to show the updated page
@@ -358,8 +361,16 @@ def start_optimization():
     # Manually grab the offcut path and temporary flag from the form
     form_offcut_path = request.form.get('offcut_path', '').strip(' "')
     
-    # Update and save the persistent config (this will skip saving the offcut path if temporary)
+    # Update config, conditionally clearing part quantities if multipliers/paths change.
+    # This ensures "Optimize" behaves like "Refresh" first.
+    old_hhos_map = {f['path']: f.get('multiplier', 1) for f in config.get('hhos_files', [])}
     config = update_config_from_form(config, request.form)
+    new_hhos_map = {f['path']: f.get('multiplier', 1) for f in config.get('hhos_files', [])}
+    
+    if old_hhos_map != new_hhos_map:
+        if 'part_quantities' in config:
+            config['part_quantities'] = {}
+    
     save_config(config)
 
     # Now, for THIS RUN ONLY, determine the effective path and set it in the config.

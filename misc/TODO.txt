@@ -66,8 +66,8 @@ FEATURES
         - ✓ Fix ideal score calculation
         - w_stock_fill_item_bonus? The bonus provided by using stock parts is in creating less waste. Do we really need this?
         - X Penalize higher numbers of unique Default sheet layouts more than layouts on Offcut sheets? Or just add a flat bonus for every offcut used?
-
-        - ------> Greedy heuristic in _place_parts_in_rects, can we incorporate it into the B&B?
+        - [Probably Not] ------> Greedy heuristic in _place_parts_in_rects, can we incorporate it into the B&B?
+        
         - I made some changes at one point that handled cases of scoring incomplete layouts, but I don't think that actually ever happens.
         - When chosing order of cuts, should also try to minimize total cutting distance?
 
@@ -102,7 +102,6 @@ CODE
     - Rename weights variables to be more intuitive
     - Add header comments in helper files
     - ---> Remove print & tracking functions from Optimizer
-    - -> Can/should we combine the code in geometry_utils.py with some of the stuff in opitimizer.py?
     - Probably repetitive code, especially regarding scoring, in optimizer.py, results_manager.py, geometry_utils.py, and scoring_utils.py
 
 BUGS
@@ -144,7 +143,7 @@ BUGS
     - ✓ Results page isn't always showing the "nothing to display" message
 
     - The calculated ideal score is several orders of magnitude smaller than the true score.
-    - The stock part standardization doesn't seem to affect the final score.
+    - The stock part standardization doesn't seem to affect the final score. (Do we even still need stock part standardization?)
     - Greedy solution sometimes takes a really long time?
     - X? Are we re-evaluating the offcuts each time a layout is completed AND each time a solution is found?
 
@@ -152,8 +151,8 @@ MISC
     - X Change default branching factor to 2 or 3.
     - X Ask the AI to just make the ideal score predictor more sophisticated?
     - X Change Stock Part Inv. Bonus tooltip to something like "Should usually be a larger number(i.e., 2-5), since setting it heigher doesn't negatively impact the effects of other weights, and we want to make sure that the more important stock is prioritized."
-
-    - Why are the absolute scores in the hundreds?
+    - X Why are the absolute scores in the hundreds?
+    
     - -------> TEST Temporary OPTION ON OFFCUT LIST INPUT
     - Does the consolidate_empty_space run for all sheets or just all layouts?
 
