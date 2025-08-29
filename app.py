@@ -333,57 +333,66 @@ def home():
 @app.route('/start_optimization', methods=['POST'])
 def start_optimization():
     config = load_config()
+    form_data = request.form
+
+    # --- Step 1: Update config from form & Validate Paths ---
+    old_hhos_map = {f['path']: f.get('multiplier', 1) for f in config.get('hhos_files', [])}
+    config_for_run = update_config_from_form(config.copy(), form_data)
     
-    form_offcut_path = request.form.get('offcut_path', '').strip(' "')
-    is_temporary = request.form.get('temporary_offcut_path') == 'true'
+    errors = []
+    for hhos_file in config_for_run.get('hhos_files', []):
+        path = hhos_file.get('path', '').strip()
+        if path and not os.path.exists(path):
+            errors.append(f"HHOS file not found: {os.path.basename(path)}")
+
+    stock_path = config_for_run.get('stock_inv_path', '').strip()
+    if stock_path and not os.path.exists(stock_path):
+        errors.append(f"Stock inventory file not found: {os.path.basename(stock_path)}")
+
+    form_offcut_path = form_data.get('offcut_path', '').strip(' "')
+    if form_offcut_path and not os.path.exists(form_offcut_path):
+        errors.append(f"Offcut list file not found: {os.path.basename(form_offcut_path)}")
+    
+    if errors:
+        error_message = "Please fix file path errors before optimizing:\n- " + "\n- ".join(errors)
+        return jsonify({"error": error_message}), 400
+
+    # --- Step 2: Validation Passed. Commit config changes. ---
+    new_hhos_map = {f['path']: f.get('multiplier', 1) for f in config_for_run.get('hhos_files', [])}
+    if old_hhos_map != new_hhos_map:
+        if 'part_quantities' in config_for_run:
+            config_for_run['part_quantities'] = {}
+            
+    is_temporary = form_data.get('temporary_offcut_path') == 'true'
     DEFAULT_OFFCUT_PATH = 'managed_offcut_list.csv'
 
-    if form_offcut_path and not is_temporary and os.path.exists(form_offcut_path):
+    if form_offcut_path and not is_temporary:
         try:
             from data_processing import standardize_sheet_data
-            
             reader = pd.read_csv if form_offcut_path.lower().endswith('.csv') else pd.read_excel
             user_offcut_df = reader(form_offcut_path)
-            
-            temp_config = update_config_from_form(load_config(), request.form)
-
             if not user_offcut_df.empty:
                 standardized_df = standardize_sheet_data(
                     user_offcut_df, "Offcut",
-                    temp_config['default_length'],
-                    temp_config['default_width']
+                    config_for_run['default_length'],
+                    config_for_run['default_width']
                 )
                 standardized_df.to_csv(DEFAULT_OFFCUT_PATH, index=False)
         except Exception as e:
             traceback.print_exc()
             return jsonify({"error": f"Failed to process and overwrite managed offcut list: {e}"}), 400
     
-    # Manually grab the offcut path and temporary flag from the form
-    form_offcut_path = request.form.get('offcut_path', '').strip(' "')
-    
-    # Update config, conditionally clearing part quantities if multipliers/paths change.
-    # This ensures "Optimize" behaves like "Refresh" first.
-    old_hhos_map = {f['path']: f.get('multiplier', 1) for f in config.get('hhos_files', [])}
-    config = update_config_from_form(config, request.form)
-    new_hhos_map = {f['path']: f.get('multiplier', 1) for f in config.get('hhos_files', [])}
-    
-    if old_hhos_map != new_hhos_map:
-        if 'part_quantities' in config:
-            config['part_quantities'] = {}
-    
-    save_config(config)
+    save_config(config_for_run)
 
-    # Now, for THIS RUN ONLY, determine the effective path and set it in the config.
-    effective_run_path = form_offcut_path
-    if not effective_run_path:
-        effective_run_path = DEFAULT_OFFCUT_PATH
-    config['offcut_path'] = effective_run_path
+    # --- Step 3: Start Optimization Thread ---
+    effective_run_path = form_offcut_path if form_offcut_path else DEFAULT_OFFCUT_PATH
+    config_for_run['offcut_path'] = effective_run_path
 
     task_id = str(uuid.uuid4())
     with tasks_lock:
         tasks[task_id] = {'status': 'running', 'progress': {}, 'result': None}
     
-    thread = threading.Thread(target=run_optimization_task, args=(task_id, config))
+    thread = threading.Thread(target=run_optimization_task, args=(task_id, config_for_run))
     thread.daemon = True
     thread.start()
     

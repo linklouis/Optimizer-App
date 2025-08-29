@@ -38,7 +38,7 @@ FEATURES
         - ✓ Add an "accept early" button to the Optimizing Layouts... loading card?
         - X/✓ Allow greedy algorithm as fallback
         - ✓ Add [?] to Standardize Stock Layouts, Min. Useable Offcut Width, prioritize (Manage Offcuts card), and Required Quantity (Manage Stock Parts card)
-        - ✓ toggleable isualization
+        - ✓ toggleable visualization
         - ✓ Allow uploading a temp Offcut List that doesn't override the current one? Maybe have a "Temporary" check box next to the "Offcut List" label?
         - ✓ Clear Offcut List file input space after optimization?
         - ✓ [TEST] Tell user when the files they're pointing to don't exist
@@ -67,7 +67,7 @@ FEATURES
         - w_stock_fill_item_bonus? The bonus provided by using stock parts is in creating less waste. Do we really need this?
         - X Penalize higher numbers of unique Default sheet layouts more than layouts on Offcut sheets? Or just add a flat bonus for every offcut used?
         - [Probably Not] ------> Greedy heuristic in _place_parts_in_rects, can we incorporate it into the B&B?
-        
+
         - I made some changes at one point that handled cases of scoring incomplete layouts, but I don't think that actually ever happens.
         - When chosing order of cuts, should also try to minimize total cutting distance?
 
