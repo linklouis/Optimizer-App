@@ -330,7 +330,8 @@ def _calculate_made_counts_jit(refs: np.ndarray, unique_refs: np.ndarray, live_c
 
 
 def _calculate_optimistic_stock_bonus(remaining_parts: list, optional_parts_data: np.ndarray, 
-                                     live_stock_counts: Counter, config: Dict[str, Any]) -> float:
+                                      live_stock_counts: Counter, config: Dict[str, Any],
+                                      learned_rates: Dict[str, float]) -> float:
     """
     Calculates a realistic upper bound for the stock fill bonus using vectorized NumPy operations.
     """
@@ -338,7 +339,7 @@ def _calculate_optimistic_stock_bonus(remaining_parts: list, optional_parts_data
     if optional_parts_data.shape[0] == 0 or (not remaining_parts and is_mixed_job):
         return 0.0
 
-    packing_density_for_stock = 0.75    # TODO Shouldn't this be learned from the best solutions??
+    packing_density_for_stock = learned_rates.get('packing_density', 0.75)
     required_parts_area = sum(p['length'] * p['width'] for p in remaining_parts)
     total_future_area = (required_parts_area / packing_density_for_stock) if packing_density_for_stock > 0 else 0
 
@@ -348,7 +349,9 @@ def _calculate_optimistic_stock_bonus(remaining_parts: list, optional_parts_data
         return 0.0
 
     w_stock_fill = config.get('w_stock_fill', DEFAULT_CONFIG['w_stock_fill'])
-    flat_bonus_unit = config.get('w_stock_fill_item_bonus', 0.05)   # TODO Not actually in the config at the moment. Why do we need this anyway, shouldn't the bonus from adding stock come from producing less waste?
+    # This flat bonus provides a direct, explicit incentive to make specific stock parts
+    # that are below their target quantities, separate from the implicit bonus of reducing waste.
+    flat_bonus_unit = config.get('w_stock_fill_item_bonus', 0.05)
     
     part_data = optional_parts_data
     refs = part_data[:, 0]
@@ -480,7 +483,7 @@ def _calculate_bound(remaining_parts: list, current_score: float, config: Dict[s
     raw_quantity_bonus = avg_quantity_bonus_per_sheet * predicted_sheets
 
     optimistic_new_layouts = _predict_number_of_new_sheet_layouts(remaining_parts, used_signatures, config)
-    raw_stock_bonus = _calculate_optimistic_stock_bonus(remaining_parts, optional_parts_data_for_bound, live_stock_counts, config)
+    raw_stock_bonus = _calculate_optimistic_stock_bonus(remaining_parts, optional_parts_data_for_bound, live_stock_counts, config, learned_rates)
 
     area_penalty = (predicted_waste_area / max_values['waste_area']) * config.get('w_waste', DEFAULT_CONFIG['w_waste'])
     offcut_penalty = (predicted_offcut_area / max_values['offcut_area']) * config.get('w_offcut', DEFAULT_CONFIG['w_offcut'])
