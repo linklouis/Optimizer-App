@@ -131,6 +131,7 @@ BUGS
     - ✓? Offcut finding isn't always 100% perfect file:///C:/Users/louis/Downloads/Screenshot_28-8-2025_142929_127.0.0.1.jpeg
     - ✓ Manage Offcuts card only shows up if you have a file path entered? It should used the saved file.
     - ✓ Changing the multiplier on the File Paths card doesn't *always* update the Manage Job Parts card. Every time Load / Refresh Files is clicked, the multipliers in Manage Job Parts should update to match the ones in File Paths.
+    - ✓? The content of the loading card can get pushed off the bottom
 
     - The calculated ideal score is several orders of magnitude smaller than the true score.
     - The stock part standardization doesn't seem to affect the final score.
@@ -138,7 +139,6 @@ BUGS
                Could make the change to prioritize larger waste areas useless in find_guillotine_cuts. If all offcuts are placed as best as possible, we only need to worry about making the least cuts possible. https://g.co/gemini/share/c34e4f61fb14
     - Canceling an optimization doesn't always stop it from running in the background, at least not right away.
     - Greedy solution sometimes takes a really long time?
-    - The content of the loading card can get pushed off the bottom
     - X? Are we re-evaluating the offcuts each time a layout is completed AND each time a solution is found?
 
 MISC

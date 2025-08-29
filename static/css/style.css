@@ -524,12 +524,12 @@ th .select-all-parts-in-file { cursor: pointer; }
     grid-template-columns: repeat(2, 1fr);
     gap: 1rem;
     border-top: 1px solid var(--border-color);
-    padding-top: 1.5rem;
+    padding-top: 1rem;
 }
 
 .stat-card {
     background-color: var(--bg-primary);
-    padding: 1rem;
+    padding: 0.6rem;
     border-radius: 0.5rem;
     display: flex;
     flex-direction: column;
@@ -759,6 +759,8 @@ input:checked + .slider:before { transform: translateX(20px); }
     margin-top: auto; /* Pushes the button to the bottom of the flex container */
     padding-top: 1.5rem;
     border-top: 1px solid var(--border-color);
+    display: flex;
+    gap: 1rem;
 }
 
 .btn-cancel {
@@ -813,14 +815,6 @@ body.dark-mode .btn-cancel:hover {
 }
 
 
-.loading-actions {
-    margin-top: auto; /* Pushes the button to the bottom of the flex container */
-    padding-top: 1.5rem;
-    border-top: 1px solid var(--border-color);
-    display: flex;
-    gap: 1rem;
-}
-
 .btn-accept {
     width: 100%;
     padding: 0.75rem;
@@ -862,7 +856,8 @@ body.dark-mode .btn-accept:hover:not(:disabled) {
     background-color: var(--bg-primary);
     display: flex;
     flex-direction: column;
-    max-height: 140px; /* Limit height */
+    flex: 1; /* Allow container to grow/shrink to fill space */
+    min-height: 0; /* Prevents flexbox overflow issues */
 }
 
 .log-header {
