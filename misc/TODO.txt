@@ -93,7 +93,6 @@ FEATURES
 
         - Make the Loaded Parts List section look better
         - Add line break before 'Note:' in search time tooltip
-        - Also tell the user if a file doesn't exist on the File Paths card?
         - Make the titles of sheet cards on the results page look better
 
 CODE
@@ -147,6 +146,8 @@ BUGS
     - The stock part standardization doesn't seem to affect the final score. (Do we even still need stock part standardization?)
     - Greedy solution sometimes takes a really long time?
     - X? Are we re-evaluating the offcuts each time a layout is completed AND each time a solution is found?
+    - Loading card should expand downwards to fit content if needed.
+    - Sometimes if you reload the page without canceling the optimization or somthing, it will keep running in the background until I kill the program and restart.
 
 MISC
     - X Change default branching factor to 2 or 3.

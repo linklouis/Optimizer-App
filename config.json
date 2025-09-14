@@ -14,7 +14,7 @@
             "multiplier": 7
         }
     ],
-    "stock_inv_path": "C:\\Users\\linkl\\Louis Link - Tmp\\Optimizer Project\\Demo\\Input\\Stock Part Inventory.xlsx",
+    "stock_inv_path": "C:\\Users\\linkl\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\Stock Part Inventory.xlsx",
     "offcut_path": "",
     "selected_hhos_parts": [
         "C:\\Users\\linkl\\Louis Link - Temp\\Optimizer Project\\Demo\\Input\\HHOS_SC-220492.csv:::0",

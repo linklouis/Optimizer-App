@@ -45,7 +45,15 @@ function renderResults(result) {
         const svgContentWidth = viewBoxWidth * PIXELS_PER_UNIT;
         card.style.width = `calc(${svgContentWidth}px + ${CARD_HORIZONTAL_PADDING})`;
         card.dataset.layoutSignature = layout.signature;
-        card.querySelector('.layout-title').innerHTML = `${sheet.type} ${sheet.length.toFixed(3)}x${sheet.width.toFixed(3)} | x<span>${layout.quantity}</span> | Yield: <span>${layout.yield_percentage.toFixed(2)}</span>%`;
+
+        const layoutHeader = card.querySelector('.layout-header');
+        layoutHeader.querySelector('.layout-title').textContent = `${sheet.type} ${sheet.length.toFixed(3)} x ${sheet.width.toFixed(3)}`;
+        const stats = layoutHeader.querySelector('.layout-stats');
+        stats.querySelector('.stat-quantity').textContent = layout.quantity;
+        stats.querySelector('.stat-yield').textContent = `${layout.yield_percentage.toFixed(1)}%`;
+        stats.querySelector('.stat-parts').textContent = layout.placed_parts.length;
+        stats.querySelector('.stat-cuts').textContent = layout.cuts ? layout.cuts.length : 0;
+        
         const svg = card.querySelector('svg');
         svg.setAttribute('viewBox', `-2 -2 ${sheet.width + 4} ${sheet.length + 4}`);
         const sheetBg = svg.querySelector('.sheet-bg');

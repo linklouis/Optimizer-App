@@ -410,7 +410,15 @@
                 <div id="results-container"></div>
                 <template id="layout-card-template">
                     <div class="layout-card card">
-                        <h3 class="layout-title"></h3>
+                        <div class="layout-header">
+                            <h3 class="layout-title"></h3>
+                            <div class="layout-stats">
+                                <div class="stat-item tooltip" data-tooltip="Multiplier"><i class="fa-solid fa-layer-group"></i> <strong class="stat-quantity"></strong></div>
+                                <div class="stat-item tooltip" data-tooltip="Yield"><i class="fa-solid fa-chart-pie"></i> <strong class="stat-yield"></strong></div>
+                                <div class="stat-item tooltip" data-tooltip="Parts"><i class="fa-solid fa-puzzle-piece"></i> <strong class="stat-parts"></strong></div>
+                                <div class="stat-item tooltip" data-tooltip="Cuts"><i class="fa-solid fa-scissors"></i> <strong class="stat-cuts"></strong></div>
+                            </div>
+                        </div>
                         <div class="svg-container">
                             <svg viewBox="-2 -2 100 100">
                                 <defs>
