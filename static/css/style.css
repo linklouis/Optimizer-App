@@ -978,7 +978,7 @@ body::-webkit-scrollbar-thumb:hover {
 
 .form-error {
     display: block;
-    color: var(--danger-color);
+    color: var(--danger);
     font-size: 0.8rem;
     margin-top: 4px;
     padding-left: 2px;

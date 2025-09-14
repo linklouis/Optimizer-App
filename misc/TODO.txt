@@ -43,6 +43,7 @@ FEATURES
         - ✓ Clear Offcut List file input space after optimization?
         - ✓ [TEST] Tell user when the files they're pointing to don't exist
         - ✓ Hitting enter in the File Paths card should hit Load / Refresh Files button.
+        - ✓ Make sure to catch non-existing file path errors for all file path inputs, not just HHOS files.
 
         - Save offcuts (Maybe only save after export?)
         - Notes section for offcuts

@@ -336,7 +336,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     body: formData
                 });
 
-                if (!startResponse.ok) throw new Error('Failed to start optimization task.');
+                if (!startResponse.ok) {
+                    const errorData = await startResponse.json();
+                    throw new Error(errorData.error || 'Failed to start optimization task.');
+                }
 
                 // Clear the offcut path input and temporary checkbox after successful submission
                 const offcutPathInput = document.getElementById('offcut_path');
