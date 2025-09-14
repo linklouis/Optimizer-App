@@ -489,7 +489,6 @@ th .select-all-parts-in-file { cursor: pointer; }
     padding: 2rem;
     width: 100%;
     /*max-width: 1200px; /* Allow panel to be wider */
-    max-height: 80vh; /* Limit height to 80% of viewport */
     box-shadow: 0 10px 25px -5px var(--shadow-color);
     display: flex;
     flex-direction: row; /* Change to row for two columns */

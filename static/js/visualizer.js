@@ -109,7 +109,10 @@ class TreeVisualizer {
     constructor(svgId) {
         this.svg = document.getElementById(svgId);
         this.svg.innerHTML = ''; // Wipes the SVG clean from any previous runs
-        
+
+        // Set a large, static viewBox. This is the "canvas" for the simulation.
+        this.svg.setAttribute('viewBox', '-2000 -2000 4000 4000');
+
         // Create a wrapper group for zoom and pan
         this.zoomWrapper = this.svg.appendChild(document.createElementNS('http://www.w3.org/2000/svg', 'g'));
         this.linkGroup = this.zoomWrapper.appendChild(document.createElementNS('http://www.w3.org/2000/svg', 'g'));
@@ -247,8 +250,19 @@ class TreeVisualizer {
         this.nodeGroup.innerHTML = '';
         this.linkGroup.innerHTML = '';
         this.framesSinceLastSpawn = 0;
+        
+        // Calculate an initial scale to make the view reasonable.
+        // We want a certain area (e.g., 200x200 units) of the simulation to be visible.
         const { width, height } = this.svg.parentElement.getBoundingClientRect();
-        this.zoom = { x: width / 2, y: height / 2, scale: 0.5 };
+        const minContainerDim = Math.min(width, height);
+        const desiredViewArea = 250; // The desired visible area in SVG units.
+
+        let initialScale = 1.0;
+        if (minContainerDim > 0 && desiredViewArea > 0) {
+            initialScale = minContainerDim / desiredViewArea;
+        }
+
+        this.zoom = { x: 0, y: 0, scale: initialScale };
     }
 
     addOrUpdateNodes(nodeList) {
@@ -295,13 +309,8 @@ class TreeVisualizer {
 
     _animationLoop() {
         // This smooth loop only handles rendering
-        const { width, height } = this.svg.parentElement.getBoundingClientRect();
-        if (width > 0 && height > 0) {
-            this.svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
-            this.zoomWrapper.setAttribute('transform', `translate(${this.zoom.x}, ${this.zoom.y}) scale(${this.zoom.scale})`);
-            
-            this._updatePositions(this.childCounts);
-        }
+        this.zoomWrapper.setAttribute('transform', `translate(${this.zoom.x}, ${this.zoom.y}) scale(${this.zoom.scale})`);
+        this._updatePositions(this.childCounts);
         this.animationFrameId = requestAnimationFrame(() => this._animationLoop());
     }
 
